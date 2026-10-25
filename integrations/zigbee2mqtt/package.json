@@ -1,0 +1,9 @@
+{
+  "name": "vimar-30805-zigbee2mqtt-converter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build_external_converter.js",
+    "test": "node --test"
+  }
+}
