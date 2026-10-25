@@ -949,6 +949,18 @@
 !/.claude/skills/vomar-guide/
 !/.claude/skills/vomar-guide/SKILL.md
 
+!/tools/release/manifest.py
+!/tools/release/signers.py
+!/tools/release/signing-identities.json
+!/tools/release/tests/test_manifest.py
+!/VERSION
+!/.release-please-manifest.json
+!/release-please-config.json
+!/CHANGELOG.md
+!/.cz.toml
+
+!/release-manifest.schema.json
+
 # Account state and acquired/generated artifacts always remain private.
 /_test*/
 /_tmp*/

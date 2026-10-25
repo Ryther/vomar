@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "firmwarePublicKeySha256": "c6f5cbe0a2b1083977a2562009840719ae13daafe42bc89886c1a6f4919a1ba1",
+  "androidCertificateSha256": "3e41558dfa5652b7beaedb96ee15468ee05fcafb40a0d07e604e774726156343",
+  "androidAlias": "vimar-updater",
+  "automaticIdentityGeneration": false
+}
