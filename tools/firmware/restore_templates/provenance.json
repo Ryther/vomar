@@ -1,0 +1,77 @@
+[
+  {
+    "source": "experiments/vimar-second-restore-20261020/CMakeLists.txt",
+    "sha256": "9f4280fd0f404ac6c76aadca9d1f0032ec7b5b704d048ac6399b54f6eb3f0f1e",
+    "template": "CMakeLists.txt"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/prj.conf",
+    "sha256": "4d8880c7229a336d7eebca64d61bd8c5a751e48f57c51abe1cd966c57d561223",
+    "template": "prj.conf"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/main.c",
+    "sha256": "8b5b9873f2d84c6ecc6c906196eccc8ef7ed17b3c9a0511e549b27d85cea585e",
+    "template": "main.c",
+    "source_sha256": "7fa13e3ef967937f98898a8f179d5e37464002d97e83476dea131e07c0cf36e7",
+    "transformation": "Replace device identity, backup digest and chip revision literals with explicit per-device template bindings"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/restore_flasher.c",
+    "sha256": "2725c395e8d87572b4673d97d958db907aeca1470d01b994cb378e6f31aadf39",
+    "template": "restore_flasher.c"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/restore_flasher.h",
+    "sha256": "b2d8aebdb4034e02ca791b0eae2eafd5a15c9ae9c0b20f614aeedaf4fce44acf",
+    "template": "restore_flasher.h"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/restorer.overlay",
+    "sha256": "39273fff5906943658f81da821939fff881d43ec40cac32afef07740b189a8a3",
+    "template": "restorer.overlay"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/check_ldo.py",
+    "sha256": "8cae74c061f95c8e777bd6fb303a71f2657b89c360cef409405b853c9299cd95",
+    "template": "check_ldo.py"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/restore_via_ble.py",
+    "sha256": "0a231aa620be8a066632ca87e54f4ebe6b1c038f4f8e4b3e611277d7bdec64ab",
+    "template": "restore_via_ble.py",
+    "source_sha256": "dc23f1295eccedc217920ff0c0ad247b4cc03fcd4133baa5b6261bc4cbedd9ad",
+    "transformation": "Replace device identity, backup digest and chip revision literals with explicit per-device template bindings"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/enter_restore_via_ble.py",
+    "sha256": "70905c097c34a44ea50fefc55edf0150fbfcd9d7ab57123648c64f15fba876a0",
+    "template": "enter_restore_via_ble.py",
+    "source_sha256": "73362d931d6342c7538a09b924dff707b915e37f548cfb9c94e936c0a0cb17e5",
+    "transformation": "Use conservative negotiated SMP upload size, no forced2475-byte reassembly"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/research_console.py",
+    "sha256": "d351b720d9bc1a4ad6f228afdabde4cf54a683a76d2b76065e61e3c655290241",
+    "template": "research_console.py",
+    "source_sha256": "1a901e5198e719d04e496bfc4b48ed23479e706b8de64458777a7e6fbcefb971",
+    "transformation": "Replace device identity, backup digest and chip revision literals with explicit per-device template bindings"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/bootstrap/CMakeLists.txt",
+    "sha256": "00c1ff318a73e38d16c879b8c7116238529f1fb7d8beac865ddf998c49147834",
+    "template": "bootstrap/CMakeLists.txt"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/bootstrap/prj.conf",
+    "sha256": "0aff0d80656f4f6abee25be3af125bbd822fcd9712f64676ea2f614fbf67e088",
+    "template": "bootstrap/prj.conf"
+  },
+  {
+    "source": "experiments/vimar-second-restore-20261020/bootstrap/main.c",
+    "sha256": "e0253ebffa3b720fda53b5a433d279efd32067f1837b49aee65cf58571c41788",
+    "template": "bootstrap/main.c",
+    "source_sha256": "bb0516ca1fcd0864e47218559280a1556d90ffb8797ca875b56ef9c6e9af7b29",
+    "transformation": "Replace device identity, backup digest and chip revision literals with explicit per-device template bindings"
+  }
+]
