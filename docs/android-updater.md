@@ -1,9 +1,18 @@
-# Vimar Updater Android 1.0.0
+# Vimar Updater Android 1.0.1
 
-App1.0.0 (versionCode20) promotes the verified0.6.5 app with release-version
-metadata only. The package ID, release signer, firmware trust key, permissions,
-features and interface are unchanged. Firmware versioning and qualification
-remain independent.
+App 1.0.1 (versionCode 21) delivers the approved saved-connection and device-filter
+changes. Settings → Zigbee2MQTT now supports multiple named saved broker profiles,
+one active connection, a separate named Zigbee topics list and saved-credential
+editing. Add device displays topic names. Devices → Show uses one native list
+for continuous press/drag/release, normal tap, keyboard and accessibility, without
+the previous Use list mode switch or Done step.
+
+The signed APK is delivered locally under
+`experiments/android-updater/releases/1.0.1/`. Its incremented version code and
+existing release signer support upgrading the installed 1.0.0 app. Package ID,
+firmware trust key and permissions remain unchanged. Firmware versioning and
+qualification remain independent. Native gesture/accessibility and live-broker
+acceptance are still separate from the software build and APK audits.
 
 App0.6.5 completed the approved operation-clarity pass: persistent Bluetooth
 target/phase, actionable MQTT failures and inline field errors, non-secret
@@ -28,7 +37,7 @@ with a separate private candidate selection, foreground lifetime, Stop and
 report export. Normal release, fleet and Zigbee routes still reject candidates.
 
 For exact phone steps, see [Update a mounted dimmer by Bluetooth](android-bluetooth-trial.md).
-The app version is1.0.0. Firmware packages have independent versions and
+The app version is 1.0.1. Firmware packages have independent versions and
 qualification records.
 
 App0.6.3 explicitly queues the initial system pairing request after LE service
@@ -138,6 +147,13 @@ owner-reported Bluetooth update was corroborated by post-trial radio diagnostics
 full current-release migration/pairing qualification remains separate.
 
 ## Release artifacts and qualification
+
+Android 1.0.1/code21 includes the new UI implementation rather than only version
+metadata. Its local release folder contains the signed APK, checksum, build
+report and verification record. Fresh checks passed 437 JVM tests, 27 build-tooling
+tests, lint and signature/content audits. The signing certificate matches 1.0.0,
+and the new UI classes/labels are present in the signed DEX. No native runtime,
+physical phone or live-broker acceptance is claimed for 1.0.1.
 
 Android 1.0.0/code20 was prepared and delivered locally with the existing package
 ID, signer and firmware public key. Every DEX/resource/asset matches 0.6.5; the
