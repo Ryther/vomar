@@ -1,6 +1,6 @@
 # Desktop application
 
-Native packages provide `Vomar` (GUI) and `vomar` (CLI), sharing the same Python
+Native packages provide `Vomar` (GUI) and `vomar-cli` (CLI), sharing the same Python
 engine. End users need no Python, Nordic SDK, Gradle or development container.
 Each supported platform is built separately; a Linux test does not qualify
 Windows/macOS drivers or Bluetooth.
@@ -8,14 +8,14 @@ Windows/macOS drivers or Bluetooth.
 ## Install
 
 - Linux x64: extract the tar.gz, run `sh Vomar/install.sh`, and open Vomar from
-  the desktop menu. `~/.local/bin` provides both launchers. Use the shipped
+  the desktop menu. `~/.local/bin` provides the `vomar` and `vomar-gui` launchers. Use the shipped
   uninstall script to remove only the owned runtime; private data is retained.
 - Windows x64: use the per-user installer or extract the portable ZIP. Approve
   the unsigned application through the normal Windows first-launch flow after
   checking the downloaded distribution checksums. DK USB access may require a
   compatible libusb/WinUSB driver selected deliberately for the probe interface.
 - macOS Intel and Apple Silicon: choose the matching DMG and copy Vomar to
-  Applications. The CLI is `Vomar.app/Contents/MacOS/vomar`. The initial bundle
+  Applications. The CLI is `Vomar.app/Contents/MacOS/vomar-cli`. The initial bundle
   has ad-hoc integrity signing, without a trusted developer certificate or
   notarization. Use System Settings' normal approval flow. Bluetooth access is
   requested only when you initiate a scan/connection.
