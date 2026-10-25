@@ -91,9 +91,17 @@ class Window(QMainWindow):
         self.empty=QLabel('No saved devices. Use Bluetooth discovery to choose a device, then give it a name.');self.empty.setWordWrap(True);layout.addWidget(self.empty)
         row=QHBoxLayout();self.button('Name or move',self.edit_device,row);self.button('Remove',self.remove_device,row);row.addStretch();layout.addLayout(row)
         form=QFormLayout();self.target=self.field('Bluetooth target',form);self.zigbee_network=self.field('Zigbee network',form);self.zigbee_ieee=self.field('Zigbee device',form);self.carrier=self.field('HTTPS OTA source',form);layout.addLayout(form)
-        row=QHBoxLayout();self.button('Review Bluetooth update',lambda:self.send('updates.preview',{'target':self.target.text()}),row);self.button('Review selected batch',lambda:self.send('fleet.preview',{'ids':[r.data(0,Qt.UserRole)['id'] for r in self.devices.selectedItems()]}),row);self.button('Read recovery history',lambda:self.send('diagnostics.read',{'target':self.target.text()}),row);layout.addLayout(row)
+        row=QHBoxLayout();self.button('Review Bluetooth update',lambda:self.send('updates.preview',{'target':self.target.text()}),row);self.button('Review selected batch',self.review_batch,row);self.button('Read recovery history',lambda:self.send('diagnostics.read',{'target':self.target.text()}),row);layout.addLayout(row)
         self.button('Review Zigbee update',lambda:self.send('zigbee.preview',{'network':self.zigbee_network.text(),'ieee':self.zigbee_ieee.text(),'source':self.carrier.text()}),layout)
         self.stack.addWidget(page)
+    def review_batch(self):
+        transport,ok=QInputDialog.getItem(self,'Batch connection','Connection',['auto','ble','zigbee'],0,False)
+        if not ok:return
+        mode,ok=QInputDialog.getItem(self,'Batch scheduling','Scheduling',['sequential','network-parallel'],0,False)
+        if ok:self.send('fleet.preview',{'ids':[r.data(0,Qt.UserRole)['id'] for r in self.devices.selectedItems()],'mode':mode,'transport':transport,'source':self.carrier.text()})
+    def resume_batch(self):
+        batch,ok=QInputDialog.getText(self,'Review paused batch','Batch ID (from activity details)')
+        if ok:self.send('fleet.resume-preview',{'batch':batch})
     def select_device(self):
         rows=self.devices.selectedItems()
         if rows:self.target.setText(rows[0].data(0,Qt.UserRole).get('ble',''))
@@ -111,7 +119,7 @@ class Window(QMainWindow):
         page=QWidget();layout=QVBoxLayout(page);layout.setContentsMargins(20,0,0,0);self.heading('Activity',layout)
         self.activity=QTreeWidget();self.activity.setHeaderLabels(['Operation','Status','Started']);self.activity.setAccessibleName('Durable operation sessions');self.activity.itemSelectionChanged.connect(self.select_session);layout.addWidget(self.activity,1)
         self.activity_help=QLabel('Interrupted operations stay here. Restarting Vomar never approves a continuation.');self.activity_help.setWordWrap(True);layout.addWidget(self.activity_help)
-        row=QHBoxLayout();self.button('Refresh',lambda:self.send('sessions.list'),row);self.button('Review interrupted Bluetooth update',lambda:self.send('updates.resume-preview',{'session':self.selected_session}),row);self.button('Confirm physical operation',lambda:self.send('sessions.confirm',{'session':self.selected_session}),row);layout.addLayout(row);self.stack.addWidget(page)
+        row=QHBoxLayout();self.button('Refresh',lambda:self.send('sessions.list'),row);self.button('Show batches',lambda:self.send('fleet.list'),row);self.button('Review paused batch',self.resume_batch,row);self.button('Review interrupted Bluetooth update',lambda:self.send('updates.resume-preview',{'session':self.selected_session}),row);self.button('Confirm physical operation',lambda:self.send('sessions.confirm',{'session':self.selected_session}),row);layout.addLayout(row);self.stack.addWidget(page)
     def select_session(self):
         rows=self.activity.selectedItems()
         if rows:self.selected_session=rows[0].data(0,Qt.UserRole)
@@ -146,12 +154,10 @@ class Window(QMainWindow):
         topics=[t.text() for t in self.topics if t.text()]
         self.send('mqtt.save',{'uri':self.broker.text(),'username':self.username.text(),'password':self.password.text(),'allow_plaintext':self.plain.isChecked(),'networks':[{'id':f'network-{i+1}','label':f'Network {i+1}','topic':v} for i,v in enumerate(topics)]})
     def review(self,result):
-        box=QMessageBox(self);box.setWindowTitle('Review '+result['operation']);box.setIcon(QMessageBox.Warning);box.setText('Review this device and operation before continuing.');box.setInformativeText(result['message']);box.setDetailedText(json.dumps(result['summary'],indent=2));box.setStandardButtons(QMessageBox.Ok|QMessageBox.Cancel);box.setDefaultButton(QMessageBox.Cancel)
-        # Show authority-bearing details immediately, not hidden behind More.
-        detail=QLabel(json.dumps(result['summary'],indent=2));detail.setWordWrap(True);detail.setTextInteractionFlags(Qt.TextSelectableByMouse|Qt.TextSelectableByKeyboard);box.layout().addWidget(detail,box.layout().rowCount(),0,1,box.layout().columnCount())
-        if box.exec()!=QMessageBox.Ok:return
-        answer,ok=QInputDialog.getText(self,'Confirm the reviewed target','Type '+result['challenge']+' to approve only this operation')
-        if ok and answer==result['challenge']:self.send('execute',{'review':result['review']})
+        from .review import ReviewDialog
+        dialog=ReviewDialog(result,self)
+        if dialog.exec()==dialog.DialogCode.Accepted:self.send('execute',{'review':result['review']})
+        else:self.worker.submit('review.cancel',{'review':result['review']})
     def result(self,action,raw):
         result=json.loads(raw)
         if action==getattr(self,'active_action',None):

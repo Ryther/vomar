@@ -1,0 +1,18 @@
+# Only reviewed image inputs may leave the working tree as build context.
+**
+!.devcontainer/
+.devcontainer/**
+!.devcontainer/Dockerfile
+!.devcontainer/toolchain.json
+!.devcontainer/assistants/
+.devcontainer/assistants/**
+!.devcontainer/assistants/package.json
+!.devcontainer/assistants/package-lock.json
+!.devcontainer/research/
+.devcontainer/research/**
+!.devcontainer/research/Dockerfile
+!tools/
+tools/**
+!tools/dev/
+tools/dev/**
+!tools/dev/bootstrap.py

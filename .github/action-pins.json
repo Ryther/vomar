@@ -1,0 +1,11 @@
+{
+  "checkout": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+  "python": "actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+  "upload": "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+  "download": "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333",
+  "codeql-init": "github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+  "codeql-analyze": "github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
+  "please": "googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7",
+  "node": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
+  "sonar": "SonarSource/sonarqube-scan-action@c7ee0f9df90b7aa20e8dcf9695dcfe2e7da5b4f2"
+}

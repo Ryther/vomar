@@ -32,3 +32,12 @@ def test_actual_worker_owns_state_and_shuts_down(tmp_path):
     worker.submit('devices.list');deadline=time.monotonic()+.1
     while time.monotonic()<deadline:app.processEvents();time.sleep(.01)
     window.close();app.processEvents();assert not worker.isRunning()
+
+
+def test_review_denial_and_exact_challenge_gate():
+    from vomar_updater.gui.review import ReviewDialog
+    app=QApplication.instance() or QApplication([])
+    d=ReviewDialog({'operation':'first-install','summary':{'Device UID':'00000001:00000002'},'message':'Review exact target','challenge':'00000002'})
+    assert not d.approve.isEnabled();d.challenge.setText('wrong');assert not d.approve.isEnabled()
+    d.challenge.setText('00000002');assert not d.approve.isEnabled();d.physical.setChecked(True);assert d.approve.isEnabled()
+    d.reject();assert d.result()==d.DialogCode.Rejected

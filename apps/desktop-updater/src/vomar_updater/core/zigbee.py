@@ -43,6 +43,7 @@ class ZigbeeEngine:
         self.store=store;self.bridge=bridge;self.scheduler=scheduler;self.on_event=on_event;self.fetch=fetch;self.reviews={};self.consents={}
     def held(self,network):return any(s['binding'].get('network')==network and s['uncertain'] for s in self.store.sessions())
     async def inspect(self,package,network,ieee,source):
+        package.assert_verified()
         meta=package.manifest.get('zigbeeOta')
         if not meta or package.manifest.get('purpose'):raise ValueError('A normal signed release with an OTA carrier is required')
         if self.held(network):raise ValueError('An earlier submitted update is uncertain on this network; explicitly reconcile its status')
@@ -57,6 +58,7 @@ class ZigbeeEngine:
         if self.reviews.get(r.token)!=r or r.expires<time.monotonic():raise ValueError('Zigbee review expired')
         c=secrets.token_hex(32);self.consents[c]=r.token;return c
     async def execute(self,package,r,consent):
+        package.assert_verified()
         if self.consents.pop(consent,None)!=r.token or self.reviews.pop(r.token,None)!=r or r.expires<time.monotonic() or package.digest!=r.package_digest:raise ValueError('Fresh exact Zigbee approval required')
         async def operation():
             if self.held(r.network) or self.bridge.birth!=r.birth:raise ValueError('Network state changed after review')

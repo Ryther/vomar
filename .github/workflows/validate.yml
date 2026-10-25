@@ -1,0 +1,153 @@
+name: Validate candidate
+on:
+  push: {branches: [main]}
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      sha: {type: string, required: true}
+permissions: {contents: read}
+concurrency:
+  group: validation-${{ github.ref }}-${{ inputs.sha || github.sha }}
+  cancel-in-progress: false
+jobs:
+  source:
+    name: Contracts required
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-dev.lock
+      - run: python -m pip install --require-hashes -r requirements-desktop.lock
+      - run: python -m pip install --no-deps --no-build-isolation -e .
+      - run: python -m tools.release.component_versions --output reports/component-versions.json
+      - run: python -m tools.release.public_tree
+      - run: python -m pytest tools/release/tests tools/dev/tests apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
+      - run: python -m coverage run --source=vomar_updater -m pytest apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
+      - run: mkdir -p reports && python -m coverage xml -o reports/python-coverage.xml
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'python-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
+  conventional:
+    name: Conventional Commits
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Check title and actual commit range
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$PR_TITLE" ]; then cz check --message "$PR_TITLE"; fi
+          if [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ]; then cz check --rev-range "$BASE..HEAD"; else cz check --rev-range HEAD; fi
+  firmware:
+    name: Firmware required
+    env:
+      VIMAR_NCS_WORKSPACE: /home/runner/.cache/vomar/ncs
+      VIMAR_WEST: /home/runner/.cache/vomar/ncs-venv/bin/west
+      VIMAR_BUILD_PYTHON: /home/runner/.cache/vomar/ncs-venv/bin/python
+      ZEPHYR_SDK_INSTALL_DIR: /home/runner/.cache/vomar/zephyr-sdk-1.0.1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gperf device-tree-compiler binutils-arm-none-eabi
+      - run: python -m pip install --require-hashes -r requirements-dev.lock
+      - run: python tools/dev/bootstrap.py firmware
+      - run: python -m tools.release.c_coverage --output reports
+      - name: Compile real DK profiles with an ephemeral development identity
+        env:
+          VIMAR_NCS_WORKSPACE: /home/runner/.cache/vomar/ncs
+          VIMAR_WEST: /home/runner/.cache/vomar/ncs-venv/bin/west
+          ZEPHYR_SDK_INSTALL_DIR: /home/runner/.cache/vomar/zephyr-sdk-1.0.1
+        run: python -m tools.release.ci_firmware --output _test/ci-firmware
+      - run: python -m tools.release.capture_analysis --build _test/ci-firmware --output reports
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'firmware-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
+  android:
+    name: Android required
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - run: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:assembleRelease
+      - name: Collect actual JVM coverage
+        run: |
+          mkdir -p reports
+          cp apps/android-updater/core/build/reports/jacoco/test/jacocoTestReport.xml reports/core-jacoco.xml
+          cp apps/android-updater/app/build/reports/jacoco/jacocoDebugReport/jacocoDebugReport.xml reports/app-jacoco.xml
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'android-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'android-unsigned-${{ inputs.sha || github.sha }}', path: apps/android-updater/app/build/outputs/apk/release/app-release-unsigned.apk, if-no-files-found: error}
+  desktop:
+    name: Desktop native (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-22.04, platform: linux-x64}
+          - {runner: windows-2022, platform: windows-x64}
+          - {runner: macos-15-intel, platform: macos-x64}
+          - {runner: macos-15, platform: macos-arm64}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-desktop.lock
+      - run: python -m pip install --no-deps .
+      - name: GUI and core tests
+        env: {QT_QPA_PLATFORM: offscreen}
+        run: python -m pip install --require-hashes -r requirements-dev.lock && python -m pytest apps/desktop-updater/tests
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
+      - run: python -m pip install --require-hashes -r requirements-security.lock
+      - run: pip-audit --disable-pip --no-deps -r requirements-desktop.lock -f json -o native-dependency-audit.json
+      - run: python -m tools.release.package_desktop --output _test/native
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'desktop-${{ matrix.platform }}-${{ inputs.sha || github.sha }}', path: '_test/native/vomar-desktop-*', if-no-files-found: error}
+  desktop-required:
+    name: Desktop required
+    needs: desktop
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - env: {RESULT: '${{ needs.desktop.result }}'}
+        run: test "$RESULT" = success
+  documentation:
+    name: Documentation required
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-dev.lock
+      - run: mkdocs build --strict
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'documentation-${{ inputs.sha || github.sha }}', path: _test/site, if-no-files-found: error}
+  converter:
+    name: Converter required
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with: {node-version: '24.22.1'}
+      - run: mkdir -p reports && node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=reports/lcov.info integrations/zigbee2mqtt/test/*.test.js
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'javascript-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'converter-${{ inputs.sha || github.sha }}', path: integrations/zigbee2mqtt/dist/vimar_30805.js, if-no-files-found: error}

@@ -1,0 +1,4 @@
+{
+  "library/sonarqube": "library/sonarqube@sha256:0b3408443fb6a311253de27941b10977c9b977fd53be2265947bfe14161308b8",
+  "sonarsource/sonar-scanner-cli": "sonarsource/sonar-scanner-cli@sha256:47956b669bf486bdad919e1cbd0533223515aa0b6d1d31763e5a3754942df6d7"
+}

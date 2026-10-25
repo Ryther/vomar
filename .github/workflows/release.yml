@@ -1,0 +1,132 @@
+name: Assemble exact distribution
+on:
+  workflow_run:
+    workflows: [Validate candidate]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      sha: {description: Full immutable candidate SHA, required: true, type: string}
+      version: {description: Reviewed distribution version, required: true, type: string}
+      firmware_url: {description: Public signed qualification-candidate ZIP URL, required: true, type: string}
+      firmware_sha256: {description: Exact candidate ZIP hash, required: true, type: string}
+      publish: {description: Publish the complete verified draft, required: true, type: boolean, default: false}
+permissions: {contents: read, actions: read}
+jobs:
+  resolve:
+    if: github.repository == 'Ryther/vomar' && (github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.head_branch == 'main'))
+    runs-on: ubuntu-24.04
+    outputs:
+      sha: ${{ steps.metadata.outputs.sha }}
+      version: ${{ steps.metadata.outputs.version }}
+      firmware_url: ${{ steps.metadata.outputs.firmware_url }}
+      firmware_sha256: ${{ steps.metadata.outputs.firmware_sha256 }}
+      publish: ${{ steps.metadata.outputs.publish }}
+    steps:
+      - id: metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha || github.event.workflow_run.head_sha }}
+          VERSION: ${{ inputs.version }}
+          FIRMWARE_URL: ${{ inputs.firmware_url || vars.FIRMWARE_CANDIDATE_URL }}
+          FIRMWARE_SHA256: ${{ inputs.firmware_sha256 || vars.FIRMWARE_CANDIDATE_SHA256 }}
+          PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish || github.event_name == 'workflow_run' && vars.AUTO_PUBLISH_RELEASES == 'true' }}
+        run: |
+          python - <<'PY'
+          import os,re,json,base64,urllib.request
+          sha=os.environ['SHA'];assert re.fullmatch('[0-9a-f]{40}',sha)
+          url='https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+'/contents/VERSION?ref='+sha
+          req=urllib.request.Request(url,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN']})
+          with urllib.request.urlopen(req) as r:data=json.load(r)
+          version=base64.b64decode(data['content']).decode().strip()
+          assert re.fullmatch('(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',version)
+          if os.environ['VERSION']:assert os.environ['VERSION']==version
+          assert re.fullmatch('[0-9a-f]{64}',os.environ['FIRMWARE_SHA256'])
+          assert os.environ['FIRMWARE_URL'].startswith('https://github.com/')
+          values={'sha':sha,'version':version,'firmware_url':os.environ['FIRMWARE_URL'],'firmware_sha256':os.environ['FIRMWARE_SHA256'],'publish':os.environ['PUBLISH'].lower()}
+          assert all('\n' not in v and '\r' not in v for v in values.values())
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              for key,value in values.items():out.write(key+'='+value+'\n')
+          PY
+  validate:
+    needs: resolve
+    uses: ./.github/workflows/validate.yml
+    with: {sha: '${{ needs.resolve.outputs.sha }}'}
+  security:
+    needs: resolve
+    uses: ./.github/workflows/security.yml
+    with: {sha: '${{ needs.resolve.outputs.sha }}'}
+  assemble:
+    needs: [resolve, validate, security]
+    runs-on: ubuntu-24.04
+    environment: release-signing
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.workflow_sha }}', path: trusted, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r trusted/requirements-dev.lock
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with: {pattern: '*-${{ needs.resolve.outputs.sha }}', path: inputs, merge-multiple: true}
+      - name: Materialize explicit existing signing identities privately
+        env:
+          FIRMWARE_KEY: ${{ secrets.FIRMWARE_SIGNING_KEY_PEM }}
+          APK_KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE_BASE64 }}
+          APK_PASSWORD: ${{ secrets.ANDROID_SIGNING_PASSWORD }}
+          QUALIFICATION: ${{ vars.FIRMWARE_QUALIFICATION_JSON }}
+        run: |
+          python - <<'PY'
+          import os,base64
+          from pathlib import Path
+          p=Path('private');p.mkdir(mode=0o700)
+          for name,raw in [('firmware.pem',os.environ['FIRMWARE_KEY'].encode()),('android.jks',base64.b64decode(os.environ['APK_KEYSTORE'],validate=True)),('password.txt',(os.environ['APK_PASSWORD']+'\n').encode()),('qualification.json',os.environ['QUALIFICATION'].encode())]:
+              if not raw:raise ValueError('Existing identity/qualification input required')
+              f=p/name;f.write_bytes(raw);f.chmod(0o600)
+          PY
+      - name: Verify exact firmware candidate download
+        env: {URL: '${{ needs.resolve.outputs.firmware_url }}', EXPECTED: '${{ needs.resolve.outputs.firmware_sha256 }}'}
+        run: |
+          PYTHONPATH=trusted:trusted/apps/desktop-updater/src python - <<'PY'
+          import os,re
+          from pathlib import Path
+          from vomar_updater.adapters.releases import download
+          from tools.release.manifest import digest
+          if not re.fullmatch('[0-9a-f]{64}',os.environ['EXPECTED']):raise ValueError('Exact firmware hash required')
+          raw=download(os.environ['URL'],2*1024*1024)
+          if digest(raw)!=os.environ['EXPECTED']:raise ValueError('Firmware candidate hash mismatch')
+          Path('private/candidate.zip').write_bytes(raw)
+          PY
+      - name: Assemble only matching qualified components and native artifacts
+        env: {VERSION: '${{ needs.resolve.outputs.version }}', SHA: '${{ needs.resolve.outputs.sha }}'}
+        run: >-
+          PYTHONPATH=trusted python -m tools.release.assemble --inputs inputs --output assets
+          --version "$VERSION" --sha "$SHA" --firmware-candidate private/candidate.zip
+          --qualification private/qualification.json --private-key private/firmware.pem
+          --keystore private/android.jks --password-file private/password.txt
+          --android-tools "$ANDROID_HOME/build-tools/35.0.0"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'complete-distribution-${{ needs.resolve.outputs.sha }}', path: assets, if-no-files-found: error}
+      - name: Remove signer material
+        if: always()
+        run: rm -rf -- private
+  publish:
+    needs: [resolve, assemble]
+    if: needs.resolve.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    environment: release-publication
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.workflow_sha }}', path: trusted, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r trusted/requirements-dev.lock
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with: {name: 'complete-distribution-${{ needs.resolve.outputs.sha }}', path: assets}
+      - name: Read independently protected qualification
+        env: {QUALIFICATION: '${{ vars.FIRMWARE_QUALIFICATION_JSON }}'}
+        run: python -c 'import os;from pathlib import Path;Path("qualification.json").write_text(os.environ["QUALIFICATION"])'
+      - env:
+          GH_TOKEN: ${{ secrets.RELEASE_PUBLICATION_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: >-
+          PYTHONPATH=trusted python -m tools.release.publish --directory assets
+          --qualification qualification.json --public-key trusted/firmware/keys/dev-public.pem --android-tools "$ANDROID_HOME/build-tools/35.0.0" --publish

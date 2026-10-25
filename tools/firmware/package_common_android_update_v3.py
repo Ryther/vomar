@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:sys.path.insert(0,str(ROOT))
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes,serialization
 from cryptography.hazmat.primitives.asymmetric import ec,utils
+from tools.firmware.bounded_zip import read_member
 from tools.firmware.package_common_android_update import canonical,sha,digest,hashes_list,verify_zigbee_carrier
 from tools.firmware.package_android_update import MAX_ZIP,MAX_IMAGE,signed_metadata
 from tools.firmware.build_ota_migration import check_slot
@@ -105,7 +106,7 @@ def _validate_common_v3_bundle(raw,key,expected_purpose=None):
   with zipfile.ZipFile(io.BytesIO(raw)) as archive:
    info=archive.infolist();names=[v.filename for v in info]
    if len(names)!=len(set(names)) or len(names)>(12 if expected_purpose else 11) or any(v.file_size<0 or v.file_size>MAX_IMAGE or v.flag_bits&1 or v.is_dir() for v in info) or sum(v.file_size for v in info)>MAX_ZIP:raise ValueError('duplicate/oversized/encrypted ZIP entries')
-   entries={n:archive.read(n) for n in names}
+   entries={i.filename:read_member(archive,i,MAX_IMAGE) for i in info}
  except (zipfile.BadZipFile,RuntimeError,NotImplementedError) as exc:raise ValueError('invalid ZIP') from exc
  if not {'manifest.json','manifest.sig'}<=set(entries):raise ValueError('missing signed manifest')
  mraw=entries['manifest.json']

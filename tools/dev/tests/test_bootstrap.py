@@ -33,3 +33,12 @@ def test_image_bootstrap_can_run_from_shallow_container_copy(tmp_path):
     shutil.copy2(Path(__file__).parents[1]/'bootstrap.py',script)
     p=subprocess.run([__import__('sys').executable,str(script),'help'],capture_output=True,text=True)
     assert 'IndexError' not in p.stderr
+
+
+def test_private_workspace_files_never_enter_docker_build_context():
+    import pathspec
+    policy=pathspec.PathSpec.from_lines('gitignore',(Path(__file__).resolve().parents[3]/'.dockerignore').read_text().splitlines())
+    for p in ['.claude/settings.json','_test/protected-original.zip','work/private/key.pem','.devcontainer/post-create.sh','.env']:
+        assert policy.match_file(p),p
+    for p in ['.devcontainer/Dockerfile','.devcontainer/toolchain.json','tools/dev/bootstrap.py','.devcontainer/assistants/package-lock.json']:
+        assert not policy.match_file(p),p

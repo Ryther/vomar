@@ -72,10 +72,19 @@ class MqttBridge:
             if not topic.startswith(network.topic+'/'):continue
             relative=topic[len(network.topic)+1:]
             if relative=='bridge/state' and value in ({'state':'offline'},'offline'):self._offline();return
-            if relative=='bridge/devices' and type(value) is list:
+            if relative=='bridge/devices':
                 for key in [k for k in self.devices if k[0]==network.id]:self.devices.pop(key)
-                for d in value[:512]:
-                    if type(d) is dict and re.fullmatch('0x[0-9a-f]{16}',d.get('ieee_address','')):self.devices[(network.id,d['ieee_address'])]=d
+                for key in [k for k in self.observations if k[0]==network.id]:self.observations.pop(key)
+                if type(value) is not list or len(value)>512:return
+                seen=set();names=set();records={}
+                for d in value:
+                    if type(d) is not dict:return
+                    ieee=d.get('ieee_address');name=d.get('friendly_name');definition=d.get('definition')
+                    if not isinstance(ieee,str) or not re.fullmatch('0x[0-9a-f]{16}',ieee) or ieee in seen:return
+                    if not isinstance(name,str) or not 1<=len(name)<=256 or name in names or any(c in name for c in ('+','#')):return
+                    if definition is not None and type(definition) is not dict:return
+                    seen.add(ieee);names.add(name);records[(network.id,ieee)]=d
+                self.devices.update(records)
             elif relative.startswith('bridge/response/device/ota_update/') and not retained and type(value) is dict:
                 pending=self.pending.get(value.get('transaction'))
                 if pending and pending[0]==topic and value.get('status')=='ok' and type(value.get('data')) is dict and value['data'].get('id')==pending[1] and not pending[2].done():pending[2].set_result(value['data'])
@@ -92,7 +101,8 @@ class MqttBridge:
     def target(self,network,ieee):
         if not self.connected:raise ConnectionError('MQTT is offline')
         d=self.devices.get((network,ieee))
-        if not d or d.get('definition',{}).get('vendor','').lower()!='openvimar' or d.get('definition',{}).get('model')!='30805-custom' or d.get('model_id')!='Vimar30805' or d.get('disabled') is True or d.get('definition',{}).get('supports_ota') is not True:raise ValueError('Selected device is not a discovered supported custom dimmer')
+        definition=d.get('definition') if d else None
+        if type(definition) is not dict or definition.get('vendor')!='OpenVimar' or definition.get('model')!='30805-custom' or d.get('model_id')!='Vimar30805' or d.get('disabled') is True or definition.get('supports_ota') is not True:raise ValueError('Selected device is not a discovered supported custom dimmer')
         return d
     async def publish(self,topic,payload):
         if not self.connected:raise ConnectionError('Broker disconnected')

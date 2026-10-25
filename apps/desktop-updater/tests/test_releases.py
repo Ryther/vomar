@@ -11,7 +11,7 @@ def fixture(tmp_path):
         name='vomar-firmware-0.1.0.zip' if role=='firmware-common' else role+'.dat'
         (tmp_path/name).write_bytes(role.encode());r={'role':role,'filename':name,'componentVersion':'1.0.0'}
         if role=='android-apk':r['androidVersionCode']=20
-        if role.startswith('desktop-'):_,platform,architecture=role.split('-');r.update(platform=platform,architecture=architecture)
+        if role.startswith('desktop-'):_,platform,architecture=role.split('-');r.update(platform=platform,architecture='x64' if architecture=='setup' else architecture)
         records.append(r)
     m=build_manifest('0.1.0','a'*40,records,tmp_path)
     release={'draft':False,'prerelease':False,'tag_name':m['tag'],'assets':[{'name':a['filename'],'size':a['size'],'browser_download_url':f'https://github.com/Ryther/vomar/releases/download/{m["tag"]}/{a["filename"]}'} for a in m['artifacts']]}

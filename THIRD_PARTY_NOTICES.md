@@ -1520,3 +1520,16 @@ Codex CLI (Apache-2.0), OpenCode (MIT) and Claude Code (Anthropic's published
 terms) are development-only tools; their accounts, subscriptions and provider
 credentials are not included in the product or repository. Nordic/ZBOSS stack
 conditions above remain separate from the license on project-authored source.
+
+The native desktop distribution includes unmodified, dynamically loaded Qt,
+PySide6 and Shiboken6 libraries. Their upstream license texts are included under
+`notices/Qt-PySide6`; corresponding PySide/Shiboken source is available at
+https://github.com/pyside/pyside-setup/tree/v6.12.0 and Qt source at
+https://download.qt.io/official_releases/qt/6.12/6.12.0/submodules/ .
+Only Qt Core/Gui/Widgets and required platform plugins are selected. No Qt
+Designer, QML compiler or other GPL development executable is shipped. The
+application source, frozen build recipe and dependency locks are public; users
+may rebuild Vomar with a modified compatible library. No term of the Vomar MIT
+license restricts debugging modifications to these libraries. The bundled Python
+runtime's full license is `notices/Python-LICENSE.txt`. OpenOCD retains its
+upstream license and notices in the bundled probe directory.

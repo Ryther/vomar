@@ -1,0 +1,48 @@
+{
+  "openocd": {
+    "release": "v0.12.0-7",
+    "source": "https://github.com/xpack-dev-tools/openocd-xpack/tree/v0.12.0-7",
+    "assets": {
+      "xpack-openocd-0.12.0-7-darwin-arm64.tar.gz": {
+        "url": "https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-7/xpack-openocd-0.12.0-7-darwin-arm64.tar.gz",
+        "sha256": "667342c086984f3e5a55b4e0d5f711add13fb04de040fca493303000e6c19327"
+      },
+      "xpack-openocd-0.12.0-7-darwin-x64.tar.gz": {
+        "url": "https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-7/xpack-openocd-0.12.0-7-darwin-x64.tar.gz",
+        "sha256": "668ad25350103a4357e11629ec833eae5982e973889ce25bad0c2963e37fa8bf"
+      },
+      "xpack-openocd-0.12.0-7-linux-arm64.tar.gz": {
+        "url": "https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-7/xpack-openocd-0.12.0-7-linux-arm64.tar.gz",
+        "sha256": "db73a3ab91c556ecec2405a7e02d404b11139df6aba1031cad94a7e6766d06cc"
+      },
+      "xpack-openocd-0.12.0-7-linux-x64.tar.gz": {
+        "url": "https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-7/xpack-openocd-0.12.0-7-linux-x64.tar.gz",
+        "sha256": "94b3790983beaf8ed57e646c0620dd66d705fddae03d290823a6ed3b439468d6"
+      },
+      "xpack-openocd-0.12.0-7-win32-x64.zip": {
+        "url": "https://github.com/xpack-dev-tools/openocd-xpack/releases/download/v0.12.0-7/xpack-openocd-0.12.0-7-win32-x64.zip",
+        "sha256": "6bfd3c97135aafef8affc9af1acf34fd0e2b9ca26044506f6abd7f95b7630052"
+      }
+    }
+  },
+  "inno": {
+    "release": "is-7_1_0",
+    "source": "https://github.com/jrsoftware/issrc/tree/is-7_1_0",
+    "assets": {
+      "innosetup-7.1.0-x64.exe": {
+        "url": "https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe",
+        "sha256": "0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f"
+      }
+    }
+  },
+  "gitleaks": {
+    "version": "v8.30.1",
+    "url": "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz",
+    "sha256": "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+  },
+  "actionlint": {
+    "version": "v1.7.12",
+    "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz",
+    "sha256": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+  }
+}

@@ -1,0 +1,15 @@
+name: Propose distribution
+on:
+  push: {branches: [main]}
+permissions: {contents: read}
+jobs:
+  proposal:
+    if: github.repository == 'Ryther/vomar'
+    runs-on: ubuntu-24.04
+    environment: release-proposal
+    steps:
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
+        with:
+          token: ${{ secrets.RELEASE_PROPOSAL_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

@@ -1,0 +1,103 @@
+# Desktop application
+
+Native packages provide `Vomar` (GUI) and `vomar` (CLI), sharing the same Python
+engine. End users need no Python, Nordic SDK, Gradle or development container.
+Each supported platform is built separately; a Linux test does not qualify
+Windows/macOS drivers or Bluetooth.
+
+## Install
+
+- Linux x64: extract the tar.gz, run `sh Vomar/install.sh`, and open Vomar from
+  the desktop menu. `~/.local/bin` provides both launchers. Use the shipped
+  uninstall script to remove only the owned runtime; private data is retained.
+- Windows x64: use the per-user installer or extract the portable ZIP. Approve
+  the unsigned application through the normal Windows first-launch flow after
+  checking the downloaded distribution checksums. DK USB access may require a
+  compatible libusb/WinUSB driver selected deliberately for the probe interface.
+- macOS Intel and Apple Silicon: choose the matching DMG and copy Vomar to
+  Applications. The CLI is `Vomar.app/Contents/MacOS/vomar`. The initial bundle
+  has ad-hoc integrity signing, without a trusted developer certificate or
+  notarization. Use System Settings' normal approval flow. Bluetooth access is
+  requested only when you initiate a scan/connection.
+
+The target contracts are Ubuntu 22.04+ x64, Windows 10 1809+/11 x64 and macOS
+14.4+ on the matching architecture. Native runner checks and linked-library
+inspection must establish the actual package floor; host-only tests do not.
+
+## Devices, Activity and Settings
+
+Devices is optional organization: discover a nearby recovery, then save a name
+and room if useful. Manual updates do not require a registry. A macOS Bluetooth
+identifier is an opaque UUID; do not convert it into a MAC address.
+
+Settings → Updates accepts one signed local common ZIP or the public GitHub
+source. Multiple desktop ZIPs in a release are harmless: clients use explicit
+firmware role, canonical name and exact download bytes. A local older supported
+ZIP still works without a GitHub token. Verification never starts an update.
+
+Review Bluetooth updates from Devices. Review names the live UID, approved loader,
+package and observed images; type the displayed challenge to approve that one
+operation. Stop and process restart revoke approval. Activity preserves intent,
+progress, acknowledgment and uncertainty. Acknowledged reset is not verified
+physical operation. Confirm actual device operation separately after observing it.
+
+An interrupted upload requires the same session, package and fresh live review.
+A completed acknowledged reset is not silently repeated. The separate Bluetooth
+trial tool accepts signed qualification candidates for a single controlled target;
+those candidates cannot enter the normal release/fleet/Zigbee route.
+
+## First installation and repair
+
+Use an isolated bench with mains disconnected. MCU identity alone does not prove
+the commercial hardware model. Select the exact DK serial, review HALT and keep
+the exclusive connection while acquiring two equal FLASH/FICR/UICR reads. Export
+and reopen the exact protected original before reviewing FLASH programming.
+No UICR write, mass erase or automatic recovery operation exists in this route.
+
+Installation writes bounded FLASH pages, verifies them, commits the anchor last,
+then verifies the complete image and unchanged UICR. It ends halted. Verified
+start is a separate review. Never disconnect or release an uncertain target on
+an assumption that a transfer succeeded.
+
+For repair, retain the initial original/export and select the interrupted session.
+Fresh preview checks the same release/target/original and journal head. Pages
+never issued by the journal must still match the original. Rebuild may discard
+custom settings. Changed originals, missing journals or unknown memory block
+repair. No startup path restores hardware consent.
+
+## Optional MQTT and fleet
+
+One explicitly connected broker supports up to three distinct Zigbee2MQTT base
+topics. Private brokers are supported independently of public release HTTPS
+policy. Unencrypted TCP/WebSocket connections require separate local-network
+consent. Passwords use Secret Service, Keychain or Windows Credential Manager;
+there is no plaintext fallback. Unlock the OS store if it is unavailable.
+
+A Zigbee update requires the exact HTTPS carrier bytes bound by the signed
+package, a supported custom target, correlated OTA check and a fresh advancing
+recovery contract. Retained state is a baseline, not proof. A submitted uncertain
+update holds its network until explicit read-only reconciliation; cancellation
+does not cancel a remote Zigbee2MQTT operation. One global BLE operation and one
+operation per network limit concurrency. Saved labels never replace identity.
+
+## CLI and developer rebuild
+
+`vomar --help` lists releases, devices, fleet, MQTT, sessions, diagnostics, backup,
+probe, first-install, repair, start, trial and Zigbee commands. `preview` is
+read-only admission; `run` prepares and prints a fresh interactive review.
+There is no universal `--yes` or replayable approval file. Machine-readable
+results go to stdout; progress and errors go to stderr.
+
+Rebuild with Python 3.13.12 and the hash-locked desktop requirements:
+
+```sh
+python -m pip install --require-hashes -r requirements-desktop.lock
+python -m pip install --no-deps .
+python -m tools.release.package_desktop --output _test/native
+```
+
+Build on the target OS/architecture. The onedir runtime links Qt dynamically;
+upstream license texts and build inventory ship under notices. Replacing Qt
+libraries or rebuilding is supported subject to their upstream ABI/license.
+Trusted OS signing remains deferred; firmware and Android signer continuity are
+mandatory and separate. See [release preparation](releasing.md).

@@ -77,6 +77,7 @@ internal class AndroidFleetReleases(context:Context) {
             out.toByteArray().also{require(it.size==metadataAsset.getInt("size"))}
         }
         val selection=DistributionAssets.parse(metadata,tag)
+        selection.assets.forEach{asset(it.filename,it.size)}
         val firmware=asset(selection.firmware.filename,selection.firmware.size)
         onTotal(firmware.getLong("size"));onProgress(0)
         val ref=download(firmware.getString("browser_download_url"),PackageReader.MAX_ZIP){cache.import(it,{coroutine.ensureActive()},onProgress)}

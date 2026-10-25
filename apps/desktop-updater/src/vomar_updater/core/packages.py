@@ -12,6 +12,7 @@ import re
 import zipfile
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
+from tools.firmware.bounded_zip import read_member
 from tools.firmware.package_common_android_update_v3 import strict_json, validate_common_v3_bundle, verify_signature, canonical, sha, exact
 from tools.firmware.package_common_android_update import verify_component, verify_zigbee_carrier, hashes_list, digest
 from tools.firmware.package_android_update import MAX_ZIP, MAX_IMAGE
@@ -30,7 +31,7 @@ def read_zip(raw, *, limits=None, max_size=MAX_ZIP):
             if not 1<=len(infos)<=16 or len(set(names))!=len(names):raise ValueError('Duplicate/oversized ZIP directory')
             if any(i.is_dir() or i.flag_bits&1 or i.filename not in (limits or names) or '/' in i.filename or '\\' in i.filename or i.filename in ('.','..') or i.file_size>(limits[i.filename] if limits else MAX_IMAGE) or (i.external_attr>>16)&0o170000==0o120000 for i in infos):raise ValueError('Unsafe ZIP member')
             if sum(i.file_size for i in infos)>max_size:raise ValueError('ZIP expansion limit')
-            return {i.filename:z.read(i) for i in infos}
+            return {i.filename:read_member(z,i,limits[i.filename] if limits else MAX_IMAGE) for i in infos}
     except (zipfile.BadZipFile,RuntimeError,NotImplementedError,OSError) as e:raise ValueError('Invalid ZIP') from e
 
 

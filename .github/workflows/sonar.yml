@@ -1,0 +1,71 @@
+name: Trusted Sonar analysis
+on:
+  workflow_run:
+    workflows: [Validate candidate]
+    types: [completed]
+permissions: {contents: read, actions: read, checks: write}
+jobs:
+  analyze:
+    name: Sonar required
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_repository.full_name == github.repository && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.actor.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    environment: sonar-analysis
+    steps:
+      # Helper/config come from the protected workflow revision, never PR code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.workflow_sha }}', path: trusted, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.event.workflow_run.head_sha }}', path: candidate, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          pattern: '*reports-${{ github.event.workflow_run.head_sha }}'
+          path: reports
+          merge-multiple: true
+      - name: Require actual reports for every product language
+        env: {CANDIDATE_SHA: '${{ github.event.workflow_run.head_sha }}'}
+        run: |
+          PYTHONPATH=trusted python - <<'PY'
+          import os
+          from tools.release.reports import check
+          check('reports',os.environ['CANDIDATE_SHA'])
+          from tools.release.prepare_analysis import prepare
+          prepare('reports','candidate',os.environ['CANDIDATE_SHA'])
+          PY
+      - run: python trusted/tools/dev/bootstrap.py firmware
+      - name: Scan source using only protected settings
+        uses: SonarSource/sonarqube-scan-action@c7ee0f9df90b7aa20e8dcf9695dcfe2e7da5b4f2
+        env: {SONAR_TOKEN: '${{ secrets.SONAR_TOKEN }}'}
+        with:
+          projectBaseDir: candidate
+          args: >-
+            -Dproject.settings=../trusted/sonar-project.properties
+            -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }}
+            -Dsonar.python.coverage.reportPaths=../reports/python-coverage.xml
+            -Dsonar.javascript.lcov.reportPaths=../reports/lcov.info
+            -Dsonar.coverage.jacoco.xmlReportPaths=../reports/core-jacoco.xml,../reports/app-jacoco.xml
+            -Dsonar.coverageReportPaths=../reports/c-coverage.xml
+            -Dsonar.cfamily.compile-commands=../reports/compile_commands.json
+      - name: Require exact candidate security analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: PYTHONPATH=trusted python -m tools.release.security_gate --sha "$CANDIDATE_SHA"
+      - name: Attach the required check to the actual candidate SHA
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_SHA: ${{ github.event.workflow_run.head_sha }}
+          RESULT: ${{ job.status }}
+        run: |
+          python - <<'PY'
+          import os,json,urllib.request,re
+          sha=os.environ['CANDIDATE_SHA'];assert re.fullmatch('[0-9a-f]{40}',sha)
+          repo=os.environ['GITHUB_REPOSITORY'];result='success' if os.environ['RESULT']=='success' else 'failure'
+          body=json.dumps({'name':'Sonar required','head_sha':sha,'status':'completed','conclusion':result}).encode()
+          req=urllib.request.Request('https://api.github.com/repos/'+repo+'/check-runs',data=body,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'})
+          with urllib.request.urlopen(req) as response:response.read()
+          PY

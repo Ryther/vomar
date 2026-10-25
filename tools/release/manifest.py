@@ -7,8 +7,8 @@ from pathlib import Path
 import re
 
 SEMVER = r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)'
-REQUIRED_ROLES = frozenset(('firmware-common','zigbee-ota','android-apk','desktop-linux-x64','desktop-windows-x64','desktop-macos-x64','desktop-macos-arm64','zigbee2mqtt-converter','licenses','offline-guide'))
-OPTIONAL_ROLES = frozenset(('desktop-windows-setup','source-sbom'))
+REQUIRED_ROLES = frozenset(('firmware-common','zigbee-ota','android-apk','desktop-linux-x64','desktop-windows-x64','desktop-windows-setup','desktop-macos-x64','desktop-macos-arm64','zigbee2mqtt-converter','licenses','offline-guide'))
+OPTIONAL_ROLES = frozenset(('source-sbom',))
 TOP = {'schemaVersion','distributionVersion','tag','commit','components','artifacts'}
 ARTIFACT = {'role','filename','size','sha256','componentVersion'}
 
@@ -41,7 +41,7 @@ def validate(value, directory=None):
     if type(value['components']) is not dict or not value['components']:raise ValueError('Component versions required')
     for k,v in value['components'].items():
         if not re.fullmatch('[a-z][a-z0-9-]*',k) or not isinstance(v,str) or not re.fullmatch(SEMVER,v):raise ValueError('Invalid component version')
-    if type(value['artifacts']) is not list or not 10<=len(value['artifacts'])<=32:raise ValueError('Incomplete or oversized distribution')
+    if type(value['artifacts']) is not list or not 11<=len(value['artifacts'])<=32:raise ValueError('Incomplete or oversized distribution')
     roles=set();names=set()
     for a in value['artifacts']:
         exact(a,ARTIFACT,{'platform','architecture','androidVersionCode'})

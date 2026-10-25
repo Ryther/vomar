@@ -12,12 +12,12 @@ from .service import Service
 def parser():
     p=argparse.ArgumentParser(prog='vomar',description=__doc__);p.add_argument('--version',action='version',version=__version__);p.add_argument('--state',type=Path,help='Private application state directory')
     groups=p.add_subparsers(dest='group',required=True)
-    commands={'releases':['inspect','latest','verify'],'devices':['list','scan','import','save','remove'],'sessions':['list','details','confirm'],'diagnostics':['read','export'],'updates':['preview','run','resume','prepare'],'backup':['capture','import'],'first-install':['run'],'repair':['run'],'start':['run'],'probe':['inspect','halt'],'mqtt':['save','connect','disconnect','devices'],'settings':['get','save'],'trial':['preview','run'],'zigbee':['preview','run','reconcile'],'fleet':['list','preview','run'],'bench':['install','repair','start']}
+    commands={'releases':['inspect','latest','verify'],'devices':['list','scan','import','save','remove'],'sessions':['list','details','confirm'],'diagnostics':['read','export'],'updates':['preview','run','resume','prepare'],'backup':['capture','import'],'first-install':['run'],'repair':['run'],'start':['run'],'probe':['inspect','halt'],'mqtt':['save','connect','disconnect','devices'],'settings':['get','save'],'trial':['preview','run'],'zigbee':['preview','run','reconcile'],'fleet':['list','preview','run','resume'],'bench':['install','repair','start']}
     for group,actions in commands.items():
         q=groups.add_parser(group);sub=q.add_subparsers(dest='action',required=True)
         for action in actions:
             r=sub.add_parser(action)
-            for name in ('path','package','target','serial','session','original','export','repository','name','room','id','ieee','network','uri','username','theme','language','source','public-key','mode'):
+            for name in ('path','package','target','serial','session','original','export','repository','name','room','id','ieee','network','uri','username','theme','language','source','public-key','mode','transport','batch'):
                 r.add_argument('--'+name)
             r.add_argument('--topic',action='append',default=[],help='MQTT base topic; repeat at most three times');r.add_argument('--allow-plaintext',action='store_true')
     return p
@@ -59,8 +59,10 @@ async def run(args):
             else:raise ValueError('--original is required; never replace the preserved original after interruption')
             if group=='backup':return {'original':service.original.digest,'export':service.export_path}
             r=await service.dispatch(('bench.preview' if action=='install' else 'bench.'+action+'-preview') if group=='bench' else group+'.preview',a);confirm(r);return await service.dispatch('execute',r)
-        if group=='zigbee' or group=='mqtt' and action=='devices':
+        if group=='zigbee' or group=='fleet' and args.transport!='ble' or group=='mqtt' and action=='devices':
             await service.dispatch('mqtt.connect');await asyncio.sleep(.5)
+        if group=='fleet' and action=='resume':
+            r=await service.dispatch('fleet.resume-preview',a);confirm(r);return await service.dispatch('execute',r)
         if group=='updates' and action in ('resume','prepare'):
             r=await service.dispatch('updates.resume-preview' if action=='resume' else 'updates.prepare-preview',a);confirm(r);return await service.dispatch('execute',r)
         if group in ('updates','trial','zigbee','fleet') and action=='run':

@@ -1,0 +1,24 @@
+site_name: Vomar
+site_url: https://ryther.github.io/vomar/
+repo_url: https://github.com/Ryther/vomar
+repo_name: Ryther/vomar
+site_dir: _test/site
+hooks: [tools/docs/site.py]
+theme:
+  name: material
+  palette:
+    primary: deep orange
+    accent: teal
+nav:
+  - Start: index.md
+  - Install and recover: offline-guide.md
+  - Desktop: desktop.md
+  - Development: development.md
+  - Release a distribution: releasing.md
+  - GitHub setup: github-setup.md
+  - Client parity: desktop-parity.md
+  - UX evidence: ux-evidence.md
+validation:
+  links:
+    not_found: warn
+    unrecognized_links: warn

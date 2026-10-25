@@ -1,0 +1,16 @@
+name: Vomar product analysis
+queries:
+  - uses: security-extended
+paths:
+  - firmware
+  - _test/codeql-firmware/typed/source/firmware
+  - _test/codeql-firmware/typed/loader/source/firmware
+  - apps/android-updater
+  - apps/desktop-updater
+  - integrations/zigbee2mqtt
+  - tools
+  - .github/workflows
+paths-ignore:
+  - '**/test-fixtures/**'
+  - '**/build/**'
+  - '**/dist/**'

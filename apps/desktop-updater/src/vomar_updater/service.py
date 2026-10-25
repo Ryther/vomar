@@ -29,6 +29,9 @@ class Service:
     def _review(self,kind,review,summary,challenge):
         token=secrets.token_hex(24);self.reviews[token]=(kind,review)
         return {'review':token,'operation':kind,'summary':summary,'challenge':challenge,'message':'Review this exact operation. Approval expires and is never restored after restart.'}
+    def ble_summary(self,p,package):
+        images=json.loads(p.observed_json);primary=images.get('primary') or {}
+        return {'Device UID':':'.join(p.identity.uid) if p.identity else 'Legacy recovery; UID must be verified after preparation','Connection':p.target,'Firmware version':package.version,'Current version':primary.get('version') or 'Unavailable','Operation':p.operation,'After transfer':'Check the physical dimmer; a reset acknowledgment does not prove operation','Package SHA-256':package.digest}
     def need_package(self):
         if self.package is None:raise ValueError('Choose and verify a signed firmware ZIP first')
         return self.package
@@ -50,7 +53,7 @@ class Service:
             p=self.candidate if action=='trial.preview' else self.need_package()
             if p is None:raise ValueError('Choose a candidate through the separate Bluetooth trial tool')
             r=await self.engine.inspect(p,a['target'],operation='trial' if action=='trial.preview' else 'bootstrap')
-            return self._review('trial' if action=='trial.preview' else 'prepare',r,asdict(r),r.identity.uid[-1] if r.identity else r.target[-8:])
+            return self._review('trial' if action=='trial.preview' else 'prepare',r,self.ble_summary(r,p),r.identity.uid[-1] if r.identity else r.target[-8:])
         if action=='devices.list':return self.registry.list()
         if action=='devices.import':return {'imported':self.registry.import_records(Path(a['path']).read_bytes())}
         if action=='devices.save':
@@ -59,15 +62,40 @@ class Service:
         if action=='devices.scan':
             async with self.scheduler.ble:return await self.ble.scan()
         if action=='fleet.list':return self.batches.list()
-        if action=='fleet.preview':
-            selected=a.get('ids',a.get('id','').split(','));rows=[r for r in self.registry.list() if r['id'] in selected]
+        if action in ('fleet.preview','fleet.resume-preview'):
+            prior=None
+            if action=='fleet.resume-preview':
+                prior=next((b for b in self.batches.list() if b['id']==a.get('batch',a.get('id'))),None)
+                if not prior or prior['state']!='paused':raise ValueError('Choose a paused batch for a fresh review')
+                selected=[j['target'] for j in prior['jobs'] if j['state'] in ('queued','interrupted')]
+                a={**a,'mode':prior['mode'],'transport':prior.get('transport','ble'),'source':prior.get('source','')}
+            else:selected=a.get('ids') or a.get('id','').split(',')
+            rows=[r for r in self.registry.list() if r['id'] in selected]
             if not rows or len(rows)!=len(set(selected)):raise ValueError('Choose distinct saved devices for the batch')
-            package=self.need_package();reviews=[]
-            for r in rows:
-                if not r['ble']:raise ValueError('This Bluetooth batch contains a device without a nearby target; choose an explicit Zigbee route for network jobs')
-                reviews.append(await self.engine.inspect(package,r['ble']))
-            group=self.batches.create(package.digest,[r['id'] for r in rows],a.get('mode','sequential'))
-            return self._review('fleet',(group,reviews),{'batch':group['id'],'package':package.digest,'devices':[{'name':row['name'],'room':row['room'],'identity':asdict(r.identity)} for row,r in zip(rows,reviews)]},group['id'][-8:])
+            package=self.need_package();mode=a.get('mode','sequential');transport=a.get('transport','auto')
+            if transport not in ('auto','ble','zigbee'):raise ValueError('Choose Bluetooth, Zigbee or saved device routes')
+            if prior and prior['package']!=package.digest:raise ValueError('Resume requires the exact batch package')
+            reviews=[];summaries=[];identities=set()
+            for row in rows:
+                lane='zigbee' if transport=='zigbee' or transport=='auto' and row['network'] and row['ieee'] else 'ble'
+                old=next((j for j in prior['jobs'] if j['target']==row['id']),None) if prior else None
+                if lane=='ble':
+                    if not row['ble']:raise ValueError('Selected device has no Bluetooth target')
+                    r=await self.engine.inspect(package,row['ble'],resume_session=old.get('session') if old else None)
+                    identity=('ble',r.identity.uid);summary=self.ble_summary(r,package)
+                else:
+                    if self.mqtt is None:raise ValueError('Connect the saved broker before a network batch')
+                    from .core.zigbee import ZigbeeEngine
+                    self.zigbee=self.zigbee or ZigbeeEngine(self.store,self.mqtt,self.scheduler,self.on_event)
+                    assets=self.store.setting('release-assets') or {}
+                    source=a.get('source') or assets.get('zigbee-ota',{}).get('url','')
+                    r=await self.zigbee.inspect(package,row['network'],row['ieee'],source)
+                    identity=('zigbee',r.network,r.ieee);summary={'network':r.network,'ieee':r.ieee,'source':r.source}
+                if identity in identities:raise ValueError('Batch repeats a live device identity')
+                identities.add(identity);reviews.append((row['id'],lane,r));summaries.append({'name':row['name'],'room':row['room'],'route':lane,**summary})
+            group=prior or self.batches.create(package.digest,[r['id'] for r in rows],mode)
+            group.update(transport=transport,source=a.get('source',''));self.batches.save(group)
+            return self._review('fleet',(group,reviews,package),{'batch':group['id'],'mode':group['mode'],'package':package.digest,'devices':summaries},group['id'][-8:])
         if action=='sessions.list':return self.store.sessions()
         if action=='sessions.details':return self.store.events(a['session'])
         if action=='sessions.confirm':
@@ -76,12 +104,12 @@ class Service:
             return self._review('operator-confirm',a['session'],{'session':a['session'],'evidence':'Operator confirms actual dimmer operation; this is not fleet firmware qualification'},a['session'][-8:])
         if action=='updates.preview':
             p=await self.engine.inspect(self.need_package(),a['target'])
-            return self._review('update',p,asdict(p),p.identity.uid[-1])
+            return self._review('update',p,self.ble_summary(p,self.need_package()),p.identity.uid[-1])
         if action=='updates.resume-preview':
             prior=next((s for s in self.store.sessions() if s['id']==a['session']),None)
             if prior is None:raise ValueError('Choose an interrupted Bluetooth session')
             r=await self.engine.inspect(self.need_package(),prior['binding']['target'],resume_session=prior['id'])
-            return self._review('update',r,asdict(r),r.identity.uid[-1])
+            return self._review('update',r,self.ble_summary(r,self.need_package()),r.identity.uid[-1])
         if action=='diagnostics.read':
             async with self.scheduler.ble:
                 try:
@@ -120,21 +148,35 @@ class Service:
             self.plan=prepare_install(self.original,selected)
             r=self.installer.review(self.plan,self.probe,self.export_path,resume_session=a.get('session') if action in ('repair.preview','bench.repair-preview') else None,start=action in ('start.preview','bench.start-preview'))
             return self._review(('bench-'+('start' if r.start else 'repair' if r.resume_session else 'first-install')) if candidate_mode else action.split('.')[0],r,{'qualification':'pending' if candidate_mode else 'qualified package',**self.plan.binding,'probe':self.probe.serial,'effect':'Explicit reset/start' if r.start else 'Bounded FLASH write; UICR preserved; ends halted'},f'{self.original.identity[1]:08x}')
+        if action=='review.cancel':
+            self.reviews.pop(a['review'],None);return {'reviewRevoked':True}
         if action=='execute':
             token=a['review'];item=self.reviews.pop(token,None)
             if item is None:raise ValueError('Review expired or belongs to another process')
             kind,review=item
             if kind=='fleet':
-                group,previews=review;group['state']='running';self.batches.save(group)
-                for job,p in zip(group['jobs'],previews):
+                group,previews,package=review;group['state']='running';self.batches.save(group)
+                async def execute_job(item):
+                    target,lane,p=item;job=next(j for j in group['jobs'] if j['target']==target)
                     try:
-                        async with self.batch_ble:
-                            job['state']='running';self.batches.save(group)
-                            job['session']=await self.engine.execute(self.need_package(),p,self.engine.approve(p));job['state']='await-operator'
-                    except BaseException:
-                        job['state']='interrupted';group['state']='paused';self.batches.save(group);raise
+                        job['state']='running';self.batches.save(group)
+                        if lane=='ble':
+                            async with self.batch_ble:job['session']=await self.engine.execute(package,p,self.engine.approve(p))
+                            job['state']='await-operator'
+                        else:
+                            job['session']=await self.zigbee.execute(package,p,self.zigbee.approve(p));job['state']='verified'
+                    except BaseException as error:
+                        job['state']='interrupted';job['error']=type(error).__name__
+                        matches=[r for r in self.store.sessions() if r['binding'].get('package')==package.digest and (r['binding'].get('target')==getattr(p,'target',None) if lane=='ble' else r['binding'].get('ieee')==p.ieee and r['binding'].get('network')==p.network)]
+                        if matches:job['session']=matches[0]['id']
                     self.batches.save(group)
-                group['state']='await-operator';self.batches.save(group);return group
+                if group['mode']=='network-parallel':await asyncio.gather(*(execute_job(p) for p in previews))
+                else:
+                    for item in previews:
+                        await execute_job(item)
+                        if any(j['state']=='interrupted' for j in group['jobs']):break
+                group['state']='paused' if any(j['state'] in ('queued','interrupted') for j in group['jobs']) else 'await-operator' if any(j['state']=='await-operator' for j in group['jobs']) else 'verified'
+                self.batches.save(group);return group
             if kind=='zigbee':return {'session':await self.zigbee.execute(self.need_package(),review,self.zigbee.approve(review))}
             if kind in ('trial','prepare'):return {'session':await self.engine.execute(self.candidate if kind=='trial' else self.need_package(),review,self.engine.approve(review))}
             if kind=='update':return {'session':await self.engine.execute(self.need_package(),review,self.engine.approve(review))}

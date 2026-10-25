@@ -38,6 +38,15 @@ class DistributionContractTest {
             assertEquals(id,c.getValue("accept").jsonPrimitive.boolean,accepted)
         }
     }
+    @Test fun sharedDistributionManifest() {
+        val root=File(requireNotNull(System.getProperty("vomar.root")))
+        val cases=Json.parseToJsonElement(File(root,"tests/contracts/distribution.json").readText()).jsonObject.getValue("cases").jsonArray
+        cases.forEach { item ->
+            val c=item.jsonObject
+            assertEquals(c.getValue("id").jsonPrimitive.content,c.getValue("accept").jsonPrimitive.boolean,
+                runCatching{DistributionAssets.parse(c.getValue("manifest").toString().toByteArray(),"v0.1.0")}.isSuccess)
+        }
+    }
     @Test fun syntheticOpenOcdOriginal() {
         val root=File(requireNotNull(System.getProperty("vomar.root")))
         val original=org.openvimar.installer.OriginalArchive.verify(File(root,"tests/contracts/fixtures/openocd-original.zip").readBytes())

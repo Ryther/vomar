@@ -1,0 +1,58 @@
+name: Public security and dependency checks
+on:
+  push: {branches: [main]}
+  pull_request:
+  workflow_call:
+    inputs:
+      sha: {type: string, required: true}
+permissions: {contents: read}
+jobs:
+  secrets:
+    name: Secrets
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m tools.release.install_check_tools --output _test/check-tools
+      - run: _test/check-tools/gitleaks git --redact --no-banner --log-opts=--all
+  workflows:
+    name: Workflow lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-dev.lock
+      - run: python -m tools.release.check_workflows
+      - run: python -m tools.release.install_check_tools --output _test/check-tools
+      - run: _test/check-tools/actionlint
+  dependencies:
+    name: Dependencies required
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-security.lock
+      - run: pip-audit --disable-pip --no-deps -r requirements-desktop.lock -f json -o dependency-audit.json
+      - run: npm audit --prefix .devcontainer/assistants --omit=dev --audit-level=moderate
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with: {name: 'dependency-report-${{ inputs.sha || github.sha }}', path: dependency-audit.json, if-no-files-found: error}
+  ux:
+    name: UX evidence gate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-desktop.lock -r requirements-dev.lock
+      - run: python -m pip install --no-deps .
+      - env: {QT_QPA_PLATFORM: offscreen}
+        run: python -m pytest apps/desktop-updater/tests/test_gui.py
+      - run: test -s docs/desktop-parity.md && test -s docs/ux-evidence.md
