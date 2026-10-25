@@ -1,4 +1,16 @@
-# Vimar Updater Android 1.0.1
+# Vimar Updater Android 1.0.2
+
+App 1.0.2 (versionCode 22) fixes stale metadata for saved Zigbee devices. While
+the selected MQTT connection is active, device-topic firmware reports update
+Devices and the saved record automatically. A stale bridge inventory cannot
+replace a version already reported on the device topic. For the known OpenVimar
+wire format, the installed OTA version is decoded; the available/latest version
+is never shown as installed firmware. Local device names and rooms are retained.
+
+Saved readings are labelled `(saved)` when disconnected or when only cached
+broker data is available. Device details show when the version information was
+received. Opening the app still does not automatically connect, query or update
+devices; receiving MQTT metadata never authorizes a firmware operation.
 
 App 1.0.1 (versionCode 21) delivers the approved saved-connection and device-filter
 changes. Settings → Zigbee2MQTT now supports multiple named saved broker profiles,
@@ -8,7 +20,7 @@ for continuous press/drag/release, normal tap, keyboard and accessibility, witho
 the previous Use list mode switch or Done step.
 
 The signed APK is delivered locally under
-`experiments/android-updater/releases/1.0.1/`. Its incremented version code and
+`experiments/android-updater/releases/1.0.2/`. Its incremented version code and
 existing release signer support upgrading the installed 1.0.0 app. Package ID,
 firmware trust key and permissions remain unchanged. Firmware versioning and
 qualification remain independent. Native gesture/accessibility and live-broker
@@ -37,7 +49,7 @@ with a separate private candidate selection, foreground lifetime, Stop and
 report export. Normal release, fleet and Zigbee routes still reject candidates.
 
 For exact phone steps, see [Update a mounted dimmer by Bluetooth](android-bluetooth-trial.md).
-The app version is 1.0.1. Firmware packages have independent versions and
+The app version is 1.0.2. Firmware packages have independent versions and
 qualification records.
 
 App0.6.3 explicitly queues the initial system pairing request after LE service
@@ -147,6 +159,12 @@ owner-reported Bluetooth update was corroborated by post-trial radio diagnostics
 full current-release migration/pairing qualification remains separate.
 
 ## Release artifacts and qualification
+
+Android 1.0.2/code22 delivers the metadata refresh correction with the existing
+package ID and release signer. Its release folder records the fresh test results,
+signature/content checks and limits. No live broker or phone was used to diagnose
+the reported bathroom value; the actual installed version remains unverified by
+this app task. A broker/device must report a new version before the UI can show it.
 
 Android 1.0.1/code21 includes the new UI implementation rather than only version
 metadata. Its local release folder contains the signed APK, checksum, build

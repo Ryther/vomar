@@ -135,15 +135,19 @@ internal class NativeFleetUi(
         scope.launch { release=withContext(Dispatchers.IO){runCatching{runtime.releases.selected()}.getOrNull()};releaseInitialised=true;if(release==null&&commonPending&&!sourceBusy)adoptCommon();renderPage() }
         scope.launch { runtime.queue.groups.collect { if(pageId=="activity")refreshPage() else if(pageId=="network")connectionsUi.updateAvailability() } }
         scope.launch { FleetUpdateService.status.collect{if(it.isNotBlank())sourceNotice(it)} }
-        scope.launch { network.state.collect { value ->
+        scope.launch {
+            var previousConnection:String?=null
+            network.state.collect { value ->
+            val currentConnection=network.activeProfileId.takeIf{value.connected}
+            val connectionChanged=currentConnection!=previousConnection;previousConnection=currentConnection
             if(pageId=="network")connectionsUi.updateState()
             if(pageId=="zigbee-import")refreshPage()
             var changed=false
             value.devices.forEach { observed ->
                 val known=store.devices.firstOrNull{it.networkId==observed.networkId&&it.ieee==observed.ieee}
-                if(known!=null){val merged=observed.copy(id=known.id,name=known.name,room=known.room,address=known.address?:observed.address,uid=known.uid.ifEmpty{observed.uid});if(known!=merged){store.upsert(merged);changed=true}}
+                if(known!=null){val merged=ZigbeeDeviceMetadata.mergeSaved(known,observed);if(known!=merged){store.upsert(merged);changed=true}}
             }
-            if(changed&&pageId in listOf("devices","device"))refreshPage()
+            if((changed||connectionChanged)&&pageId in listOf("devices","device"))refreshPage()
         } }
     }
     private fun refreshPage(){val offset=scroll.scrollY;renderPage();scroll.post{scroll.scrollTo(0,offset)}}
@@ -311,8 +315,12 @@ internal class NativeFleetUi(
         search.addTextChangedListener(object:TextWatcher{override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){query=s.toString();renderDevices(rows)};override fun afterTextChanged(s:Editable?) {}})
         renderDevices(rows)
     }
+    private fun activeZigbeeTopics():Set<String> = if(network.state.value.connected)
+        runCatching { network.loadProfiles().firstOrNull{it.id==network.activeProfileId}?.networks.orEmpty().map{it.id}.toSet() }.getOrDefault(emptySet()) else emptySet()
     private fun renderDevices(rows:LinearLayout){
         rows.removeAllViews()
+        val activeTopics=activeZigbeeTopics()
+        val currentReports=network.state.value.devices.associateBy{it.networkId to it.ieee}
         val visible=store.devices.filter{r->(r.name+" "+r.room).contains(query,true) && when(filter){"Up to date"->deviceStatus(r).eligibility==Eligibility.CURRENT;"Update available"->deviceStatus(r).eligibility==Eligibility.UPDATE;"Not updatable"->deviceStatus(r).eligibility==Eligibility.BLOCKED;else->true}}
         if(visible.isEmpty())copy("No devices match this view.",rows)
         var updateSelectionSummary:()->Unit={}
@@ -338,7 +346,7 @@ internal class NativeFleetUi(
             val check=CheckBox(activity).apply{minWidth=dp(48);minHeight=dp(48);buttonTintList=ColorStateList.valueOf(color(R.color.ui_primary));contentDescription="Select ${r.name}";isChecked=selected.contains(r.id);setOnCheckedChangeListener{_,checked->if(checked)selected.add(r.id)else selected.remove(r.id);updateSelectionSummary();selectionFooter()}}
             row.addView(check,LinearLayout.LayoutParams(dp(48),-2))
             val info=column().apply{setPadding(dp(8),dp(16),dp(8),dp(16));isClickable=true;isFocusable=true;minimumHeight=dp(80);setBackgroundResource(android.R.drawable.list_selector_background);setOnClickListener{rememberRoute();detailId=r.id;pageId="device";renderPage();scroll.scrollTo(0,0)}}
-            info.addView(text(r.name,16,true));val metadata=listOfNotNull(r.room.takeIf{it.isNotBlank()},r.installedVersion).joinToString(" · ");if(metadata.isNotBlank())add(text(metadata,13,secondary=true),info,4)
+            info.addView(text(r.name,16,true));val version=r.installedVersion?.let{if(r.networkId!=null&&(ZigbeeDeviceMetadata.savedReading(r,r.networkId in activeTopics,currentReports[r.networkId to r.ieee])))"$it (saved)" else it};val metadata=listOfNotNull(r.room.takeIf{it.isNotBlank()},version).joinToString(" · ");if(metadata.isNotBlank())add(text(metadata,13,secondary=true),info,4)
             val status=deviceStatus(r)
             add(text(status.label,13).apply{setTextColor(eligibilityColor(status.eligibility))},info,5)
             if(status.eligibility==Eligibility.BLOCKED)add(text(status.reason,13,secondary=true),info,4)
@@ -386,7 +394,12 @@ internal class NativeFleetUi(
             AlertDialog.Builder(activity).setTitle("Remove ${record.name}?").setMessage("Only this phone’s organisational record is removed. Update checkpoints and reports are retained.").setNegativeButton("Cancel",null).setPositiveButton("Remove"){_,_->store.devices.removeAll{it.id==record.id};selected.remove(record.id);store.save();navigate("devices")}.show()
         }
         section("Device identity")
-        copy(record.installedVersion?.let{"Observed firmware $it"}?:"Firmware has not been checked yet.")
+        copy(record.installedVersion?.let{"Reported firmware $it"}?:"Firmware has not been checked yet.")
+        if(record.networkId!=null){
+            record.observedAt?.let{copy("Version info received · ${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(it))}")}
+            copy(if(record.networkId in activeZigbeeTopics())"Zigbee2MQTT connected · device information updates automatically." else "Connection not active · showing saved device information.")
+            if(ZigbeeDeviceMetadata.savedReading(record,record.networkId in activeZigbeeTopics(),network.state.value.devices.firstOrNull{it.networkId==record.networkId&&it.ieee==record.ieee}))copy("This is a saved reading. A new device report can update it.")
+        }
         copy("Saved details help select a device. Every update checks its live identity and image compatibility again.")
     }
     private fun addDevice(){

@@ -72,7 +72,7 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
         }
         when {
             relative=="bridge/devices" -> {
-                val devices=try { parseDevices(network.id,value,now()) } catch(_:Exception) { invalidate(network.id,"Invalid bridge inventory");return }
+                val devices=try { parseDevices(network.id,value,now()).map { incoming->incoming.copy(record=ZigbeeDeviceMetadata.preserveVersion(live[key(network.id,incoming.record.ieee!!)]?.record,incoming.record)) } } catch(_:Exception) { invalidate(network.id,"Invalid bridge inventory");return }
                 live.keys.filter { it.startsWith(network.id+":") }.forEach(live::remove)
                 devices.forEach { live[key(network.id,it.record.ieee!!)]=it }
                 val filters=devices.flatMap { d -> listOf("${network.baseTopic}/${d.friendlyName}","${network.baseTopic}/${d.record.ieee}") }.distinct().filter { subscribed.add(it) }
@@ -104,6 +104,11 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
             !relative.startsWith("bridge/") -> {
                 val device=live.values.singleOrNull { it.record.networkId==network.id && relative in setOf(it.friendlyName,it.record.ieee) } ?: return
                 val data=value as? JsonObject ?: return
+                val refreshed=ZigbeeDeviceMetadata.fromState(device,data,now(),message.retained)
+                if(refreshed!=device.record){
+                    live[key(network.id,device.record.ieee!!)]=device.copy(record=refreshed)
+                    mutable.update { it.copy(devices=live.values.map { d->d.record }.sortedBy { d->d.id }) }
+                }
                 val contract=parseContract(data)
                 if(contract!=null)contracts.compute(key(network.id,device.record.ieee!!)) { _,previous ->
                     if(previous==null || contract.boot!=previous.boot || ((contract.sample-previous.sample) and 0xffffffffL) in 1..0x7fffffffL)contract else previous
@@ -246,7 +251,7 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
                 val kind=if(vendor.equals("OpenVimar",true))FirmwareKind.CUSTOM else FirmwareKind.STOCK
                 val version=row.string("software_build_id")?.takeIf { it.isNotBlank() && it.length<=64 }
                 val record=DeviceRecord("zigbee:$network:$ieee",name,networkId=network,ieee=ieee,installedVersion=version,
-                    firmwareKind=kind,capabilities=capabilities,observedAt=at,observationSource="zigbee2mqtt/bridge/devices")
+                    firmwareKind=kind,capabilities=capabilities,observedAt=at,observationSource=ZigbeeDeviceMetadata.INVENTORY)
                 ZigbeeLiveDevice(record,name,row.string("model_id"),(row["disabled"] as? JsonPrimitive)?.booleanOrNull ?: false)
             }
             require(devices.map { it.record.ieee }.distinct().size==devices.size) { "Ambiguous duplicate IEEE" }

@@ -370,5 +370,14 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
             assertEquals(0,executions)
         }finally{kotlinx.coroutines.runBlocking{network.removeProfile(id)}}
     }
+    fun testDisconnectedZigbeeDeviceShowsSavedVersionAndConnectionState(){
+        val r=record(1,"0.5.5").copy(networkId="fixture-topic",ieee="0x0011223344556677",observationSource=ZigbeeDeviceMetadata.INVENTORY)
+        fixture(listOf(r))
+        assertTrue(texts().any{it.contains("0.5.5 (saved)")})
+        val row=nodes().filterIsInstance<TextView>().first{it.text.toString()==r.name}.parent as View
+        instrumentation.runOnMainSync{row.performClick()};instrumentation.waitForIdleSync()
+        assertTrue(texts().contains("Reported firmware 0.5.5"))
+        assertTrue(texts().contains("Connection not active · showing saved device information."));assertEquals(0,executions)
+    }
     fun testEmptyInventoryStartsWithBluetoothEnrolment(){fixture(emptyList());assertTrue(texts().contains("Add your first dimmer"));click("Add device");assertTrue(texts().contains("Search Bluetooth"));assertTrue(texts().any{it.contains("5 seconds")});assertEquals(0,imports);capture("add-empty-dark")}
 }

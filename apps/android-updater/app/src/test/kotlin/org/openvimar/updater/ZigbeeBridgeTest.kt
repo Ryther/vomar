@@ -130,4 +130,43 @@ class ZigbeeBridgeTest {
         }
         bridge.disconnect()
     }
+    @Test fun deviceStateUpdatesVersionWithoutReimportingOrSendingCommands()=runBlocking {
+        val conn=FakeConnection();val bridge=bridge(this,conn)
+        bridge.consume(MqttMessageEnvelope("alpha/bridge/devices",inventory().replace("0.5.8","0.5.5").toByteArray(),true))
+        assertEquals("0.5.5",bridge.state.value.devices.single().installedVersion)
+        bridge.consume(MqttMessageEnvelope("alpha/Desk","""{"update":{"installed_version":16777216,"latest_version":33554432}}""".toByteArray()))
+        assertEquals("1.0.0",bridge.state.value.devices.single().installedVersion)
+        assertTrue(conn.writes.isEmpty());bridge.disconnect()
+    }
+    @Test fun oldInventoryAndRetainedStateCannotReplaceANewerLiveVersion()=runBlocking {
+        val conn=FakeConnection();val bridge=bridge(this,conn)
+        bridge.consume(MqttMessageEnvelope("alpha/Desk","""{"software_build_id":"1.0.0"}""".toByteArray()))
+        bridge.consume(MqttMessageEnvelope("alpha/bridge/devices",inventory().toByteArray(),true))
+        bridge.consume(MqttMessageEnvelope("alpha/Desk","""{"software_build_id":"0.5.5"}""".toByteArray(),true))
+        assertEquals("1.0.0",bridge.state.value.devices.single().installedVersion)
+        // A genuine new report may go down in version; never just take max(version).
+        bridge.consume(MqttMessageEnvelope("alpha/Desk","""{"software_build_id":"0.5.5"}""".toByteArray()))
+        assertEquals("0.5.5",bridge.state.value.devices.single().installedVersion)
+        bridge.disconnect()
+    }
+    @Test fun retainedInstalledVersionCanRefreshTheInventoryButLatestVersionCannot()=runBlocking {
+        val conn=FakeConnection();val bridge=bridge(this,conn)
+        bridge.consume(MqttMessageEnvelope("alpha/Desk","""{"update":{"latest_version":16777216}}""".toByteArray(),true))
+        assertEquals("0.5.8",bridge.state.value.devices.single().installedVersion)
+        bridge.consume(MqttMessageEnvelope("alpha/Desk","""{"update":{"installed_version":16777216}}""".toByteArray(),true))
+        assertEquals("1.0.0",bridge.state.value.devices.single().installedVersion)
+        assertTrue(bridge.state.value.devices.single().observationSource!!.contains("cached"))
+        bridge.disconnect()
+    }
+    @Test fun versionUpdatesAreScopedToTheExactKnownTopicAndNeverDecodeStockWireVersions()=runBlocking {
+        val conn=FakeConnection();val bridge=bridge(this,conn)
+        bridge.consume(MqttMessageEnvelope("beta/bridge/devices",inventory().toByteArray(),true))
+        bridge.consume(MqttMessageEnvelope("alpha/$ieee","""{"software_build":"1.0.0"}""".toByteArray()))
+        assertEquals("1.0.0",bridge.state.value.devices.single{it.networkId=="a"}.installedVersion)
+        assertEquals("0.5.8",bridge.state.value.devices.single{it.networkId=="b"}.installedVersion)
+        bridge.consume(MqttMessageEnvelope("beta/bridge/devices",inventory(vendor="Vimar",model="30805").toByteArray(),true))
+        bridge.consume(MqttMessageEnvelope("beta/Desk","""{"update":{"installed_version":16777216}}""".toByteArray()))
+        assertEquals("0.5.8",bridge.state.value.devices.single{it.networkId=="b"}.installedVersion)
+        assertTrue(conn.writes.isEmpty());bridge.disconnect()
+    }
 }
