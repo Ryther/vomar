@@ -1,0 +1,9 @@
+{
+  "name": "Vomar research (opt in)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": "../.."
+  },
+  "remoteUser": "vscode",
+  "postCreateCommand": "python tools/dev/bootstrap.py workspace"
+}

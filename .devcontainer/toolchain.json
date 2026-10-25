@@ -1,0 +1,62 @@
+{
+  "npm": {
+    "@openai/codex": {
+      "version": "0.164.0",
+      "integrity": "sha512-TWj7UGyPRe3Pj/A3ddNAxs1te3a/W/xAd+J0LHrrFTmsSfahGMOLF/vn88D3QCIgAT3B1rm1y/Z3NYE0rx6cZQ==",
+      "engines": {
+        "node": ">=16"
+      },
+      "scripts": null,
+      "license": "Apache-2.0"
+    },
+    "@opencode/cli": {
+      "version": "2.1.4",
+      "integrity": "sha512-vtHFa/1frSylpx1cZRuzmM2ecHWn6YB8cNvhw8eWKPvSFvDnckZXugDbi3LJYD9TGjRx2U6JRo725qwqtwMUfQ==",
+      "engines": null,
+      "scripts": {
+        "postinstall": "node ./postinstall.mjs"
+      },
+      "license": "MIT"
+    },
+    "@anthropic-ai/claude-code": {
+      "version": "2.1.310",
+      "integrity": "sha512-EySpBwaocdU1nc9r7JH+GOlnMsbXc764d3HX7NL8fr7qqdxz2MiXI9hqf/rzeE/XgU23HHFltIqhb+Fq6G1CVw==",
+      "engines": {
+        "node": ">=22.0.0"
+      },
+      "scripts": {
+        "prepare": "node -e \"if (!process.env.AUTHORIZED) { console.error('ERROR: Direct publishing is not allowed.\\nPlease see the release workflow documentation to publish this package.'); process.exit(1); }\"",
+        "postinstall": "node install.cjs"
+      },
+      "license": "SEE LICENSE IN README.md"
+    }
+  },
+  "node": {
+    "node-v24.22.1-linux-arm64.tar.xz": {
+      "sha256": "dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e",
+      "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-arm64.tar.xz"
+    },
+    "node-v24.22.1-linux-x64.tar.xz": {
+      "sha256": "6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6",
+      "url": "https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.xz"
+    }
+  },
+  "ubuntu": "ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac",
+  "android": {
+    "url": "https://dl.google.com/android/repository/commandlinetools-linux-15859902_latest.zip",
+    "sha256": "4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583",
+    "platform": "android-35",
+    "buildTools": "35.0.0"
+  },
+  "uv": "0.13.5",
+  "python": {
+    "version": "3.13.12",
+    "url": "https://www.python.org/ftp/python/3.13.12/Python-3.13.12.tar.xz",
+    "sha256": "2a84cd31dd8d8ea8aaff75de66fc1b4b0127dd5799aa50a64ae9a313885b4593"
+  },
+  "sdk": {
+    "version": "1.0.1",
+    "url": "https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v1.0.1/zephyr-sdk-1.0.1_linux-x86_64_minimal.tar.xz",
+    "sha256": "ca9bc0ff66fafca1dac9d592a36d953cf16d096a9d09b1c0357f021cf9f6a7eb"
+  }
+}

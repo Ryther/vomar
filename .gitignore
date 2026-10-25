@@ -917,6 +917,37 @@
 !/tools/android/first_install_contract/programming-tests/ProgrammingPreparationProbe.kt
 !/tools/android/first_install_contract/src/OriginalRestore.kt
 !/tools/android/first_install_contract/tests/OriginalRestoreProbe.kt
+!/tools/dev/
+!/tools/dev/bootstrap.py
+!/tools/dev/tests/
+!/tools/dev/tests/test_bootstrap.py
+!/.devcontainer/
+!/.devcontainer/toolchain.json
+!/.devcontainer/assistants/
+!/.devcontainer/assistants/package.json
+!/.devcontainer/assistants/package-lock.json
+!/.devcontainer/devcontainer.json
+!/.devcontainer/Dockerfile
+!/.devcontainer/hardware/
+!/.devcontainer/hardware/devcontainer.json
+!/.devcontainer/research/
+!/.devcontainer/research/devcontainer.json
+!/.devcontainer/research/Dockerfile
+!/.agents/
+!/.agents/skills/
+!/.agents/skills/vomar-guide/
+!/.agents/skills/vomar-guide/SKILL.md
+!/.claude/
+!/.claude/skills/
+!/.claude/skills/vomar-guide
+!/docs/development.md
+!/firmware/west-lock.yml
+
+!/requirements-dev.in
+!/requirements-dev.lock
+
+!/.claude/skills/vomar-guide/
+!/.claude/skills/vomar-guide/SKILL.md
 
 # Account state and acquired/generated artifacts always remain private.
 /_test*/

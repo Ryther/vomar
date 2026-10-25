@@ -1,0 +1,32 @@
+{
+  "name": "Vomar development",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "vscode",
+  "updateRemoteUserUID": true,
+  "containerEnv": {
+    "VOMAR_CACHE": "/home/vscode/.cache/vomar",
+    "ANDROID_HOME": "/home/vscode/.cache/vomar/android",
+    "VIMAR_NCS_WORKSPACE": "/home/vscode/.cache/vomar/ncs",
+    "VIMAR_BUILD_PYTHON": "/home/vscode/.cache/vomar/ncs-venv/bin/python",
+    "VIMAR_WEST": "/home/vscode/.cache/vomar/ncs-venv/bin/west"
+  },
+  "mounts": [
+    "source=vomar-sdk-cache,target=/home/vscode/.cache/vomar,type=volume",
+    "source=vomar-agent-state,target=/home/vscode/.local/share/vomar-agents,type=volume",
+    "source=vomar-gradle-cache,target=/home/vscode/.gradle,type=volume"
+  ],
+  "postCreateCommand": "python tools/dev/bootstrap.py workspace",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-vscode.cpptools",
+        "redhat.java",
+        "ms-vscode.cmake-tools"
+      ]
+    }
+  }
+}

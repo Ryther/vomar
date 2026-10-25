@@ -1,0 +1,1 @@
+../../../.agents/skills/vomar-guide/SKILL.md

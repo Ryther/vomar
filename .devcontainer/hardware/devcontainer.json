@@ -1,0 +1,16 @@
+{
+  "name": "Vomar Linux hardware (opt in)",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "../.."
+  },
+  "remoteUser": "vscode",
+  "runArgs": [
+    "--device=/dev/bus/usb",
+    "--group-add=plugdev"
+  ],
+  "mounts": [
+    "source=/run/dbus/system_bus_socket,target=/run/dbus/system_bus_socket,type=bind,readonly"
+  ],
+  "postCreateCommand": "python tools/dev/bootstrap.py workspace"
+}
