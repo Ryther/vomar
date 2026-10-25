@@ -32,9 +32,9 @@ def confirm(review):
 
 async def run(args):
     if args.group=='releases' and args.action=='verify':
-        from .core.packages import inspect_package
+        from .core.packages import inspect_package,read_bounded
         if not args.path or not args.public_key:raise ValueError('--path and --public-key are required for read-only development verification')
-        p=inspect_package(Path(args.path).read_bytes(),Path(args.public_key).read_bytes());return {'schema':p.schema,'version':p.version,'digest':p.digest,'adoptedForDeviceUse':False}
+        p=inspect_package(read_bounded(args.path),read_bounded(args.public_key,16384));return {'schema':p.schema,'version':p.version,'digest':p.digest,'adoptedForDeviceUse':False}
     service=Service(args.state,on_event=lambda e:print(json.dumps({'event':e}),file=sys.stderr))
     a={k:v for k,v in vars(args).items() if v is not None};group=args.group;action=args.action
     try:

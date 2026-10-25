@@ -10,7 +10,7 @@ from platformdirs import user_data_path
 from .core.engine import Engine
 from .core.fleet import Registry,Scheduler,Broker,Network,Batches
 from .core.installation import InstallEngine,capture_original,verify_original,prepare_install
-from .core.packages import inspect_package
+from .core.packages import inspect_package,read_bounded
 from .core.storage import Store
 from .adapters.smp import BleakSmp
 from .adapters.openocd import OpenOcdProbe
@@ -40,7 +40,7 @@ class Service:
     async def dispatch(self,action,args=None):
         a=args or {}
         if action=='releases.inspect':
-            raw=Path(a['path']).read_bytes();self.package=inspect_package(raw,self.anchor);self.store.put(raw,'package')
+            raw=read_bounded(a['path']);self.package=inspect_package(raw,self.anchor);self.store.put(raw,'package')
             return {'digest':self.package.digest,'version':self.package.version,'schema':self.package.schema,'model':self.package.model}
         if action=='releases.latest':
             metadata,assets=await asyncio.to_thread(releases.latest,a.get('repository','Ryther/vomar'))
@@ -49,7 +49,7 @@ class Service:
             return {'distribution':metadata['distributionVersion'],'firmware':self.package.version,'digest':self.package.digest}
         if action=='trial.inspect':
             from .core.packages import inspect_candidate
-            self.candidate=inspect_candidate(Path(a['path']).read_bytes(),self.anchor)
+            self.candidate=inspect_candidate(read_bounded(a['path']),self.anchor)
             return {'candidate':self.candidate.digest,'version':self.candidate.version,'physicalQualification':False}
         if action in ('trial.preview','updates.prepare-preview'):
             p=self.candidate if action=='trial.preview' else self.need_package()
@@ -57,7 +57,7 @@ class Service:
             r=await self.engine.inspect(p,a['target'],operation='trial' if action=='trial.preview' else 'bootstrap')
             return self._review('trial' if action=='trial.preview' else 'prepare',r,self.ble_summary(r,p),r.identity.uid[-1] if r.identity else r.target[-8:])
         if action=='devices.list':return self.registry.list()
-        if action=='devices.import':return {'imported':self.registry.import_records(Path(a['path']).read_bytes())}
+        if action=='devices.import':return {'imported':self.registry.import_records(read_bounded(a['path'],512*1024))}
         if action=='devices.save':
             r={'id':a.get('id') or secrets.token_hex(8),'name':a['name'],'room':a.get('room',''),'ble':a.get('target',''),'ieee':a.get('ieee',''),'network':a.get('network','')};self.registry.save(r);return r
         if action=='devices.remove':self.registry.remove(a['id']);return {'removed':a['id']}
@@ -143,7 +143,7 @@ class Service:
             self.export_path=str(self.store.export(self.original.digest,a['path']))
             return {'original':self.original.digest,'exported':self.export_path,'reopened':True,'targetHalted':True}
         if action=='backup.import':
-            self.original=verify_original(Path(a['path']).read_bytes());self.store.put(self.original.raw,'original');self.export_path=str(Path(a['path']).absolute())
+            self.original=verify_original(read_bounded(a['path'],4*1024*1024));self.store.put(self.original.raw,'original');self.export_path=str(Path(a['path']).absolute())
             if not self.store.reopen_receipt(self.original.digest,self.export_path):raise ValueError('Original reopen failed')
             return {'original':self.original.digest,'uid':self.original.identity[:2],'reopened':True}
         if action in ('first-install.preview','repair.preview','start.preview','bench.preview','bench.repair-preview','bench.start-preview'):

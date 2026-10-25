@@ -29,3 +29,25 @@ def test_multiasset_release_selects_only_firmware(tmp_path):
 def test_download_hash_is_checked_independently_of_name(tmp_path):
     m,r=fixture(tmp_path);a=select(r,m,'Ryther/vomar')['firmware-common']
     with pytest.raises(ValueError):acquire(a,fetch=lambda url,limit:b'x'*a['size'])
+
+
+def test_discovery_rejects_oversized_firmware_before_downloading(tmp_path):
+    from tools.firmware.package_android_update import MAX_ZIP
+    m,r=fixture(tmp_path);a=next(a for a in m['artifacts'] if a['role']=='firmware-common');a['size']=MAX_ZIP+1
+    next(i for i in r['assets'] if i['name']==a['filename'])['size']=a['size']
+    with pytest.raises(ValueError):select(r,m,'Ryther/vomar')
+
+
+def test_local_import_does_not_read_an_unbounded_document(tmp_path,monkeypatch):
+    import asyncio
+    from vomar_updater.service import Service
+    from tools.firmware.package_android_update import MAX_ZIP
+    async def scenario():
+        service=Service(tmp_path/'state');path=tmp_path/'large.zip'
+        with path.open('wb') as f:f.seek(MAX_ZIP+1);f.write(b'x')
+        def forbidden(*args):raise AssertionError('Unbounded whole-file read')
+        monkeypatch.setattr(Path,'read_bytes',forbidden)
+        try:
+            with pytest.raises(ValueError):await service.dispatch('releases.inspect',{'path':str(path)})
+        finally:await service.close()
+    asyncio.run(scenario())

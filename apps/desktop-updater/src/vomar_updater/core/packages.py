@@ -10,12 +10,19 @@ import io
 import json
 import re
 import zipfile
+from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from tools.firmware.bounded_zip import read_member
 from tools.firmware.package_common_android_update_v3 import strict_json, validate_common_v3_bundle, verify_signature, canonical, sha, exact
 from tools.firmware.package_common_android_update import verify_component, verify_zigbee_carrier, hashes_list, digest
 from tools.firmware.package_android_update import MAX_ZIP, MAX_IMAGE
+
+
+def read_bounded(path,limit=MAX_ZIP):
+    with Path(path).open('rb') as stream:raw=stream.read(limit+1)
+    if len(raw)>limit:raise ValueError('Document exceeds the supported input bound')
+    return raw
 
 
 def version(value):

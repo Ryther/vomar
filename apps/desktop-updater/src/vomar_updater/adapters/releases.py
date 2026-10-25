@@ -48,6 +48,8 @@ def select(release,manifest,repo):
         parsed=urllib.parse.urlsplit(url)
         if parsed.hostname!='github.com' or parsed.path!=f'/{repo}/releases/download/{manifest["tag"]}/{a["filename"]}':raise ValueError('Asset is not bound to selected repository/tag')
         result[a['role']]={**a,'url':url}
+    from tools.firmware.package_android_update import MAX_ZIP
+    if not 1<=result['firmware-common']['size']<=MAX_ZIP:raise ValueError('Firmware asset exceeds the signed package bound')
     if result['firmware-common']['filename']!=f'vomar-firmware-{manifest["distributionVersion"]}.zip':raise ValueError('Noncanonical firmware asset')
     return result
 
