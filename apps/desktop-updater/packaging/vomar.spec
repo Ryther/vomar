@@ -12,7 +12,7 @@ common=dict(pathex=[str(source),str(root)],datas=data,hiddenimports=hidden,exclu
 gui=Analysis([str(root/'apps/desktop-updater/packaging/gui_entry.py')],**common)
 cli=Analysis([str(root/'apps/desktop-updater/packaging/cli_entry.py')],**common)
 gui_exe=EXE(PYZ(gui.pure),gui.scripts,[],exclude_binaries=True,name='Vomar',console=False,disable_windowed_traceback=False,target_arch=None)
-cli_exe=EXE(PYZ(cli.pure),cli.scripts,[],exclude_binaries=True,name='vomar',console=True,target_arch=None)
+cli_exe=EXE(PYZ(cli.pure),cli.scripts,[],exclude_binaries=True,name='vomar-cli',console=True,target_arch=None)
 coll=COLLECT(gui_exe,cli_exe,gui.binaries,gui.datas,cli.binaries,cli.datas,name='Vomar')
 if __import__('sys').platform=='darwin':
     app=BUNDLE(coll,name='Vomar.app',bundle_identifier='org.openvimar.updater.desktop',info_plist={'CFBundleDisplayName':'Vomar','LSMinimumSystemVersion':'14.4','NSBluetoothAlwaysUsageDescription':'Vomar uses Bluetooth to discover and update the selected dimmer after your review.','NSBluetoothPeripheralUsageDescription':'Vomar communicates with the selected dimmer recovery.','NSHighResolutionCapable':True})

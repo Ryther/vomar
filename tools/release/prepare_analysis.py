@@ -21,7 +21,7 @@ def prepare(reports,candidate,sha):
  for row in rows:
   if set(row)!={'file','directory','arguments'} or not row['file'].startswith(old+'/firmware/') or '..' in PurePosixPath(row['file']).parts:raise ValueError('Compilation scope is not first-party firmware')
   args=row['arguments']
-  if type(args) is not list or not args or any(not isinstance(x,str) or '\x00' in x or x.startswith(('-fplugin','-specs','-B','-wrapper','@')) or x in ('|',';','&&') for x in args):raise ValueError('Unsafe compiler metadata')
+  if type(args) is not list or not args or any(not isinstance(x,str) or '\x00' in x or (x.startswith(('-fplugin','-specs','--specs','-B','-wrapper','@')) and x!='-specs=picolibc.specs') or x in ('|',';','&&') for x in args):raise ValueError('Unsafe compiler metadata')
   # The scanner reads this database; no candidate compiler path is admitted.
   if Path(args[0]).name not in ('arm-zephyr-eabi-gcc','arm-zephyr-eabi-g++'):raise ValueError('Unexpected target compiler identity')
   row['file']=remap(row['file']);row['directory']=remap(row['directory']);row['arguments']=[remap(x) for x in args]

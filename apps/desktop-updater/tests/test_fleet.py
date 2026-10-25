@@ -69,7 +69,7 @@ def test_service_mixed_batch_parallel_routes_and_partial_failure_are_durable(tmp
             def __init__(self,*args):pass
             async def inspect(self,p,n,i,source):return ZigbeeReview(i,p.digest,n,i,source,1,time.monotonic()+300)
             def approve(self,r):return r.token
-            async def execute(self,p,r,c):
+            async def execute(self,p,r,c,*,on_session=lambda _:None):
                 async def operation():
                     assert r.network not in active;active.add(r.network);overlap.append(len(active));await asyncio.sleep(.01);active.remove(r.network)
                     if r.network=='b':raise ConnectionError('Synthetic interruption')

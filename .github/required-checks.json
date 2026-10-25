@@ -1,0 +1,31 @@
+{
+  "pullRequest": [
+    "Conventional Commits",
+    "Workflow lint",
+    "Secrets",
+    "Firmware required",
+    "Android required",
+    "Desktop required",
+    "Contracts required",
+    "Documentation required",
+    "UX evidence gate",
+    "Dependencies required",
+    "CodeQL required",
+    "Converter required"
+  ],
+  "release": [
+    "Conventional Commits",
+    "Workflow lint",
+    "Secrets",
+    "Firmware required",
+    "Android required",
+    "Desktop required",
+    "Contracts required",
+    "Documentation required",
+    "UX evidence gate",
+    "Dependencies required",
+    "CodeQL required",
+    "Converter required",
+    "Sonar required"
+  ]
+}

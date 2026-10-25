@@ -10,7 +10,7 @@ for launcher in "$HOME/.local/bin/vomar" "$HOME/.local/bin/vomar-gui"; do
 done
 mkdir -p "$prefix/vomar" "$HOME/.local/bin" "$prefix/applications"
 cp -R "$source_dir" "$runtime"
-ln -s "$runtime/vomar" "$HOME/.local/bin/vomar"
+ln -s "$runtime/vomar-cli" "$HOME/.local/bin/vomar"
 ln -s "$runtime/Vomar" "$HOME/.local/bin/vomar-gui"
 exec_path=$(printf '%s' "$runtime/Vomar" | sed 's/[\\`"$]/\\&/g; s/%/%%/g')
 printf '[Desktop Entry]\nType=Application\nName=Vomar\nExec="%s"\nTerminal=false\nCategories=Utility;\n' "$exec_path" > "$prefix/applications/org.openvimar.updater.desktop.desktop"

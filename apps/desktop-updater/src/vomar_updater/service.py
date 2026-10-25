@@ -25,7 +25,9 @@ class Service:
         self.candidate=None;self.zigbee=None;self.on_event=on_event;self.ble=BleakSmp();self.engine=Engine(self.store,self.ble,lease=self.scheduler.ble,on_event=lambda e:on_event(asdict(e)))
         self.installer=InstallEngine(self.store,on_event);self.package=None;self.probe=None;self.original=None;self.export_path=None;self.plan=None;self.reviews={};self.mqtt=None
         self.anchor=files('vomar_updater').joinpath('resources/firmware-public.der').read_bytes()
-    def stop(self):self.engine.stop();self.installer.stop();self.scheduler.stop();self.reviews.clear()
+    def stop(self):
+        if self.zigbee:self.zigbee.stop()
+        self.engine.stop();self.installer.stop();self.scheduler.stop();self.reviews.clear()
     def _review(self,kind,review,summary,challenge):
         token=secrets.token_hex(24);self.reviews[token]=(kind,review)
         return {'review':token,'operation':kind,'summary':summary,'challenge':challenge,'message':'Review this exact operation. Approval expires and is never restored after restart.'}
@@ -62,6 +64,10 @@ class Service:
         if action=='devices.scan':
             async with self.scheduler.ble:return await self.ble.scan()
         if action=='fleet.list':return self.batches.list()
+        if action=='fleet.details':
+            group=next((b for b in self.batches.list() if b['id']==a.get('batch')),None)
+            if group is None:raise ValueError('Unknown saved batch')
+            return group
         if action in ('fleet.preview','fleet.resume-preview'):
             prior=None
             if action=='fleet.resume-preview':
@@ -84,7 +90,7 @@ class Service:
                     r=await self.engine.inspect(package,row['ble'],resume_session=old.get('session') if old else None)
                     identity=('ble',r.identity.uid);summary=self.ble_summary(r,package)
                 else:
-                    if self.mqtt is None:raise ValueError('Connect the saved broker before a network batch')
+                    if self.mqtt is None:await self.dispatch('mqtt.connect')
                     from .core.zigbee import ZigbeeEngine
                     self.zigbee=self.zigbee or ZigbeeEngine(self.store,self.mqtt,self.scheduler,self.on_event)
                     assets=self.store.setting('release-assets') or {}
@@ -160,11 +166,12 @@ class Service:
                     target,lane,p=item;job=next(j for j in group['jobs'] if j['target']==target)
                     try:
                         job['state']='running';self.batches.save(group)
+                        def attach(session):job['session']=session;self.batches.save(group)
                         if lane=='ble':
-                            async with self.batch_ble:job['session']=await self.engine.execute(package,p,self.engine.approve(p))
+                            async with self.batch_ble:job['session']=await self.engine.execute(package,p,self.engine.approve(p),on_session=attach)
                             job['state']='await-operator'
                         else:
-                            job['session']=await self.zigbee.execute(package,p,self.zigbee.approve(p));job['state']='verified'
+                            job['session']=await self.zigbee.execute(package,p,self.zigbee.approve(p),on_session=attach);job['state']='verified'
                     except BaseException as error:
                         job['state']='interrupted';job['error']=type(error).__name__
                         matches=[r for r in self.store.sessions() if r['binding'].get('package')==package.digest and (r['binding'].get('target')==getattr(p,'target',None) if lane=='ble' else r['binding'].get('ieee')==p.ieee and r['binding'].get('network')==p.network)]

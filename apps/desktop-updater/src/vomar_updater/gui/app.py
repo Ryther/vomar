@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from PySide6.QtCore import QThread,Signal,Qt,QTimer
 from PySide6.QtGui import QAction,QColor,QPalette,QKeySequence
-from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QPushButton,QLabel,QStackedWidget,QTreeWidget,QTreeWidgetItem,QLineEdit,QComboBox,QFileDialog,QMessageBox,QInputDialog,QProgressBar,QScrollArea,QGroupBox,QCheckBox)
+from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QPushButton,QLabel,QStackedWidget,QTreeWidget,QTreeWidgetItem,QLineEdit,QComboBox,QFileDialog,QMessageBox,QInputDialog,QProgressBar,QScrollArea,QGroupBox,QCheckBox,QTabWidget,QDialog,QPlainTextEdit,QDialogButtonBox)
 from vomar_updater.service import Service
 
 
@@ -100,8 +100,7 @@ class Window(QMainWindow):
         mode,ok=QInputDialog.getItem(self,'Batch scheduling','Scheduling',['sequential','network-parallel'],0,False)
         if ok:self.send('fleet.preview',{'ids':[r.data(0,Qt.UserRole)['id'] for r in self.devices.selectedItems()],'mode':mode,'transport':transport,'source':self.carrier.text()})
     def resume_batch(self):
-        batch,ok=QInputDialog.getText(self,'Review paused batch','Batch ID (from activity details)')
-        if ok:self.send('fleet.resume-preview',{'batch':batch})
+        if getattr(self,'selected_batch',None):self.send('fleet.resume-preview',{'batch':self.selected_batch})
     def select_device(self):
         rows=self.devices.selectedItems()
         if rows:self.target.setText(rows[0].data(0,Qt.UserRole).get('ble',''))
@@ -117,9 +116,18 @@ class Window(QMainWindow):
         if rows:self.send('devices.remove',{'id':rows[0].data(0,Qt.UserRole)['id']})
     def build_activity(self):
         page=QWidget();layout=QVBoxLayout(page);layout.setContentsMargins(20,0,0,0);self.heading('Activity',layout)
-        self.activity=QTreeWidget();self.activity.setHeaderLabels(['Operation','Status','Started']);self.activity.setAccessibleName('Durable operation sessions');self.activity.itemSelectionChanged.connect(self.select_session);layout.addWidget(self.activity,1)
+        self.activity_tabs=QTabWidget();layout.addWidget(self.activity_tabs,1)
+        self.activity=QTreeWidget();self.activity.setHeaderLabels(['Operation','Status','Started']);self.activity.setAccessibleName('Durable operation sessions');self.activity.itemSelectionChanged.connect(self.select_session);self.activity_tabs.addTab(self.activity,'Device sessions')
+        self.batch_activity=QTreeWidget();self.batch_activity.setHeaderLabels(['Batch ID','Status','Device outcomes']);self.batch_activity.setAccessibleName('Durable fleet batches');self.batch_activity.itemSelectionChanged.connect(self.select_batch);self.activity_tabs.addTab(self.batch_activity,'Batches')
         self.activity_help=QLabel('Interrupted operations stay here. Restarting Vomar never approves a continuation.');self.activity_help.setWordWrap(True);layout.addWidget(self.activity_help)
-        row=QHBoxLayout();self.button('Refresh',lambda:self.send('sessions.list'),row);self.button('Show batches',lambda:self.send('fleet.list'),row);self.button('Review paused batch',self.resume_batch,row);self.button('Review interrupted Bluetooth update',lambda:self.send('updates.resume-preview',{'session':self.selected_session}),row);self.button('Confirm physical operation',lambda:self.send('sessions.confirm',{'session':self.selected_session}),row);layout.addLayout(row);self.stack.addWidget(page)
+        row=QHBoxLayout();self.button('Refresh sessions',lambda:self.send('sessions.list'),row);self.button('Session details',lambda:self.send('sessions.details',{'session':self.selected_session}),row);self.button('Reconcile Zigbee session',lambda:self.send('zigbee.reconcile',{'session':self.selected_session}),row);layout.addLayout(row)
+        row=QHBoxLayout();self.button('Show batches',lambda:self.send('fleet.list'),row);self.button('Batch details',lambda:self.send('fleet.details',{'batch':getattr(self,'selected_batch',None)}),row);self.button('Review selected batch',self.resume_batch,row);layout.addLayout(row)
+        row=QHBoxLayout();self.button('Review interrupted Bluetooth update',lambda:self.send('updates.resume-preview',{'session':self.selected_session}),row);self.button('Confirm physical operation',lambda:self.send('sessions.confirm',{'session':self.selected_session}),row);layout.addLayout(row);self.stack.addWidget(page)
+    def select_batch(self):
+        rows=self.batch_activity.selectedItems()
+        if rows:self.selected_batch=rows[0].data(0,Qt.UserRole)
+    def show_details(self,title,result):
+        dialog=QDialog(self);dialog.setWindowTitle(title);dialog.resize(700,500);layout=QVBoxLayout(dialog);body=QPlainTextEdit(json.dumps(result,indent=2));body.setReadOnly(True);layout.addWidget(body);buttons=QDialogButtonBox(QDialogButtonBox.Close);buttons.rejected.connect(dialog.reject);layout.addWidget(buttons);dialog.exec()
     def select_session(self):
         rows=self.activity.selectedItems()
         if rows:self.selected_session=rows[0].data(0,Qt.UserRole)
@@ -180,6 +188,14 @@ class Window(QMainWindow):
             for r in result:
                 item=QTreeWidgetItem([r['binding'].get('operation','First installation'),r['phase']+(' · review required' if r['uncertain'] else ''),datetime.datetime.fromtimestamp(r['created']).strftime('%Y-%m-%d %H:%M')]);item.setData(0,Qt.UserRole,r['id']);self.activity.addTopLevelItem(item)
             for i in range(3):self.activity.resizeColumnToContents(i)
+        elif action=='fleet.list':
+            self.batch_activity.clear()
+            for group in result:
+                outcomes=', '.join(j['target']+': '+j['state'] for j in group['jobs'])
+                item=QTreeWidgetItem([group['id'],group['state'],outcomes]);item.setData(0,Qt.UserRole,group['id']);self.batch_activity.addTopLevelItem(item)
+            for i in range(3):self.batch_activity.resizeColumnToContents(i)
+            self.activity_tabs.setCurrentIndex(1)
+        elif action in ('sessions.details','fleet.details','zigbee.reconcile'):self.show_details('Activity details',result)
         elif action.startswith('releases.'):
             self.release_label.setText('Verified firmware '+result.get('version',result.get('firmware',''))+' · '+result['digest'][:16]);self.status.setText('Signed package verified. Choose a dimmer and review the operation.');self.navigate(0)
         elif action=='settings.get':self.source.setText(result['source']);self.theme.setCurrentText(result['theme'])
@@ -211,6 +227,12 @@ def main():
             if args.screenshot:window.grab().save(str(args.screenshot))
             window.close()
         QTimer.singleShot(1000,finish)
-    return app.exec()
+    result=app.exec()
+    # Destroy the complete parent widget tree while QApplication still exists.
+    # PySide's interpreter cleanup may otherwise destroy children after their
+    # backing store, causing a native crash after a successful GUI close.
+    import shiboken6
+    if shiboken6.isValid(window):shiboken6.delete(window)
+    return result
 
 if __name__=='__main__':raise SystemExit(main())

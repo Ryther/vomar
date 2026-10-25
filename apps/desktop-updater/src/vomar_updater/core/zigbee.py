@@ -41,6 +41,9 @@ def check_url(url):
 class ZigbeeEngine:
     def __init__(self,store,bridge,scheduler,on_event=lambda _:None,fetch=carrier_bytes):
         self.store=store;self.bridge=bridge;self.scheduler=scheduler;self.on_event=on_event;self.fetch=fetch;self.reviews={};self.consents={}
+    def check(self):
+        if self.scheduler.stopped:raise asyncio.CancelledError('Stopped before a new Zigbee submission')
+    def stop(self):self.reviews.clear();self.consents.clear()
     def held(self,network):return any(s['binding'].get('network')==network and s['uncertain'] for s in self.store.sessions())
     async def inspect(self,package,network,ieee,source):
         package.assert_verified()
@@ -57,14 +60,15 @@ class ZigbeeEngine:
     def approve(self,r):
         if self.reviews.get(r.token)!=r or r.expires<time.monotonic():raise ValueError('Zigbee review expired')
         c=secrets.token_hex(32);self.consents[c]=r.token;return c
-    async def execute(self,package,r,consent):
-        package.assert_verified()
+    async def execute(self,package,r,consent,*,on_session=lambda _:None):
+        package.assert_verified();self.check()
         if self.consents.pop(consent,None)!=r.token or self.reviews.pop(r.token,None)!=r or r.expires<time.monotonic() or package.digest!=r.package_digest:raise ValueError('Fresh exact Zigbee approval required')
         async def operation():
             if self.held(r.network) or self.bridge.birth!=r.birth:raise ValueError('Network state changed after review')
             await self.bridge.verify_recovery(r.network,r.ieee,package.manifest['targetRecoverySignedHash'])
+            self.check()
             meta=package.manifest['zigbeeOta'];session=self.store.begin({'operation':'zigbee-update','network':r.network,'ieee':r.ieee,'package':package.digest,'source':r.source,'version':package.version,'fileVersion':meta['fileVersion']})
-            self.store.record(session,'mqtt-update-intent')
+            on_session(session);self.check();self.store.record(session,'mqtt-update-intent')
             try:
                 response=await self.bridge.request(r.network,r.ieee,'update',r.source,timeout=7200)
                 to=response.get('to')

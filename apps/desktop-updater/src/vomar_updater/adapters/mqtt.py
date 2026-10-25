@@ -24,7 +24,7 @@ def contract(value):
 class MqttBridge:
     def __init__(self,profile:Broker,credentials=None):
         self.profile=profile.validate();self.credentials=credentials;self.client=None;self.loop=None;self.connected=False
-        self.messages=asyncio.Queue(maxsize=256);self.devices={};self.observations={};self.pending={};self.birth=0;self.resource=None
+        self.devices={};self.observations={};self.pending={};self.birth=0;self.resource=None
     async def connect(self):
         from platformdirs import user_runtime_path
         from .locking import FileLease
@@ -91,9 +91,6 @@ class MqttBridge:
             elif not relative.startswith('bridge/') and type(value) is dict:
                 candidates=[(k,d) for k,d in self.devices.items() if k[0]==network.id and relative in (d.get('friendly_name'),k[1])]
                 if len(candidates)==1:self.observations[candidates[0][0]]={'value':value,'retained':retained,'at':time.monotonic(),'birth':self.birth}
-            event={'network':network.id,'topic':relative,'payload':value,'retained':retained}
-            if self.messages.full():self._offline();return
-            self.messages.put_nowait(event)
     def network(self,network):
         n=next((n for n in self.profile.networks if n.id==network),None)
         if n is None:raise ValueError('Unknown MQTT network')

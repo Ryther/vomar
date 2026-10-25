@@ -12,6 +12,17 @@ import shutil
 import subprocess
 import sys
 ROOT=Path(__file__).resolve().parents[2]
+def matching_notes(data,profile):
+ data=Path(data);profile=Path(profile);candidates=[data.with_suffix('.gcno')]
+ if '#' in data.name:
+  invocation=profile/data.relative_to(profile).parts[0]
+  decoded=Path(data.name.replace('#','/').lstrip('/'))
+  if '..' not in decoded.parts:candidates.append((invocation/decoded).with_suffix('.gcno'))
+ stamp=data.read_bytes()[4:12]
+ for notes in candidates:
+  if notes.is_file() and len(stamp)==8 and notes.read_bytes()[4:12]==stamp:return notes
+ raise ValueError('Executed profile has no matching compiler map')
+
 WRAPPER='''#!/usr/bin/env python3
 import glob,os,shutil,subprocess,sys,time,uuid
 from pathlib import Path
@@ -48,9 +59,9 @@ def main():
  if not data:raise ValueError('No actual native execution coverage was recorded')
  executed=output/'executed';executed.mkdir(exist_ok=True)
  for path in data:
-  notes=path.with_suffix('.gcno')
-  if not notes.is_file():raise ValueError('Executed profile has no matching compiler map')
+  notes=matching_notes(path,profile)
   for source in (path,notes):
-   dest=executed/source.relative_to(profile);dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,dest)
+   relative=path.relative_to(profile) if source==path else path.relative_to(profile).with_suffix('.gcno')
+   dest=executed/relative;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(source,dest)
  subprocess.run([sys.executable,'-m','gcovr','--root',str(ROOT),'--filter',str(ROOT/'firmware')+'/','--include-internal-functions','--sonarqube',str(output/'c-coverage.xml'),str(executed)],check=True,cwd=ROOT)
 if __name__=='__main__':main()

@@ -1104,6 +1104,12 @@
 !/licenses/qt/Qt-GPL-exception-1.0.txt
 !/licenses/qt/sources.json
 
+!/apps/desktop-updater/tests/test_review_regressions.py
+!/tools/release/evidence.py
+!/tools/release/inventory.py
+!/tools/release/tests/test_protected_evidence.py
+!/.github/required-checks.json
+
 # Account state and acquired/generated artifacts always remain private.
 /_test*/
 /_tmp*/

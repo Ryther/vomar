@@ -61,6 +61,14 @@ def assemble(inputs,output,version,sha,firmware_candidate,qualification,private_
     shutil.copy2(inputs/setup,output/setup);records.append({'role':'desktop-windows-setup','filename':setup,'componentVersion':dv,'platform':'windows','architecture':'x64'})
     for role,name,src,component in [('zigbee2mqtt-converter',f'vomar-zigbee2mqtt-{version}.js',inputs/'vimar_30805.js',zv),('licenses',f'vomar-notices-{version}.txt',ROOT/'THIRD_PARTY_NOTICES.md',version),('offline-guide',f'vomar-installation-{version}.md',ROOT/'docs/offline-guide.md',version)]:
         shutil.copy2(src,output/name);records.append({'role':role,'filename':name,'componentVersion':component})
+    from .evidence import DEPENDENCY_GRAPHS
+    inventory=output/f'vomar-dependency-inventories-{version}.zip'
+    with zipfile.ZipFile(inventory,'x',zipfile.ZIP_STORED) as archive:
+        for graph in sorted(DEPENDENCY_GRAPHS):
+            raw=(inputs/(graph+'.json')).read_bytes();data=loads(raw)
+            if data.get('sourceCommit')!=sha or data.get('graph')!=graph or not 1<=len(raw)<=8*1024*1024:raise ValueError('Missing or mismatched delivered inventory: '+graph)
+            archive.writestr(zipfile.ZipInfo(graph+'.json',(2020,1,1,0,0,0)),raw)
+    records.append({'role':'source-sbom','filename':inventory.name,'componentVersion':version})
     manifest=build_manifest(version,sha,records,output,{'firmware':m['main']['version'],'android':av,'desktop':dv,'zigbee2mqtt':zv})
     (output/'release-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
     names=sorted(a['filename'] for a in records)+['release-manifest.json']

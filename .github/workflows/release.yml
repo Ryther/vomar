@@ -121,12 +121,22 @@ jobs:
       - run: python -m pip install --require-hashes -r trusted/requirements-dev.lock
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with: {name: 'complete-distribution-${{ needs.resolve.outputs.sha }}', path: assets}
-      - name: Read independently protected qualification
-        env: {QUALIFICATION: '${{ vars.FIRMWARE_QUALIFICATION_JSON }}'}
-        run: python -c 'import os;from pathlib import Path;Path("qualification.json").write_text(os.environ["QUALIFICATION"])'
+      - name: Read independently protected qualification and advisory evidence
+        env:
+          QUALIFICATION: ${{ vars.FIRMWARE_QUALIFICATION_JSON }}
+          NATIVE_QUALIFICATION: ${{ vars.NATIVE_QUALIFICATION_JSON }}
+          DEPENDENCY_REVIEW: ${{ vars.DEPENDENCY_REVIEW_JSON }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          for name,variable in [('qualification.json','QUALIFICATION'),('native-qualification.json','NATIVE_QUALIFICATION'),('dependency-review.json','DEPENDENCY_REVIEW')]:
+              if not os.environ[variable]:raise ValueError('Protected reviewed evidence is missing: '+variable)
+              Path(name).write_text(os.environ[variable])
+          PY
       - env:
           GH_TOKEN: ${{ secrets.RELEASE_PUBLICATION_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >-
           PYTHONPATH=trusted python -m tools.release.publish --directory assets
-          --qualification qualification.json --public-key trusted/firmware/keys/dev-public.pem --android-tools "$ANDROID_HOME/build-tools/35.0.0" --publish
+          --qualification qualification.json --native-qualification native-qualification.json --dependency-review dependency-review.json --public-key trusted/firmware/keys/dev-public.pem --android-tools "$ANDROID_HOME/build-tools/35.0.0" --publish

@@ -1,9 +1,9 @@
 """Validate public workflow trust boundaries before actionlint's syntax pass."""
 from pathlib import Path
-import re
+import re,json
 import yaml
 ROOT=Path(__file__).resolve().parents[2]
-REQUIRED={'Conventional Commits','Workflow lint','Secrets','Firmware required','Android required','Desktop required','Contracts required','Documentation required','UX evidence gate','Sonar required','Dependencies required','CodeQL required','Converter required'}
+REQUIRED=set(json.loads((ROOT/'.github/required-checks.json').read_text())['release'])
 
 def check():
     names=set()

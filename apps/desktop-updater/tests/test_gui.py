@@ -41,3 +41,27 @@ def test_review_denial_and_exact_challenge_gate():
     assert not d.approve.isEnabled();d.challenge.setText('wrong');assert not d.approve.isEnabled()
     d.challenge.setText('00000002');assert not d.approve.isEnabled();d.physical.setChecked(True);assert d.approve.isEnabled()
     d.reject();assert d.result()==d.DialogCode.Rejected
+
+
+def test_gui_process_destroys_widgets_before_application_exit(tmp_path):
+    import os,subprocess,sys
+    result=subprocess.run([sys.executable,'-X','faulthandler','-m','vomar_updater.gui.app','--state',str(tmp_path/'state'),'--smoke-test','--screenshot',str(tmp_path/'screen.png')],env={**os.environ,'QT_QPA_PLATFORM':'offscreen'},capture_output=True,text=True,timeout=20)
+    assert result.returncode==0,result.stderr
+    assert (tmp_path/'screen.png').stat().st_size>1000
+
+
+def test_activity_renders_batches_and_offers_explicit_reconciliation(monkeypatch):
+    import json
+    from PySide6.QtWidgets import QPushButton,QMessageBox
+    monkeypatch.setattr(QMessageBox,'warning',lambda *args:None)
+    app=QApplication.instance() or QApplication([]);worker=Worker();calls=[];worker.submit=lambda *args:calls.append(args);window=Window(worker)
+    group={'id':'batch-fixture','state':'paused','mode':'sequential','jobs':[{'target':'fixture','state':'interrupted','session':'session-fixture'}]}
+    window.result('fleet.list',json.dumps([group]))
+    assert hasattr(window,'batch_activity') and window.batch_activity.topLevelItemCount()==1
+    item=window.batch_activity.topLevelItem(0);window.batch_activity.setCurrentItem(item)
+    window.navigate(1)
+    buttons={b.text():b for b in window.findChildren(QPushButton)}
+    buttons['Review selected batch'].click();assert calls[-1]==('fleet.resume-preview',{'batch':'batch-fixture'})
+    window.failure('fleet.resume-preview','Synthetic denial');window.selected_session='session-fixture';buttons['Reconcile Zigbee session'].click()
+    assert calls[-1]==('zigbee.reconcile',{'session':'session-fixture'})
+    window.close()

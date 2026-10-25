@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins { jacoco; id("com.android.application"); kotlin("android") }
 android {
     useLibrary("android.test.runner", false)
@@ -10,7 +12,7 @@ android {
     compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget="17" }
 }
-dependencies { implementation(project(":core")); implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5"); implementation("androidx.core:core:1.12.0"); implementation("no.nordicsemi.android:mcumgr-ble:2.7.4"); implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"); implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"); testImplementation("junit:junit:4.13.2") }
+dependencies { implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.12")); implementation(project(":core")); implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5"); implementation("androidx.core:core:1.12.0"); implementation("no.nordicsemi.android:mcumgr-ble:2.7.4"); implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"); implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0"); testImplementation("junit:junit:4.13.2") }
 dependencyLocking { lockAllConfigurations() }
 
 
@@ -31,4 +33,24 @@ val jacocoDebugReport = tasks.register<JacocoReport>("jacocoDebugReport") {
     classDirectories.setFrom(fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) { exclude("**/R.class", "**/R$*.class", "**/BuildConfig.class") })
     sourceDirectories.setFrom(files("src/main/kotlin"))
     reports { xml.required.set(true); html.required.set(true) }
+}
+
+// Resolve the actual release graph through Gradle's locked, verified resolver.
+tasks.register("writeRuntimeInventory") {
+    val output=layout.buildDirectory.file("reports/dependencies/android-runtime.json")
+    outputs.file(output)
+    doLast {
+        val configuration=configurations.getByName("releaseRuntimeClasspath")
+        val packages=configuration.incoming.resolutionResult.allComponents.mapNotNull { component ->
+            component.moduleVersion?.let { mapOf("ecosystem" to "Maven","name" to "${it.group}:${it.name}","version" to it.version) }
+        }.distinct().sortedBy { it["name"] }
+        val artifacts=configuration.resolvedConfiguration.resolvedArtifacts.map { artifact ->
+            val id=artifact.moduleVersion.id
+            mapOf("name" to "${id.group}:${id.name}","version" to id.version,"filename" to artifact.file.name,
+                "sha256" to MessageDigest.getInstance("SHA-256").digest(artifact.file.readBytes()).joinToString(""){"%02x".format(it.toInt() and 255)})
+        }.sortedBy { it["filename"] }
+        val sha=providers.exec { workingDir(rootProject.rootDir);commandLine("git","rev-parse","HEAD") }.standardOutput.asText.get().trim()
+        val file=output.get().asFile;file.parentFile.mkdirs()
+        file.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(mapOf("schemaVersion" to 1,"graph" to "android-runtime","sourceCommit" to sha,"packages" to packages,"artifacts" to artifacts)))+"\n")
+    }
 }

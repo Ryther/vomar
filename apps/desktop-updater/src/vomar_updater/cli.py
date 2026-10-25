@@ -59,7 +59,7 @@ async def run(args):
             else:raise ValueError('--original is required; never replace the preserved original after interruption')
             if group=='backup':return {'original':service.original.digest,'export':service.export_path}
             r=await service.dispatch(('bench.preview' if action=='install' else 'bench.'+action+'-preview') if group=='bench' else group+'.preview',a);confirm(r);return await service.dispatch('execute',r)
-        if group=='zigbee' or group=='fleet' and args.transport!='ble' or group=='mqtt' and action=='devices':
+        if group=='zigbee' or group=='mqtt' and action=='devices':
             await service.dispatch('mqtt.connect');await asyncio.sleep(.5)
         if group=='fleet' and action=='resume':
             r=await service.dispatch('fleet.resume-preview',a);confirm(r);return await service.dispatch('execute',r)

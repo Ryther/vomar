@@ -12,3 +12,13 @@ def test_duplicate_source_basenames_keep_distinct_execution_maps(tmp_path):
     subprocess.run([str(tmp_path/'run')],check=True)
     data=list(profile.rglob('*.gcda'));assert len(data)==2
     for p in data:assert p.read_bytes()[8:12]==p.with_suffix('.gcno').read_bytes()[8:12]
+
+
+def test_older_gcc_mangled_profile_names_find_exact_matching_map(tmp_path):
+    from tools.release.c_coverage import matching_notes
+    profile=tmp_path/'profiles';run=profile/'invocation';run.mkdir(parents=True)
+    notes=run/'tmp/build/test.gcno';notes.parent.mkdir(parents=True);notes.write_bytes(b'oncgB42*same-map')
+    data=run/'#tmp#build#test.gcda';data.write_bytes(b'adcgB42*same-map')
+    assert matching_notes(data,profile)==notes
+    notes.write_bytes(b'oncgB42*bad!-map')
+    with pytest.raises(ValueError):matching_notes(data,profile)

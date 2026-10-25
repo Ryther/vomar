@@ -45,8 +45,8 @@ def probe_tools(output):
 def notices(output):
     dest=output/'notices';dest.mkdir()
     shutil.copy2(ROOT/'LICENSE',dest/'Vomar-MIT.txt');shutil.copy2(ROOT/'THIRD_PARTY_NOTICES.md',dest/'THIRD_PARTY_NOTICES.md')
-    python_license=Path(sysconfig.get_path('stdlib'))/'LICENSE.txt'
-    if not python_license.is_file():raise ValueError('Exact Python runtime license is missing')
+    python_license=next((p for p in (Path(sysconfig.get_path('stdlib'))/'LICENSE.txt',Path(sys.base_prefix)/'LICENSE.txt') if p.is_file()),None)
+    if python_license is None:raise ValueError('Exact Python runtime license is missing')
     shutil.copy2(python_license,dest/'Python-LICENSE.txt');shutil.copytree(ROOT/'licenses/qt',dest/'Qt-PySide6')
     records=[]
     # Include the exact installed distributions/available license texts in the
@@ -92,7 +92,7 @@ def build(output,version):
         artifact=output/f'vomar-desktop-{version}-macos-{arch}.dmg'
         run('hdiutil','create','-volname','Vomar','-srcfolder',stage,'-ov','-format','UDZO',artifact)
     else:raise ValueError('Unsupported native package platform')
-    cli=bundle/('Contents/MacOS/vomar' if system=='Darwin' else 'vomar.exe' if system=='Windows' else 'vomar')
+    cli=bundle/('Contents/MacOS/vomar-cli' if system=='Darwin' else 'vomar-cli.exe' if system=='Windows' else 'vomar-cli')
     # Run outside the source tree with no repository PYTHONPATH or SDK environment.
     smoke_env={k:v for k,v in os.environ.items() if k not in ('PYTHONPATH','VIMAR_NCS_WORKSPACE','VIMAR_BUILD_PYTHON','ZEPHYR_BASE','ANDROID_HOME')}
     run(cli,'--version',cwd=output,env=smoke_env);run(cli,'--help',cwd=output,env=smoke_env)
@@ -104,7 +104,11 @@ def build(output,version):
     run(cli,'releases','verify','--path',fixture/'one-common.zip','--public-key',fixture/'public.der',cwd=output,env=smoke_env)
     gui=bundle/('Contents/MacOS/Vomar' if system=='Darwin' else 'Vomar.exe' if system=='Windows' else 'Vomar')
     run(gui,'--state',output/'smoke-private-state','--smoke-test','--screenshot',output/'gui-launch.png',cwd=output,env={**smoke_env,'QT_QPA_PLATFORM':'offscreen'})
-    (output/'package-report.json').write_text(json.dumps({'platform':system,'architecture':arch,'artifact':artifact.name,'sha256':hashlib.sha256(artifact.read_bytes()).hexdigest(),'size':artifact.stat().st_size,'physicalBleUsbQualification':False,'trustedOsSigning':False},indent=2)+'\n')
+    from .inventory import native
+    native_platform=('windows' if system=='Windows' else 'macos' if system=='Darwin' else 'linux')+'-'+arch
+    built=sorted(output.glob('vomar-desktop-*'))
+    (output/('native-'+native_platform+'.json')).write_text(json.dumps(native(bundle,native_platform,built),indent=2)+'\n')
+    (output/('package-report-'+native_platform+'.json')).write_text(json.dumps({'platform':system,'architecture':arch,'artifact':artifact.name,'sha256':hashlib.sha256(artifact.read_bytes()).hexdigest(),'size':artifact.stat().st_size,'physicalBleUsbQualification':False,'trustedOsSigning':False},indent=2)+'\n')
     return artifact
 
 

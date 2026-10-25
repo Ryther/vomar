@@ -3,10 +3,13 @@
 Complete local review before pushing. No tool here changes repository visibility,
 branch settings, remote secrets, tags or published releases automatically.
 
-- Protect main, require review and these stable checks: Conventional Commits,
-  Workflow lint, Secrets, Firmware required, Android required, Desktop required,
-  Contracts required, Documentation required, UX evidence gate, Sonar required
-  and Dependencies required. Also require the language-specific CodeQL lanes.
+- Protect main and require review plus the `pullRequest` checks listed in
+  [.github/required-checks.json](https://github.com/Ryther/vomar/blob/main/.github/required-checks.json).
+  They are produced for PR candidates, including the aggregate CodeQL lane.
+  `Sonar required` is an additional **release** gate produced only by protected
+  main analysis. Do not require it for PR merging: forks/Dependabot do not receive
+  the reusable Cloud token. Contributor community analysis reports unsupported
+  analyzers explicitly; a partial scan does not pass the release gate.
 - Use separate protected environments: release-proposal, release-signing,
   release-publication and sonar-analysis. Restrict them to the protected default
   branch/workflow and require reviewers for signer/publication access.
@@ -31,3 +34,10 @@ branch settings, remote secrets, tags or published releases automatically.
 No GitHub publication/settings have been performed by this source preparation.
 The first distribution proposal must be reviewed after the new public baseline
 is pushed; 0.0.0 is only a bootstrap manifest, not a published distribution.
+
+The publication environment additionally requires `NATIVE_QUALIFICATION_JSON`
+and `DEPENDENCY_REVIEW_JSON`, independently reviewed after all exact artifacts
+exist. See the [evidence contracts](releasing.md#delivered-dependencies-and-native-qualification).
+They are publication gates, separate from PR merging and firmware's thirteen
+physical checks. The tracked inventory generator and audit jobs provide input;
+they cannot approve physical checks or unscanned vendor advisories themselves.

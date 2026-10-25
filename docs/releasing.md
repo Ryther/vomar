@@ -66,3 +66,34 @@ the measured binaries to the reviewed source; it must be collected with the
 exact build provenance, never inferred from a passing host test. Assembly and
 publication reject evidence from another commit. The loader contracts and every
 role image hash remain bound by the signed common package.
+
+## Delivered dependencies and native qualification
+
+Every distribution includes `source-sbom`: a ZIP of the actual Gradle release
+runtime inventory, the complete pinned public Nordic SDK graph, and each native
+bundle's runtime package closure, shipped-file hashes and artifact hashes.
+Android/SDK OSV queries, per-platform Python/native inventory queries and the
+assistant npm audit are mandatory CI checks. A query failure fails validation.
+OSV does not cover every Qt, OpenOCD, system-library or Nordic/ZBOSS vendor binary.
+
+`DEPENDENCY_REVIEW_JSON` therefore records a separately protected advisory review
+of all six delivered inventory graphs. It binds the source commit, every release
+artifact hash, every inventory hash, a UTC review date within fourteen days, and
+explicit evidence/dispositions. Missing scope, stale evidence or unresolved
+advisories keep publication blocked. Inspect vendor advisories and the exact
+bundled files for unsupported automated scopes; an empty OSV response is not
+proof of full coverage. A confirmed advisory must be fixed or receive a protected
+`not-affected` disposition with reproducible evidence. Never ignore it in a CI
+allowlist to obtain a green result.
+
+`NATIVE_QUALIFICATION_JSON` is separate from firmware qualification. For Linux
+x64, Windows x64, macOS Intel and macOS arm64 it binds exact native asset hashes
+(including both Windows packages) and literal true observations for:
+`filesystemTransactions`, `bluetoothPermissionsAndUpdate`,
+`dkDriverInstallRepairStart` and `stopAndRestartRecovery`. Each platform entry
+requires an independent bench evidence reference. Build smoke checks cannot
+populate these fields. The publisher requires both protected JSON documents even
+for a local dry run; their strict shapes are implemented in
+`tools/release/evidence.py` and demonstrated with fictional test data in
+`tools/release/tests/test_protected_evidence.py`. Do not reuse synthetic test data
+as release evidence. Store actual evidence outside the public source tree.

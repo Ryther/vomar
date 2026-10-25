@@ -114,7 +114,7 @@ class Engine:
     async def _bootstrap(self,package,preview,session,images):
         self.bootstrap_decision(package,images)
         if not self.ble.authenticated:raise ValueError('Protected legacy characteristic security unavailable')
-        self.store.record(session,'bootstrap-upload-intent');raw=package.image('migration')
+        raw=package.image('migration');self.check();self.store.record(session,'bootstrap-upload-intent')
         async def progress(offset):
             self.check()
             if type(offset) is not int or not 0<=offset<=len(raw):raise ValueError('Invalid migration acknowledgment')
@@ -125,13 +125,14 @@ class Engine:
         try:ack=await self.ble.migration(package.manifest['migration']['signedRegionSha256'],images['recovery']['hash'])
         except IdentityUnavailable:
             try:await self.ble.identity()
-            except IdentityUnavailable:ack=await self.ble.reset()
+            except IdentityUnavailable:
+                self.check();ack=await self.ble.reset()
             else:raise ValueError('Identity-capable recovery cannot use legacy reset fallback')
         self.store.record(session,'await-reconnect',{'acknowledged':ack})
         self.emit('await-operator','Recovery preparation requested. Inspect again to bind the live UID before any MAIN update.',session);return session
     async def _live(self,package,expected=None):
         self.check()
-        i=await self.ble.identity()
+        i=await self.ble.identity();self.check()
         if not self.ble.authenticated:raise ValueError('Authenticated Bluetooth bond required; OS security is unavailable')
         self.compatible(package,i)
         if expected is not None and i!=expected:raise ValueError('Live target/loader/anchor changed; preview again')
@@ -148,7 +149,7 @@ class Engine:
                 except IdentityUnavailable:
                     if operation not in ('bootstrap','trial'):raise ValueError('Legacy recovery requires explicit signed recovery preparation')
                     i=None
-                images=await self.ble.images()
+                images=await self.ble.images();self.check()
                 import dataclasses
                 prior=[s for s in self.store.sessions() if s['binding'].get('package')==package.digest and s['binding'].get('target')==target and s['binding'].get('identity')==(json.loads(json.dumps(dataclasses.asdict(i))) if i else None)]
                 previous=next((s for s in prior if s['id']==resume_session),None) if resume_session else (prior[0] if prior else None)
@@ -172,16 +173,17 @@ class Engine:
         record=self._consents.pop(consent,None)
         if record is None or record[0]!=preview.fingerprint or record[1]<time.monotonic():raise ValueError('Fresh operation-specific consent required')
         self._previews.pop(preview.token,None)
-    async def execute(self,package,preview,consent):
-        package.assert_verified();self._claim(preview,consent)
+    async def execute(self,package,preview,consent,*,on_session=lambda _:None):
+        package.assert_verified();self.check();self._claim(preview,consent)
         if package.digest!=preview.package_digest:raise ValueError('Package changed')
         if self.lease.locked():raise ValueError('Bluetooth is busy')
         async with self.lease:
-            self._stop.clear()
+            self.check()
             if preview.resume_session:
                 head=hashlib.sha256(json.dumps(self.store.events(preview.resume_session),sort_keys=True).encode()).hexdigest()
                 if head!=preview.journal_head:raise ValueError('Session changed after review')
             session=preview.resume_session or self.store.begin({'package':package.digest,'target':preview.target,'identity':asdict(preview.identity) if preview.identity else None,'operation':preview.operation,'original':preview.original_digest})
+            on_session(session)
             self.store.put(package.raw,'package');self.emit('connecting','Connecting to reviewed device',session)
             try:
                 await self.ble.connect(preview.target)
@@ -191,7 +193,7 @@ class Engine:
                 if preview.identity is None:return await self._bootstrap(package,preview,session,images)
                 for _ in range(4):
                     await self._live(package,preview.identity);action=self.decision(package,images,preview.resume_role)
-                    self.check();self.store.record(session,action+'-intent',{'images':images})
+                    self.check()
                     self.emit(action,action.replace('-',' ').capitalize(),session)
                     if action.startswith('upload-'):
                         role=action.split('-')[1];raw=package.image(role)
@@ -199,12 +201,14 @@ class Engine:
                             self.check()
                             if type(offset) is not int or not 0<=offset<=len(raw):raise ValueError('Invalid upload acknowledgment')
                             self.store.record(session,'upload-progress',{'role':role,'offset':offset});self.emit('upload',f'Uploading {role}',session,offset,len(raw))
+                        self.check();self.store.record(session,action+'-intent',{'images':images})
                         await self.ble.upload(raw,progress);await self._live(package,preview.identity)
                         observed=await self.ble.images()
                         if observed.get('primary',{}).get('hash')!=package.manifest[role]['signedRegionSha256'] or not observed['primary'].get('bootable') or observed['recovery']!=images['recovery']:raise ValueError('Uploaded image readback mismatch')
                         images=observed;continue
                     await self._live(package,preview.identity)
                     if await self.ble.images()!=images:raise ValueError('Images changed before reset')
+                    self.check();self.store.record(session,action+'-intent',{'images':images})
                     if action=='migration-reset':
                         ack=await self.ble.migration(package.manifest['migration']['signedRegionSha256'],images['recovery']['hash'])
                         self.store.record(session,'await-reconnect',{'acknowledged':ack})

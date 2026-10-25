@@ -70,6 +70,7 @@ jobs:
           ZEPHYR_SDK_INSTALL_DIR: /home/runner/.cache/vomar/zephyr-sdk-1.0.1
         run: python -m tools.release.ci_firmware --output _test/ci-firmware
       - run: python -m tools.release.capture_analysis --build _test/ci-firmware --output reports
+      - run: python -m tools.release.inventory firmware --output reports/firmware-sdk.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: {name: 'firmware-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
   android:
@@ -79,10 +80,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
-      - run: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:assembleRelease
+      - run: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:assembleRelease :app:writeRuntimeInventory
       - name: Collect actual JVM coverage
         run: |
           mkdir -p reports
+          cp apps/android-updater/app/build/reports/dependencies/android-runtime.json reports/android-runtime.json
           cp apps/android-updater/core/build/reports/jacoco/test/jacocoTestReport.xml reports/core-jacoco.xml
           cp apps/android-updater/app/build/reports/jacoco/jacocoDebugReport/jacocoDebugReport.xml reports/app-jacoco.xml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
@@ -116,8 +118,18 @@ jobs:
       - run: python -m pip install --require-hashes -r requirements-security.lock
       - run: pip-audit --disable-pip --no-deps -r requirements-desktop.lock -f json -o native-dependency-audit.json
       - run: python -m tools.release.package_desktop --output _test/native
+      - name: Audit the actual frozen package dependency inventory
+        run: python -m tools.release.inventory audit --input _test/native/native-${{ matrix.platform }}.json --output _test/native/advisories-${{ matrix.platform }}.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: {name: 'desktop-${{ matrix.platform }}-${{ inputs.sha || github.sha }}', path: '_test/native/vomar-desktop-*', if-no-files-found: error}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: native-evidence-${{ matrix.platform }}-${{ inputs.sha || github.sha }}
+          path: |
+            _test/native/native-*.json
+            _test/native/package-report-*.json
+            _test/native/advisories-*.json
+          if-no-files-found: error
   desktop-required:
     name: Desktop required
     needs: desktop

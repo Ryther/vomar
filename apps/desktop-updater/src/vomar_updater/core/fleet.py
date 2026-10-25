@@ -77,7 +77,16 @@ class Scheduler:
 
 class Batches:
     """Organization is durable; executable reviews/approvals remain process-local."""
-    def __init__(self,store):self.store=store
+    def __init__(self,store):
+        self.store=store
+        for group in self.list():
+            if group.get('state')=='running':
+                group['state']='paused'
+                for job in group['jobs']:
+                    if job.get('state')=='running':job['state']='interrupted'
+                    session=next((s for s in self.store.sessions() if s['id']==job.get('session')),None)
+                    if session and session['phase']=='await-operator':job['state']='await-operator'
+                self.save(group)
     def create(self,package,targets,mode='sequential'):
         import secrets,time
         if mode not in ('sequential','network-parallel') or not 1<=len(targets)<=256:raise ValueError('Invalid bounded batch')
@@ -86,4 +95,12 @@ class Batches:
     def save(self,group):self.store.setting('batch:'+group['id'],group)
     def list(self):
         rows=self.store.db.execute("SELECT value FROM settings WHERE name LIKE 'batch:%'").fetchall()
-        return [json.loads(r[0]) for r in rows]
+        groups=[json.loads(r[0]) for r in rows];sessions={s['id']:s for s in self.store.sessions()}
+        for group in groups:
+            changed=False
+            for job in group['jobs']:
+                session=sessions.get(job.get('session'))
+                if session and session['phase'] in ('verified','operator-confirmed') and job['state']!='verified':job['state']='verified';changed=True
+            if all(j['state']=='verified' for j in group['jobs']) and group['state']!='verified':group['state']='verified';changed=True
+            if changed:self.save(group)
+        return groups

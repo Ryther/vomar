@@ -21,7 +21,7 @@ from tools.firmware.package_common_android_update_v3 import validate_common_v3_b
 from tools.firmware.ota_release import REQUIRED_CHECKS,SPLIT_REQUIRED_CHECKS
 from cryptography.hazmat.primitives import serialization
 
-CHECKS={'Conventional Commits','Workflow lint','Secrets','Firmware required','Android required','Desktop required','Contracts required','Documentation required','UX evidence gate','Sonar required','Dependencies required','CodeQL required','Converter required'}
+CHECKS=set(loads((Path(__file__).resolve().parents[2]/'.github/required-checks.json').read_bytes())['release'])
 
 
 def select_draft(releases,tag,sha):
@@ -56,9 +56,27 @@ def qualification(package,report,source_sha):
     return q
 
 
-def verify_candidate(manifest,directory,qualification_path,public_key,android_tools=None):
+def verify_candidate(manifest,directory,qualification_path,public_key,android_tools=None,*,native_evidence=None,dependency_evidence=None):
     validate(manifest,directory)
-    assets={a['role']:a for a in manifest['artifacts']};raw=(directory/assets['firmware-common']['filename']).read_bytes()
+    from .evidence import native_qualification,dependency_review,DEPENDENCY_GRAPHS
+    if not native_evidence or not dependency_evidence:raise ValueError('Protected native qualification and delivered dependency review are required')
+    native_qualification(manifest,loads(Path(native_evidence).read_bytes()))
+    assets={a['role']:a for a in manifest['artifacts']}
+    if 'source-sbom' not in assets:raise ValueError('Delivered dependency inventories are missing')
+    from tools.firmware.bounded_zip import read_member
+    with zipfile.ZipFile(directory/assets['source-sbom']['filename']) as archive:
+        names=[g+'.json' for g in DEPENDENCY_GRAPHS]
+        if len(archive.infolist())!=len(names) or set(archive.namelist())!=set(names):raise ValueError('Missing/ambiguous delivered inventory graph')
+        inventories={g:read_member(archive,archive.getinfo(g+'.json'),8*1024*1024) for g in DEPENDENCY_GRAPHS}
+    for graph,raw in inventories.items():
+        data=loads(raw)
+        if data.get('graph')!=graph or data.get('sourceCommit')!=manifest['commit']:raise ValueError('Inventory source identity mismatch')
+        if graph.startswith('native-'):
+            from .evidence import PLATFORMS
+            expected={a['filename']:a['sha256'] for a in manifest['artifacts'] if a['role'] in PLATFORMS[graph[7:]]}
+            if data.get('artifacts')!=expected or not data.get('files') or not data.get('packages'):raise ValueError('Native inventory does not describe the delivered bundle')
+    dependency_review(manifest,loads(Path(dependency_evidence).read_bytes()),inventories)
+    raw=(directory/assets['firmware-common']['filename']).read_bytes()
     key=serialization.load_pem_public_key(Path(public_key).read_bytes());package=validate_common_v3_bundle(raw,key)
     if package['main']['version']!=manifest['components']['firmware'] or assets['firmware-common']['componentVersion']!=package['main']['version']:raise ValueError('Firmware version identity mismatch')
     q=qualification(package,Path(qualification_path).read_bytes(),manifest['commit'])
@@ -141,8 +159,8 @@ def verify_checks(value,sha):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--repo',default='Ryther/vomar');p.add_argument('--directory',type=Path,required=True);p.add_argument('--qualification',type=Path,required=True);p.add_argument('--public-key',type=Path,required=True);p.add_argument('--android-tools',type=Path);p.add_argument('--publish',action='store_true');a=p.parse_args()
-    manifest=loads((a.directory/'release-manifest.json').read_bytes());verify_candidate(manifest,a.directory,a.qualification,a.public_key,a.android_tools)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--repo',default='Ryther/vomar');p.add_argument('--directory',type=Path,required=True);p.add_argument('--qualification',type=Path,required=True);p.add_argument('--public-key',type=Path,required=True);p.add_argument('--android-tools',type=Path);p.add_argument('--native-qualification',type=Path,required=True);p.add_argument('--dependency-review',type=Path,required=True);p.add_argument('--publish',action='store_true');a=p.parse_args()
+    manifest=loads((a.directory/'release-manifest.json').read_bytes());verify_candidate(manifest,a.directory,a.qualification,a.public_key,a.android_tools,native_evidence=a.native_qualification,dependency_evidence=a.dependency_review)
     paths={x['filename']:a.directory/x['filename'] for x in manifest['artifacts']};paths['release-manifest.json']=a.directory/'release-manifest.json';paths['SHA256SUMS']=a.directory/'SHA256SUMS'
     expected=''.join(digest(path.read_bytes())+'  '+name+'\n' for name,path in sorted(paths.items()) if name!='SHA256SUMS')
     if paths['SHA256SUMS'].read_text()!=expected:raise ValueError('Checksums do not describe the complete immutable asset set')
