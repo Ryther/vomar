@@ -12,3 +12,7 @@ dependencies {
 }
 dependencyLocking { lockAllConfigurations() }
 java { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
+
+tasks.withType<Test>().configureEach {
+    systemProperty("vomar.root", rootProject.projectDir.resolve("../..").canonicalPath)
+}

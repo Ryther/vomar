@@ -961,6 +961,37 @@
 
 !/release-manifest.schema.json
 
+!/pyproject.toml
+!/requirements-desktop.lock
+!/apps/desktop-updater/
+!/apps/desktop-updater/src/
+!/apps/desktop-updater/src/vomar_updater/
+!/apps/desktop-updater/src/vomar_updater/__init__.py
+!/apps/desktop-updater/src/vomar_updater/core/
+!/apps/desktop-updater/src/vomar_updater/core/__init__.py
+!/apps/desktop-updater/src/vomar_updater/core/engine.py
+!/apps/desktop-updater/src/vomar_updater/core/packages.py
+!/apps/desktop-updater/src/vomar_updater/core/storage.py
+!/apps/desktop-updater/src/vomar_updater/adapters/
+!/apps/desktop-updater/src/vomar_updater/adapters/__init__.py
+!/apps/desktop-updater/src/vomar_updater/gui/
+!/apps/desktop-updater/src/vomar_updater/gui/__init__.py
+!/apps/desktop-updater/tests/
+!/apps/desktop-updater/tests/test_core.py
+!/apps/desktop-updater/tests/test_contracts.py
+!/apps/desktop-updater/tests/test_engine.py
+!/tests/
+!/tests/contracts/
+!/tests/contracts/README.md
+!/tests/contracts/packages.json
+!/tests/contracts/fixtures/
+!/tests/contracts/fixtures/common-v3-duplicate-entry.zip
+!/tests/contracts/fixtures/options-v3-duplicate-entry.zip
+!/tests/contracts/fixtures/candidate-duplicate-entry.zip
+!/tests/contracts/fixtures/common-v2-duplicate-entry.zip
+!/tests/contracts/fixtures/legacy-v1-duplicate-entry.zip
+!/apps/android-updater/core/src/test/kotlin/org/openvimar/updater/core/DistributionContractTest.kt
+
 # Account state and acquired/generated artifacts always remain private.
 /_test*/
 /_tmp*/

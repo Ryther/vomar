@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "description": "Single source-owned synthetic corpus shared by Python and Kotlin; no stock images or private keys.",
+  "cases": [
+    {
+      "id": "common-v3-none",
+      "path": "tools/android/test-fixtures/common-v3-synthetic/one-common.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-synthetic/public.der",
+      "sourceSha256": "ed5fb1037dcdf54c1084e952418dae1d94c34124572fbb11ad6f5ed3ff3d7309",
+      "schema": 3,
+      "mutation": "none",
+      "accept": true
+    },
+    {
+      "id": "common-v3-truncate",
+      "path": "tools/android/test-fixtures/common-v3-synthetic/one-common.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-synthetic/public.der",
+      "sourceSha256": "ed5fb1037dcdf54c1084e952418dae1d94c34124572fbb11ad6f5ed3ff3d7309",
+      "schema": 3,
+      "mutation": "truncate",
+      "accept": false
+    },
+    {
+      "id": "common-v3-extra-entry",
+      "path": "tools/android/test-fixtures/common-v3-synthetic/one-common.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-synthetic/public.der",
+      "sourceSha256": "ed5fb1037dcdf54c1084e952418dae1d94c34124572fbb11ad6f5ed3ff3d7309",
+      "schema": 3,
+      "mutation": "extra-entry",
+      "accept": false
+    },
+    {
+      "id": "common-v3-duplicate-entry",
+      "path": "tests/contracts/fixtures/common-v3-duplicate-entry.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-synthetic/public.der",
+      "sourceSha256": "8fc30f5c221fcb91899e5f0d11a7b334cefd9526a6687a8d9ee730514f464408",
+      "schema": 3,
+      "mutation": "none",
+      "accept": false,
+      "derivedFrom": "tools/android/test-fixtures/common-v3-synthetic/one-common.zip",
+      "transformation": "Append duplicate synthetic manifest entry; no original source modified"
+    },
+    {
+      "id": "options-v3-none",
+      "path": "tools/android/test-fixtures/common-v3-all-options/one-common.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-all-options/public.der",
+      "sourceSha256": "d22e61e20e011c9ef6ff335a21b58f78f8a140fbc33e0e30963c8aea66c0ed1a",
+      "schema": 3,
+      "mutation": "none",
+      "accept": true
+    },
+    {
+      "id": "options-v3-truncate",
+      "path": "tools/android/test-fixtures/common-v3-all-options/one-common.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-all-options/public.der",
+      "sourceSha256": "d22e61e20e011c9ef6ff335a21b58f78f8a140fbc33e0e30963c8aea66c0ed1a",
+      "schema": 3,
+      "mutation": "truncate",
+      "accept": false
+    },
+    {
+      "id": "options-v3-extra-entry",
+      "path": "tools/android/test-fixtures/common-v3-all-options/one-common.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-all-options/public.der",
+      "sourceSha256": "d22e61e20e011c9ef6ff335a21b58f78f8a140fbc33e0e30963c8aea66c0ed1a",
+      "schema": 3,
+      "mutation": "extra-entry",
+      "accept": false
+    },
+    {
+      "id": "options-v3-duplicate-entry",
+      "path": "tests/contracts/fixtures/options-v3-duplicate-entry.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-all-options/public.der",
+      "sourceSha256": "7bb09e0f72f01f1e29251639f2e830064732b4d3f50b671e0bbf29cd97ec2920",
+      "schema": 3,
+      "mutation": "none",
+      "accept": false,
+      "derivedFrom": "tools/android/test-fixtures/common-v3-all-options/one-common.zip",
+      "transformation": "Append duplicate synthetic manifest entry; no original source modified"
+    },
+    {
+      "id": "candidate-none",
+      "path": "tools/android/test-fixtures/common-v3-candidate/qualification-candidate.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-candidate/public.der",
+      "sourceSha256": "3f4293a3270e944048d912481ab99d426cfa9207101b70e49b3abe396c226053",
+      "schema": 3,
+      "mutation": "none",
+      "accept": false
+    },
+    {
+      "id": "candidate-truncate",
+      "path": "tools/android/test-fixtures/common-v3-candidate/qualification-candidate.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-candidate/public.der",
+      "sourceSha256": "3f4293a3270e944048d912481ab99d426cfa9207101b70e49b3abe396c226053",
+      "schema": 3,
+      "mutation": "truncate",
+      "accept": false
+    },
+    {
+      "id": "candidate-extra-entry",
+      "path": "tools/android/test-fixtures/common-v3-candidate/qualification-candidate.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-candidate/public.der",
+      "sourceSha256": "3f4293a3270e944048d912481ab99d426cfa9207101b70e49b3abe396c226053",
+      "schema": 3,
+      "mutation": "extra-entry",
+      "accept": false
+    },
+    {
+      "id": "candidate-duplicate-entry",
+      "path": "tests/contracts/fixtures/candidate-duplicate-entry.zip",
+      "publicKey": "tools/android/test-fixtures/common-v3-candidate/public.der",
+      "sourceSha256": "49ac8a71a70ae877f087b730bcce0a93e070bbf05fd2b223267df69d98437897",
+      "schema": 3,
+      "mutation": "none",
+      "accept": false,
+      "derivedFrom": "tools/android/test-fixtures/common-v3-candidate/qualification-candidate.zip",
+      "transformation": "Append duplicate synthetic manifest entry; no original source modified"
+    },
+    {
+      "id": "common-v2-none",
+      "path": "apps/android-updater/test-fixtures/synthetic-common.zip",
+      "publicKey": "apps/android-updater/test-fixtures/synthetic-common-public.der",
+      "sourceSha256": "1c4b8951f236834d8d2d0ce1d69ba0d3fc39f85f6519701c1cb3a28d61306809",
+      "schema": 2,
+      "mutation": "none",
+      "accept": true
+    },
+    {
+      "id": "common-v2-truncate",
+      "path": "apps/android-updater/test-fixtures/synthetic-common.zip",
+      "publicKey": "apps/android-updater/test-fixtures/synthetic-common-public.der",
+      "sourceSha256": "1c4b8951f236834d8d2d0ce1d69ba0d3fc39f85f6519701c1cb3a28d61306809",
+      "schema": 2,
+      "mutation": "truncate",
+      "accept": false
+    },
+    {
+      "id": "common-v2-extra-entry",
+      "path": "apps/android-updater/test-fixtures/synthetic-common.zip",
+      "publicKey": "apps/android-updater/test-fixtures/synthetic-common-public.der",
+      "sourceSha256": "1c4b8951f236834d8d2d0ce1d69ba0d3fc39f85f6519701c1cb3a28d61306809",
+      "schema": 2,
+      "mutation": "extra-entry",
+      "accept": false
+    },
+    {
+      "id": "common-v2-duplicate-entry",
+      "path": "tests/contracts/fixtures/common-v2-duplicate-entry.zip",
+      "publicKey": "apps/android-updater/test-fixtures/synthetic-common-public.der",
+      "sourceSha256": "1d6522097558e89d997bce2431f3944a937f616e8f00d511081c5082a8e88b9c",
+      "schema": 2,
+      "mutation": "none",
+      "accept": false,
+      "derivedFrom": "apps/android-updater/test-fixtures/synthetic-common.zip",
+      "transformation": "Append duplicate synthetic manifest entry; no original source modified"
+    },
+    {
+      "id": "legacy-v1-none",
+      "path": "apps/android-updater/test-fixtures/synthetic-update.zip",
+      "publicKey": "apps/android-updater/test-fixtures/synthetic-public.der",
+      "sourceSha256": "340cd2458b768f979b48d7e35e86df260deec9c1dcd12a5c80d91d9277870d4c",
+      "schema": 1,
+      "mutation": "none",
+      "accept": true
+    },
+    {
+      "id": "legacy-v1-truncate",
+      "path": "apps/android-updater/test-fixtures/synthetic-update.zip",
+      "publicKey": "apps/android-updater/test-fixtures/synthetic-public.der",
+      "sourceSha256": "340cd2458b768f979b48d7e35e86df260deec9c1dcd12a5c80d91d9277870d4c",
+      "schema": 1,
+      "mutation": "truncate",
+      "accept": false
+    },
+    {
+      "id": "legacy-v1-extra-entry",
+      "path": "apps/android-updater/test-fixtures/synthetic-update.zip",
+      "publicKey": "apps/android-updater/test-fixtures/synthetic-public.der",
+      "sourceSha256": "340cd2458b768f979b48d7e35e86df260deec9c1dcd12a5c80d91d9277870d4c",
+      "schema": 1,
+      "mutation": "extra-entry",
+      "accept": false
+    },
+    {
+      "id": "legacy-v1-duplicate-entry",
+      "path": "tests/contracts/fixtures/legacy-v1-duplicate-entry.zip",
+      "publicKey": "apps/android-updater/test-fixtures/synthetic-public.der",
+      "sourceSha256": "0bc43284245648193b6778d20fbd6e39ee846992b82b4eb27b5f50959419179b",
+      "schema": 1,
+      "mutation": "none",
+      "accept": false,
+      "derivedFrom": "apps/android-updater/test-fixtures/synthetic-update.zip",
+      "transformation": "Append duplicate synthetic manifest entry; no original source modified"
+    }
+  ]
+}
