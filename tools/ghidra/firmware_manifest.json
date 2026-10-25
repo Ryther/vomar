@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "targets": {
+    "mesh": {
+      "name": "mesh",
+      "source_path": "inputs/firmware/mesh/P561_Dimmer_Mesh.bin",
+      "sha256": "8c0408c49fe3e35758a69e511faa154c2f1237512e1c1bfdf1061221db53f927",
+      "size": 213012,
+      "image_base": "0x00026000",
+      "reset_handler": "0x00043f30"
+    },
+    "zigbee": {
+      "name": "zigbee",
+      "source_path": "inputs/firmware/zigbee/P561_Dimmer_Zigbee.bin",
+      "sha256": "710f788a02eca3985d5826efacf47cef8d8fa29dde4684815c25c8c9a79690d5",
+      "size": 343988,
+      "image_base": "0x00026000",
+      "reset_handler": "0x0002675c"
+    }
+  }
+}

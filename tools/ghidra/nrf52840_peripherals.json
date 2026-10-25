@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "ranges": [
+    {"name": "FICR", "start": "0x10000000", "end": "0x10001000"},
+    {"name": "UICR", "start": "0x10001000", "end": "0x10002000"},
+    {"name": "CLOCK_POWER", "start": "0x40000000", "end": "0x40001000"},
+    {"name": "UART0_UARTE0_SPI0_SPIM0_TWI0_TWIM0", "start": "0x40002000", "end": "0x40003000"},
+    {"name": "SPI1_SPIM1_TWI1_TWIM1", "start": "0x40003000", "end": "0x40004000"},
+    {"name": "GPIOTE", "start": "0x40006000", "end": "0x40007000"},
+    {"name": "TIMER0", "start": "0x40008000", "end": "0x40009000"},
+    {"name": "TIMER1", "start": "0x40009000", "end": "0x4000a000"},
+    {"name": "TIMER2", "start": "0x4000a000", "end": "0x4000b000"},
+    {"name": "RTC0", "start": "0x4000b000", "end": "0x4000c000"},
+    {"name": "WDT", "start": "0x40010000", "end": "0x40011000"},
+    {"name": "RTC1", "start": "0x40011000", "end": "0x40012000"},
+    {"name": "TIMER3", "start": "0x4001a000", "end": "0x4001b000"},
+    {"name": "TIMER4", "start": "0x4001b000", "end": "0x4001c000"},
+    {"name": "PWM0", "start": "0x4001c000", "end": "0x4001d000"},
+    {"name": "NVMC", "start": "0x4001e000", "end": "0x4001f000"},
+    {"name": "PPI", "start": "0x4001f000", "end": "0x40020000"},
+    {"name": "PWM1", "start": "0x40021000", "end": "0x40022000"},
+    {"name": "PWM2", "start": "0x40022000", "end": "0x40023000"},
+    {"name": "SPI2_SPIM2", "start": "0x40023000", "end": "0x40024000"},
+    {"name": "RTC2", "start": "0x40024000", "end": "0x40025000"},
+    {"name": "UART1_UARTE1", "start": "0x40028000", "end": "0x40029000"},
+    {"name": "PWM3", "start": "0x4002d000", "end": "0x4002e000"},
+    {"name": "SPI3_SPIM3", "start": "0x4002f000", "end": "0x40030000"},
+    {"name": "GPIO", "start": "0x50000000", "end": "0x50001000"}
+  ]
+}
