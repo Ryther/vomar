@@ -1113,6 +1113,9 @@
 !/tools/dev/container_check.py
 !/tools/dev/tests/test_container_check.py
 
+!/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/ZigbeeDeviceMetadata.kt
+!/apps/android-updater/app/src/test/kotlin/org/openvimar/updater/ZigbeeDeviceMetadataTest.kt
+
 # Account state and acquired/generated artifacts always remain private.
 /_test*/
 /_tmp*/
