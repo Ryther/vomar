@@ -1110,6 +1110,9 @@
 !/tools/release/tests/test_protected_evidence.py
 !/.github/required-checks.json
 
+!/tools/dev/container_check.py
+!/tools/dev/tests/test_container_check.py
+
 # Account state and acquired/generated artifacts always remain private.
 /_test*/
 /_tmp*/

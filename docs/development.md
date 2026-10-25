@@ -6,6 +6,33 @@ Java 21 runs the existing Kotlin toolchain; Java 17 remains the target. The
 normal profile has no host SSH, display, D-Bus or USB mounts. Authentication is
 interactive and optional; no assistant is contacted during bootstrap.
 
+All three profiles include Docker CLI/Buildx and GitHub CLI through official
+Dev Container Features pinned by OCI digest. Their CLI versions are selected
+explicitly. The Docker feature mounts the host's `/var/run/docker.sock` at
+`/var/run/docker-host.sock` and initializes non-root access. Docker commands use
+the host daemon, including access to other local containers. GitHub login state
+has its own private named volume; credentials are never built into the image.
+
+The public profile must be built/reopened through Dev Containers so its Features
+and mounts are applied. A plain build of `.devcontainer/Dockerfile` produces only
+the base toolchain image. To build the complete public development image:
+
+```sh
+npx --yes @devcontainers/cli@0.89.0 build --workspace-folder . --image-name vomar-development:local
+```
+
+Creation and startup run `python tools/dev/container_check.py`. It requires a
+real mounted socket, a reachable Docker server and working `docker`/`gh` tools.
+It checks versions without GitHub login, hardware access or agent inference. A
+regular zero-byte `/var/run/docker-host.sock` is an unmounted image placeholder:
+the configuration must be applied using **Dev Containers: Rebuild Container**.
+Recreation interrupts the current container sessions, so save active work first.
+Changing the JSON or restarting the forwarding proxy alone cannot add a mount to
+an already running container.
+
+The public profile's complete image build/reopen still needs live verification;
+static checks and mocked daemon responses do not establish that it boots.
+
 `python tools/dev/bootstrap.py workspace` installs locked development tools into
 private state. `codex --version`, `opencode --version` and `claude --version`
 check the three assistants without login. The canonical guide is under

@@ -17,3 +17,6 @@ updates:
     schedule: {interval: weekly}
     groups:
       kotlin-android: {patterns: ['org.jetbrains.kotlin*', 'com.android*']}
+  - package-ecosystem: devcontainers
+    directory: /
+    schedule: {interval: weekly}

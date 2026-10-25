@@ -6,8 +6,8 @@ COPY tools/dev/bootstrap.py /tmp/bootstrap.py
 RUN python3 /tmp/bootstrap.py image /tmp/toolchain.json && ln -s python3 /opt/python/bin/python
 ENV PATH="/opt/python/bin:/opt/node/bin:/opt/assistants/node_modules/.bin:$PATH"
 COPY .devcontainer/assistants/package*.json /opt/assistants/
-RUN cd /opt/assistants && npm ci --omit=dev && codex --version && opencode --version && claude --version
+RUN cd /opt/assistants && npm ci --omit=dev && codex --version && opencode --version && claude --version && devcontainer --version
 RUN userdel -r ubuntu 2>/dev/null || true
-RUN useradd --create-home --uid 1000 --shell /bin/bash vscode && echo 'vscode ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/vscode && mkdir -p /home/vscode/.cache/vomar /home/vscode/.local/share/vomar-agents /home/vscode/.gradle && chown -R vscode:vscode /home/vscode
+RUN useradd --create-home --uid 1000 --shell /bin/bash vscode && echo 'vscode ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/vscode && mkdir -p /home/vscode/.config/gh /home/vscode/.cache/vomar /home/vscode/.local/share/vomar-agents /home/vscode/.gradle && chown -R vscode:vscode /home/vscode
 USER vscode
 WORKDIR /workspaces/vomar

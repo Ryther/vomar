@@ -5,6 +5,7 @@
   "dependencies": {
     "@openai/codex": "0.164.0",
     "@opencode/cli": "2.1.4",
-    "@anthropic-ai/claude-code": "2.1.310"
+    "@anthropic-ai/claude-code": "2.1.310",
+    "@devcontainers/cli": "0.89.0"
   }
 }

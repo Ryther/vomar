@@ -16,9 +16,10 @@
   "mounts": [
     "source=vomar-sdk-cache,target=/home/vscode/.cache/vomar,type=volume",
     "source=vomar-agent-state,target=/home/vscode/.local/share/vomar-agents,type=volume",
-    "source=vomar-gradle-cache,target=/home/vscode/.gradle,type=volume"
+    "source=vomar-gradle-cache,target=/home/vscode/.gradle,type=volume",
+    "source=vomar-github-state,target=/home/vscode/.config/gh,type=volume"
   ],
-  "postCreateCommand": "python tools/dev/bootstrap.py workspace",
+  "postCreateCommand": "python tools/dev/container_check.py && python tools/dev/bootstrap.py workspace",
   "customizations": {
     "vscode": {
       "extensions": [
@@ -28,5 +29,21 @@
         "ms-vscode.cmake-tools"
       ]
     }
-  }
+  },
+  "features": {
+    "ghcr.io/devcontainers/features/docker-outside-of-docker@sha256:698f5900fac471e046c6e9d4333fec88c0e8d952c713494fa0712dce80baeca0": {
+      "version": "29.9.2-ubuntu24.04u2",
+      "moby": true,
+      "mobyBuildxVersion": "0.38.1-ubuntu24.04u2",
+      "dockerDashComposeVersion": "none",
+      "installDockerBuildx": true,
+      "installDockerComposeSwitch": false,
+      "socketPath": "/var/run/docker-host.sock"
+    },
+    "ghcr.io/devcontainers/features/github-cli@sha256:bd7ab48a832228f633239277552c30b353867fef2e5b037e064b4e64f0b843f2": {
+      "version": "2.103.2",
+      "installDirectlyFromGitHubRelease": true
+    }
+  },
+  "postStartCommand": "python tools/dev/container_check.py"
 }

@@ -29,6 +29,29 @@ jobs:
       - run: mkdir -p reports && python -m coverage xml -o reports/python-coverage.xml
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: {name: 'python-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
+  devcontainer:
+    name: Devcontainer required
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with: {node-version: '24.22.1'}
+      - run: npm ci --prefix .devcontainer/assistants --omit=dev --ignore-scripts
+      - name: Build and reopen the complete public profile
+        run: .devcontainer/assistants/node_modules/.bin/devcontainer up --workspace-folder .
+      - name: Check the mounted daemon and bundled tools inside the container
+        run: |
+          .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . python tools/dev/container_check.py
+          .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . codex --version
+          .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . opencode --version
+          .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . claude --version
+          .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . devcontainer --version
+          .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . /home/vscode/.cache/vomar/dev-venv/bin/python -m pytest tools/dev/tests -q
+      - name: Remove only this job's development container
+        if: always()
+        run: docker ps -aq --filter "label=devcontainer.local_folder=$GITHUB_WORKSPACE" | xargs -r docker rm -f
   conventional:
     name: Conventional Commits
     runs-on: ubuntu-24.04

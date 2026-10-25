@@ -11,7 +11,8 @@
     "UX evidence gate",
     "Dependencies required",
     "CodeQL required",
-    "Converter required"
+    "Converter required",
+    "Devcontainer required"
   ],
   "release": [
     "Conventional Commits",
@@ -26,6 +27,7 @@
     "Dependencies required",
     "CodeQL required",
     "Converter required",
-    "Sonar required"
+    "Sonar required",
+    "Devcontainer required"
   ]
 }
