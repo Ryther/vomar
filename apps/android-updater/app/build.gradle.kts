@@ -39,6 +39,10 @@ val jacocoDebugReport = tasks.register<JacocoReport>("jacocoDebugReport") {
 tasks.register("writeRuntimeInventory") {
     val output=layout.buildDirectory.file("reports/dependencies/android-runtime.json")
     outputs.file(output)
+    val sourceRevision=providers.exec { workingDir(rootProject.rootDir);commandLine("git","rev-parse","HEAD") }.standardOutput.asText.map { it.trim() }
+    inputs.property("sourceCommit",sourceRevision)
+    inputs.files(configurations.named("releaseRuntimeClasspath"))
+    inputs.file("gradle.lockfile")
     doLast {
         val configuration=configurations.getByName("releaseRuntimeClasspath")
         val packages=configuration.incoming.resolutionResult.allComponents.mapNotNull { component ->
@@ -49,7 +53,7 @@ tasks.register("writeRuntimeInventory") {
             mapOf("name" to "${id.group}:${id.name}","version" to id.version,"filename" to artifact.file.name,
                 "sha256" to MessageDigest.getInstance("SHA-256").digest(artifact.file.readBytes()).joinToString(""){"%02x".format(it.toInt() and 255)})
         }.sortedBy { it["filename"] }
-        val sha=providers.exec { workingDir(rootProject.rootDir);commandLine("git","rev-parse","HEAD") }.standardOutput.asText.get().trim()
+        val sha=sourceRevision.get()
         val file=output.get().asFile;file.parentFile.mkdirs()
         file.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(mapOf("schemaVersion" to 1,"graph" to "android-runtime","sourceCommit" to sha,"packages" to packages,"artifacts" to artifacts)))+"\n")
     }
