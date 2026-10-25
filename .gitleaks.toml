@@ -1,0 +1,11 @@
+[extend]
+useDefault = true
+
+[[rules]]
+id = "private-key"
+[[rules.allowlists]]
+description = "Synthetic APK negative-test header markers; no key material"
+condition = "AND"
+paths = ['''(^|/)tools/android/tests/test_build_updater\.py$''']
+regexTarget = "line"
+regexes = ['''@pytest\.mark\.parametrize\('name,data',\ \[\('assets/private\.pem',\ b'\-\-\-\-\-BEGIN\ EC\ PRIVATE\ KEY\-\-\-\-\-'\),\ \('assets/stock\.bin',\ b'original'\),\ \('assets/backup\.dat',b'dump'\),\ \('assets/key\.der',b'private\-DER'\),\ \('DebugProbesKt\.bin',\ b'forged'\),\ \('classes\.dex',\ b'prefix\-\-\-\-\-BEGIN\ PRIVATE\ KEY\-\-\-\-\-'\)\]\)''']

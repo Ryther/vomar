@@ -1,5 +1,35 @@
 # Vimar 30805 Reverse Engineering Workspace
 
+## Public product development
+
+Vomar ships firmware, native updater clients and a Zigbee2MQTT converter.
+Read CONTRIBUTING.md and the affected component guide before changing a public
+contract. Public source, docs, comments and commits are English. Match the
+user's language in conversation.
+
+Use the pinned public development environments. Keep package/identity/session
+validation and operation admission in the shared backend; GUI/CLI selectors
+are not authorization. Preserve original backups, explicit fresh consent,
+uncertain mutation status and signer continuity across interruption/restart.
+Do not add an implicit hardware action to startup, scanning, tests or recovery.
+
+Use synthetic fixtures and disposable local services. Never use household
+brokers, credentials or device captures in automated tests. Report actual
+commands/results and skips; source presence and passing host tests do not
+establish BLE/USB/power-cut qualification.
+
+The source ignore policy denies new files by default. Review each authored path
+and add a narrow exception; never force-add private/generated files. Quality
+analysis covers authored product code; secret scanning covers all public files
+and reachable history. Preserve pinned Actions and trust-separated PR/release
+jobs. Release Please alone proposes distribution versions/changelogs/tags.
+Do not regenerate production signing identities, replace immutable assets or
+publish a candidate as qualified without matching physical evidence.
+
+For user-visible changes, review the affected guides and canonical Vomar skill,
+exercise the actual GUI/CLI behavior and keep unfinished UX work in an ignored
+local handoff. A green status badge is not evidence of complete device safety.
+
 This repository is a local research workspace for reverse engineering the
 Vimar View Wireless Linea 30805 dimmer and preparing a custom nRF52840 firmware.
 
