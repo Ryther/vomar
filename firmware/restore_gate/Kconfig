@@ -1,0 +1,15 @@
+config VIMAR_STOCK_RESTORE_GATE
+ bool "Permit exact authenticated stock restorer to replace MCUboot"
+ depends on MCUBOOT && SOC_NRF52840 && BOOT_FIRMWARE_LOADER && BOOT_VALIDATE_SLOT0 && FPROTECT
+ depends on BOOT_SIGNATURE_TYPE_ECDSA_P256 && BOOT_USE_CC310 && BOOT_FIH_PROFILE_OFF
+ default n
+
+config VIMAR_STOCK_RESTORER_SHA256
+ string "SHA256 of the entire authorized signed binary"
+ depends on VIMAR_STOCK_RESTORE_GATE
+
+config VIMAR_STOCK_RESTORER_SIZE
+ int "Exact signed restorer binary size"
+ range 1 258048
+ depends on VIMAR_STOCK_RESTORE_GATE
+ default 1

@@ -1,0 +1,32 @@
+mainmenu "Vimar BLE research console"
+source "Kconfig.zephyr"
+config RESEARCH_STATUS_LED
+    bool "Temporary Vimar candidate RGB alive/authenticated BLE indicator"
+    default n
+    depends on SOC_NRF52840
+    help
+      Owns PWM0 and candidate RGB pins P0.12/P0.06/P0.08 only.
+      Uses intermediate duty because physical LED polarity is unconfirmed.
+      Does not enable the dimmer output and is not a power-off measurement.
+config RESEARCH_STOCK_OUTPUT
+    bool "Experimental reconstruction of stock PWM/GPIO output"
+    default n
+    depends on SOC_NRF52840
+    help
+      Drives P0.13 PWM1, P0.14 enable and stock initialized outputs.
+      Pin endpoints and downstream fault behavior are not hardware-validated.
+      Never enable on the actual Vimar without separately reviewing the image.
+config RESEARCH_STOCK_CONFIG19
+    int "Initial stock configuration output P0.19"
+    range 0 1
+    default 1
+    depends on RESEARCH_STOCK_OUTPUT
+    help
+      Stock argument comes from EEPROM block 0x24 payload byte 0, default 1.
+      This compile-time value does not read or preserve existing EEPROM settings.
+config RESEARCH_SOFTWARE_RECOVERY
+    bool "Matching MCUboot supports retained software recovery request"
+    default n
+    help
+      Enable only with a loader built with RETENTION_BOOT_MODE and
+      BOOT_FIRMWARE_LOADER_BOOT_MODE. The original DK loader lacks this.

@@ -1,0 +1,23 @@
+config VIMAR_COMMON_RESTORE_GATE
+ bool "Source-only common RESTORE-role loader exception candidate"
+ depends on MCUBOOT && SOC_NRF52840 && BOOT_FIRMWARE_LOADER && BOOT_VALIDATE_SLOT0 && FPROTECT
+ depends on BOOT_SIGNATURE_TYPE_ECDSA_P256 && BOOT_USE_CC310 && BOOT_USE_NRF_CC310_BL && BOOT_FIH_PROFILE_OFF
+ default n
+ help
+  Opt in only for reviewed common-loader experiments. Requires fresh real
+  firmware-loader crypto validation followed by strict selected RESTORE-role
+  parsing and committed local backup-anchor identity/UICR checks. Preserves
+  full48KiB protection on all ordinary boots and admission errors. It cannot
+  be combined with the existing device-bound exact-restorer wrapper module.
+  Generic RESTORE code and Android anchor installation are separate work.
+
+config VIMAR_INHERITED_WATCHDOG_HANDOFF
+ bool "Wait for an inherited watchdog reset before normal boot"
+ depends on VIMAR_COMMON_RESTORE_GATE
+ default n
+ help
+  For first installation from stock firmware with a pause-on-HALT watchdog.
+  An early loader hook waits without feeding WDT or entering ordinary boot
+  until the real watchdog reset stops it. Inactive WDT adds no delay.
+  Android admission requires this capability in the signed descriptor and
+  checks the live watchdog profile; this option alone grants no installation.

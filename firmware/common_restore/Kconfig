@@ -1,0 +1,9 @@
+mainmenu "Isolated common stock restoration consumer"
+source "Kconfig.zephyr"
+config VIMAR_COMMON_RESTORE_EXPERIMENTAL
+	bool "Isolated stock RESTORE source candidate"
+	default n
+config VIMAR_COMMON_RESTORE_BOOTSTRAP
+	bool "Dedicated primary stock-bootstrap purpose"
+	depends on VIMAR_COMMON_RESTORE_EXPERIMENTAL
+	default n

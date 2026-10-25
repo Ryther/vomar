@@ -1,0 +1,21 @@
+#ifndef VIMAR_RECOVERY_MIGRATION_CONFIG_H
+#define VIMAR_RECOVERY_MIGRATION_CONFIG_H
+#if defined(CONFIG_VIMAR_RECOVERY_MIGRATION_EXEC)
+#if !defined(CONFIG_VIMAR_P031_PROTECTION) || !defined(CONFIG_VIMAR_RECOVERY_BUTTON_EXIT) || \
+ !defined(CONFIG_VIMAR_OTA_INSTALLER) || !defined(CONFIG_MCUMGR_TRANSPORT_BT) || \
+ !defined(CONFIG_MCUMGR_TRANSPORT_BT_PERM_RW_AUTHEN) || \
+ !defined(CONFIG_MCUMGR_SMP_COMMAND_STATUS_HOOKS) || !defined(CONFIG_MCUMGR_MGMT_NOTIFICATION_HOOKS) || \
+ !defined(CONFIG_MCUMGR_GRP_IMG_STATUS_HOOKS) || !defined(CONFIG_MCUMGR_GRP_IMG_MUTEX) || \
+ !defined(CONFIG_MCUMGR_GRP_OS_RESET_HOOK)
+#error "Migration execution requires protected authenticated Bluetooth and serialized status hooks"
+#endif
+#if defined(CONFIG_MCUMGR_TRANSPORT_UART) || defined(CONFIG_MCUMGR_TRANSPORT_RAW_UART) || \
+ defined(CONFIG_MCUMGR_TRANSPORT_UART_ASYNC) || defined(CONFIG_MCUMGR_TRANSPORT_UDP) || \
+ defined(CONFIG_MCUMGR_TRANSPORT_SHELL) || defined(CONFIG_MCUMGR_TRANSPORT_LORAWAN) || \
+ defined(CONFIG_MCUMGR_TRANSPORT_DUMMY) || defined(CONFIG_MCUMGR_TRANSPORT_RAW_DUMMY) || \
+ defined(CONFIG_MCUMGR_TRANSPORT_BT_PERM_RW) || defined(CONFIG_MCUMGR_TRANSPORT_BT_PERM_RW_ENCRYPT) || \
+ defined(CONFIG_IMG_ENABLE_IMAGE_CHECK)
+#error "Migration execution forbids alternate transports, weaker permissions and upload fast paths"
+#endif
+#endif
+#endif

@@ -1,0 +1,35 @@
+/* Static candidate derived from stock input tables. Not hardware-validated.
+ * Combine with ota-{mcuboot,loader}.overlay for the matching image partition.
+ * This is not a complete standalone Vimar board definition. */
+#include <zephyr/dt-bindings/regulator/nrf5x.h>
+/ {
+    aliases {
+        /delete-property/ mcuboot-led0;
+    };
+};
+&led0 { status = "disabled"; };
+&led1 { status = "disabled"; };
+&led2 { status = "disabled"; };
+&led3 { status = "disabled"; };
+&pwm_led0 { status = "disabled"; };
+&button0 { gpios = <&gpio0 26 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>; };
+&button1 { gpios = <&gpio0 4 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>; };
+&button2 { status = "disabled"; };
+&button3 { status = "disabled"; };
+&uart0 { status = "disabled"; };
+&spi1 { status = "disabled"; };
+&spi3 { status = "disabled"; };
+&i2c0 { status = "disabled"; };
+&i2c1 { status = "disabled"; };
+&qspi { status = "disabled"; };
+/* The DK flash child is independently selected by DT_HAS_NORDIC_QSPI_NOR.
+ * Disable it too: a disabled controller alone still builds its init routine. */
+&mx25r64 { status = "disabled"; };
+&pwm0 { status = "disabled"; };
+&usbd { status = "disabled"; };
+/* Keep the existing stock reset mapping; do not generate a UICR writer. */
+&uicr { /delete-property/ gpio-as-nreset; };
+/* Do not inherit the DK's external LC/DC-DC assumptions. Both regulator
+ * enables happen before main(), including in MCUboot. Preserve reset LDO. */
+&reg1 { regulator-initial-mode = <NRF5X_REG_MODE_LDO>; };
+&reg0 { status = "disabled"; };

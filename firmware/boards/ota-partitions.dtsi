@@ -1,0 +1,40 @@
+/* Shared internal-flash map for all three DK images. No external flash. */
+/delete-node/ &boot_partition;
+/delete-node/ &slot0_partition;
+/delete-node/ &slot1_partition;
+/delete-node/ &storage_partition;
+
+&flash0 {
+	partitions {
+		boot_partition: partition@0 {
+			compatible = "zephyr,mapped-partition";
+			label = "mcuboot";
+			reg = <0x00000 0x0c000>;
+		};
+		slot0_partition: partition@c000 {
+			compatible = "zephyr,mapped-partition";
+			label = "image-0";
+			reg = <0x0c000 0xa4000>;
+		};
+		slot1_partition: partition@b0000 {
+			compatible = "zephyr,mapped-partition";
+			label = "image-1";
+			reg = <0xb0000 0x40000>;
+		};
+		storage_partition: partition@f0000 {
+			compatible = "zephyr,mapped-partition";
+			label = "storage";
+			reg = <0xf0000 0x07000>;
+		};
+		zboss_nvram: partition@f7000 {
+			compatible = "zephyr,mapped-partition";
+			label = "zboss-nvram";
+			reg = <0xf7000 0x08000>;
+		};
+		zboss_product_config: partition@ff000 {
+			compatible = "zephyr,mapped-partition";
+			label = "zboss-product-config";
+			reg = <0xff000 0x01000>;
+		};
+	};
+};

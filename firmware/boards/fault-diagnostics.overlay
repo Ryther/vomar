@@ -1,0 +1,3 @@
+/* Fixed256-byte fatal record window is outside the ordinary RAM allocator.
+ * No object is placed here by the C runtime; only bounded volatile writes. */
+&sram0 { reg = <0x20000000 0x0003fe00>; };

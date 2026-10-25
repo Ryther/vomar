@@ -1,0 +1,12 @@
+choice FIRMWARE_LOADER
+config FIRMWARE_LOADER_IMAGE_VIMAR_BLE
+	bool "Vimar authenticated BLE recovery"
+endchoice
+
+config FIRMWARE_LOADER_IMAGE_NAME
+	default "vimar_recovery" if FIRMWARE_LOADER_IMAGE_VIMAR_BLE
+
+config FIRMWARE_LOADER_IMAGE_PATH
+	default "$(APP_DIR)/recovery" if FIRMWARE_LOADER_IMAGE_VIMAR_BLE
+
+source "share/sysbuild/Kconfig"

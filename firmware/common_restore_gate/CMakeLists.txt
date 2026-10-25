@@ -1,0 +1,16 @@
+if(CONFIG_VIMAR_COMMON_RESTORE_GATE)
+  if(CONFIG_VIMAR_STOCK_RESTORE_GATE)
+    message(FATAL_ERROR "Common restore gate cannot share legacy linker wrappers")
+  endif()
+  zephyr_library()
+  zephyr_library_sources(common_restore_gate.c common_restore_policy.c ../loader_contract/loader_contract.c)
+  if(CONFIG_VIMAR_INHERITED_WATCHDOG_HANDOFF)
+    zephyr_library_sources(inherited_watchdog_boot.c)
+  endif()
+  zephyr_library_include_directories(. ../loader_contract ../ota
+    ${ZEPHYR_MCUBOOT_MODULE_DIR}/boot/zephyr/include
+    ${ZEPHYR_MCUBOOT_MODULE_DIR}/ext/nrf)
+  zephyr_library_link_libraries(MCUBOOT_BOOTUTIL)
+  target_link_options(zephyr_interface INTERFACE -Wl,--wrap=boot_go -Wl,--wrap=fprotect_area)
+  zephyr_linker_sources(SECTIONS anchor_reservation.ld)
+endif()

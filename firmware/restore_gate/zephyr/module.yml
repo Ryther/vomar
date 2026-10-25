@@ -1,0 +1,4 @@
+name: vimar_restore_gate
+build:
+  cmake: .
+  kconfig: Kconfig

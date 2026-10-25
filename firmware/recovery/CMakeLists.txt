@@ -1,0 +1,48 @@
+cmake_minimum_required(VERSION 3.20.0)
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+project(vimar_recovery)
+target_sources(app PRIVATE src/main.c)
+if(CONFIG_VIMAR_RECOVERY_BUTTON_EXIT)
+  if(CONFIG_IMG_ENABLE_IMAGE_CHECK)
+    message(FATAL_ERROR "Recovery button exit requires IMG_ENABLE_IMAGE_CHECK=n: SDK fast path can omit DFU_PENDING")
+  endif()
+  target_sources(app PRIVATE src/recovery_exit.c src/recovery_exit_control.c src/recovery_primary.c src/recovery_exit_zephyr.c)
+  target_include_directories(app PRIVATE ${ZEPHYR_BASE}/subsys/mgmt/mcumgr/grp/img_mgmt/include)
+  target_link_libraries(app PRIVATE MCUBOOT_BOOTUTIL)
+endif()
+
+if(CONFIG_VIMAR_OTA_INSTALLER)
+  target_sources(app PRIVATE src/ota_install.c ../ota/ota_image.c ../ota/ota_format.c ../ota/ota_transaction.c ../ota/ota_storage.c ../ota/ota_split_stage.c ../ota/ota_pair.c)
+  target_include_directories(app PRIVATE ../ota)
+endif()
+
+if(CONFIG_VIMAR_RECOVERY_SERVICE_MODE)
+  target_sources(app PRIVATE src/recovery_session.c ../src/wireless_status_led.c ../src/vimar_led.c)
+endif()
+
+if(CONFIG_VIMAR_RECOVERY_IDENTITY)
+  target_sources(app PRIVATE src/recovery_identity.c src/recovery_identity_zephyr.c)
+endif()
+
+if(CONFIG_VIMAR_RECOVERY_BOOT_HISTORY)
+  target_sources(app PRIVATE src/recovery_boot_history.c src/recovery_boot_history_zephyr.c)
+endif()
+
+if(CONFIG_VIMAR_RECOVERY_MIGRATION_EXEC)
+  target_sources(app PRIVATE src/recovery_migration.c src/recovery_migration_zephyr.c src/recovery_migration_preflight_zephyr.c)
+endif()
+
+if(CONFIG_VIMAR_P031_PROTECTION)
+  target_sources(app PRIVATE ../src/candidate_power_protection.c ../src/vimar_power_protection.c ../src/boot_trace.c ../src/boot_trace_zephyr.c)
+  target_include_directories(app PRIVATE ../src ../research/src)
+  target_sources(app PRIVATE ../research/src/research_handoff.c)
+endif()
+
+if(CONFIG_VIMAR_OTA_SPLIT_STAGING)
+  if(NOT VIMAR_OTA_PAIR_BINDINGS_HEADER OR NOT EXISTS "${VIMAR_OTA_PAIR_BINDINGS_HEADER}")
+    message(FATAL_ERROR "Split OTA requires frozen authorized pair bindings header")
+  endif()
+  target_compile_definitions(app PRIVATE VIMAR_OTA_PAIR_BINDINGS_HEADER="${VIMAR_OTA_PAIR_BINDINGS_HEADER}")
+endif()
+
+include(${CMAKE_CURRENT_SOURCE_DIR}/../loader_contract/runtime.cmake)

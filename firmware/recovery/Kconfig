@@ -1,0 +1,84 @@
+mainmenu "Vimar independent BLE recovery"
+source "Kconfig.zephyr"
+
+config VIMAR_OTA_INSTALLER
+    bool "Enable experimental authenticated compressed OTA installer"
+    default n
+    help
+      Opt in only for the explicitly built OTA recovery pair. Legacy recovery
+      and generic provisioning retain BLE recovery without the staged installer
+      until physical OTA qualification is complete.
+
+rsource "../Kconfig.protection"
+
+config VIMAR_RECOVERY_BUTTON_EXIT
+    bool "Candidate authenticated local exit from recovery"
+    default n
+    depends on VIMAR_P031_PROTECTION && VIMAR_OTA_INSTALLER
+    select GPIO
+    select MCUMGR_MGMT_NOTIFICATION_HOOKS
+    select MCUMGR_SMP_COMMAND_STATUS_HOOKS
+    select MCUMGR_GRP_IMG_STATUS_HOOKS
+    select MCUMGR_GRP_IMG_MUTEX
+    help
+      Require release after boot, a five-second two-button chord and release.
+      Refuse partial uploads and any primary that fails signature, geometry or
+      the current compatible-main role policy. Candidate requires qualification.
+      The SDK image-check fast path can omit DFU_PENDING; it must stay disabled
+      with this candidate's persistent completion tracking.
+
+config VIMAR_RECOVERY_SERVICE_MODE
+    bool "Candidate timed Bluetooth service and indefinite fault recovery"
+    default n
+    depends on VIMAR_RECOVERY_BUTTON_EXIT && SOC_NRF52840
+    help
+      Both-button and Zigbee requests select blue/green ordinary Bluetooth,
+      returning after 60 seconds of inactivity through the authenticated exit
+      gate. Other causes and interrupted writes retain blue/red recovery without
+      expiry. Active commands/uploads prevent timeout. Uses only RGB PWM0 and
+      a passive protection status read; requires measured paired qualification.
+
+config VIMAR_RECOVERY_IDENTITY
+    bool "Authenticated runtime identity for common release packages"
+    default y if VIMAR_RECOVERY_SERVICE_MODE
+    depends on VIMAR_P031_PROTECTION && VIMAR_OTA_INSTALLER && BT && MCUMGR
+    help
+      Adds read-only SMP group0x8040 command0 with protocol/model/layout, live
+      FICR DEVICEID and protected loader SHA256. It does not authorize writes
+      and does not provide cryptographic hardware attestation. SMP permissions
+      remain authenticated. A project capability service identifies discovery.
+
+config VIMAR_RECOVERY_BOOT_HISTORY
+    bool "Read-only authenticated persisted boot history"
+    default y if VIMAR_RECOVERY_SERVICE_MODE
+    depends on VIMAR_P031_PROTECTION && BT && MCUMGR
+    depends on MCUMGR_TRANSPORT_BT && MCUMGR_TRANSPORT_BT_PERM_RW_AUTHEN
+    select MCUMGR_SMP_CBOR_MIN_ENCODING_LEVEL_2
+    help
+      Adds SMP group0x8041 READ command0 with a mutex snapshot of the existing
+      six-entry88-byte boot trace and current storage status. No write handler,
+      new persistent record, reset or erase command is added. Raw reset flags
+      and pending reasons are observations and do not prove a reset cause.
+
+config VIMAR_RECOVERY_MIGRATION_EXEC
+    bool "Explicit authenticated execution of a hash-pinned common migration"
+    default y if VIMAR_RECOVERY_SERVICE_MODE
+    depends on VIMAR_RECOVERY_BUTTON_EXIT && BT && MCUMGR
+    depends on MCUMGR_TRANSPORT_BT && MCUMGR_TRANSPORT_BT_PERM_RW_AUTHEN
+    depends on !MCUMGR_TRANSPORT_UART && !MCUMGR_TRANSPORT_RAW_UART
+    depends on !MCUMGR_TRANSPORT_UART_ASYNC && !MCUMGR_TRANSPORT_UDP
+    depends on !MCUMGR_TRANSPORT_SHELL && !MCUMGR_TRANSPORT_LORAWAN
+    depends on !MCUMGR_TRANSPORT_DUMMY && !MCUMGR_TRANSPORT_RAW_DUMMY
+    help
+      Candidate SMP group0x8042 WRITE0 accepts exactly the signed-region hash
+      of an already uploaded, pinned-key authenticated profile2 MIGRATION.
+      A successful response precedes deferred revalidation and reset. Normal
+      OS reset, physical exit and idle expiry remain MAIN-only. No arbitrary
+      role, erase, programming, code-protection exception or legacy fallback.
+
+if VIMAR_P031_PROTECTION
+config MCUMGR_MGMT_NOTIFICATION_HOOKS
+    default y
+config MCUMGR_GRP_OS_RESET_HOOK
+    default y
+endif

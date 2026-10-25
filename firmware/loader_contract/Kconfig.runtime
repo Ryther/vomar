@@ -1,0 +1,9 @@
+config VIMAR_LOADER_RUNTIME_V2
+    bool "Opt-in typed common-loader runtime contract"
+    depends on SOC_NRF52840 && VIMAR_OTA_SPLIT_STAGING
+    default n
+    help
+      Requires a finite generated typed loader-contract header. Common families
+      require a committed anchor and local live UID/UICR/geometry validation.
+      Existing READ0 and exact legacy default remain unchanged. READ1 is added
+      only to authenticated recovery identity when this option is explicitly on.

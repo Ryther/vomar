@@ -1,0 +1,19 @@
+config VIMAR_P031_PROTECTION
+    bool "Candidate P0.31 shared output inhibit (paired recovery required)"
+    depends on SOC_NRF52840 && SETTINGS
+    select GPIO
+    select SOC_FLASH_NRF_PARTIAL_ERASE
+    default n
+    help
+      Experimental opt-in for the matching main/recovery pair. Physical input
+      meaning and monitoring coverage through flash/reset need qualification.
+
+config VIMAR_OTA_SPLIT_STAGING
+    bool "Version2 OTA staging in bounded primary/recovery tails"
+    depends on VIMAR_P031_PROTECTION
+    default n
+    help
+      Requires a release-authorized loader allowlist, matched signed recovery,
+      exact code limits and separately qualified migration. Legacy stays default.
+
+rsource "loader_contract/Kconfig.runtime"

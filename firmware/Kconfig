@@ -1,0 +1,25 @@
+mainmenu "Vimar configurable Zigbee application"
+source "Kconfig.zephyr"
+config VIMAR_HARDWARE
+    bool "Vimar30805 validated PWM/GPIO adapter (not DK simulation)"
+    default n
+    depends on SOC_NRF52840
+config RESEARCH_STOCK_OUTPUT
+    bool
+    default y if VIMAR_HARDWARE
+config RESEARCH_STOCK_CONFIG19
+    int
+    range 0 1
+    default 1
+
+config VIMAR_ZIGBEE_OTA
+    bool "Authenticated compressed Zigbee OTA for Vimar"
+    depends on VIMAR_HARDWARE
+    default n
+
+config VIMAR_FAULT_DIAGNOSTICS
+    bool "Retain exact Zigbee fatal diagnostics across software reset"
+    depends on SOC_NRF52840 && ZBOSS_RESET_ON_ASSERT && SETTINGS && !BT
+    default n
+
+rsource "Kconfig.protection"

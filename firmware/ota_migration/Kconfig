@@ -1,0 +1,26 @@
+mainmenu "BLE recovery migration"
+source "Kconfig.zephyr"
+config MIGRATION_COMMON
+ bool "Common migration for an explicit finite loader allowlist"
+ depends on SOC_NRF52840 && VIMAR_OTA_SPLIT_STAGING
+ default n
+ help
+   Uses generated common_platform.h instead of a per-device target_uid.h.
+   Requires authenticated RECOVERY role/profile2 and keeps runtime UID checks.
+   Unknown legacy/future loaders remain unsupported.
+
+config MIGRATION_STAGE_PROBE
+ bool "Bench-only arm an independently staged OTA candidate after migration"
+ depends on !MIGRATION_COMMON
+ default n
+
+config MIGRATION_LEGACY_ZIGBEE_ENTRY
+ bool "Authenticated profile1 Zigbee bridge into common recovery"
+ depends on MIGRATION_COMMON && !VIMAR_LOADER_RUNTIME_V2 && !MIGRATION_STAGE_PROBE
+ default n
+ help
+   Opt-in legacy OTA entry with executing-image-bound transaction/checkpoint
+   admission. Only the bridge primary uses profile1; embedded recovery still
+   requires authenticated profile2 RECOVERY role and a finite legacy loader.
+
+rsource "../Kconfig.protection"

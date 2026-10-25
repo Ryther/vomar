@@ -1,0 +1,1 @@
+static const unsigned char authorized_restorer_hash[32] = { @RESTORER_HASH_BYTES@ };
