@@ -1,0 +1,15 @@
+<resources>
+    <color name="ui_surface">#FAF8F3</color>
+    <color name="ui_panel">#EFEEE8</color>
+    <color name="ui_text">#25282C</color>
+    <color name="ui_text_secondary">#565E65</color>
+    <color name="ui_primary">#A64412</color>
+    <color name="ui_on_primary">#FFF8F2</color>
+    <color name="ui_disabled">#E3E1DA</color>
+    <color name="ui_on_disabled">#626A70</color>
+    <color name="ui_outline">#858D91</color>
+    <color name="ui_teal">#1B6C69</color>
+    <color name="ui_current">#217438</color>
+    <color name="ui_available">#756000</color>
+    <color name="ui_error">#A6312B</color>
+</resources>

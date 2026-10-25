@@ -1,0 +1,21 @@
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:alertDialogTheme">@style/AppDialogTheme</item>
+        <item name="android:colorAccent">@color/ui_primary</item>
+        <item name="android:windowBackground">@color/ui_surface</item>
+        <item name="android:colorBackground">@color/ui_surface</item>
+        <item name="android:textColorPrimary">@color/ui_text</item>
+        <item name="android:textColorSecondary">@color/ui_text_secondary</item>
+        <item name="android:statusBarColor">@color/ui_surface</item>
+        <item name="android:navigationBarColor">@color/ui_surface</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+    <style name="AppDialogTheme" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">@color/ui_primary</item>
+        <item name="android:colorBackground">@color/ui_panel</item>
+        <item name="android:windowBackground">@color/ui_panel</item>
+        <item name="android:textColorPrimary">@color/ui_text</item>
+        <item name="android:textColorSecondary">@color/ui_text_secondary</item>
+    </style>
+</resources>

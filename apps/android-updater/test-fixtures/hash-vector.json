@@ -1,0 +1,12 @@
+{
+  "migration": {
+    "authenticatedEnd": 1536,
+    "fileSha256": "51c0dd648e7ab8cb89c085e1d524a757af10ced9d5b043506a6e5e8771cac185",
+    "signedRegionSha256": "f6eab0b8c5c408e426153c143c71608a4c8303cbd902ee69410f4ec8ed2deda2"
+  },
+  "main": {
+    "authenticatedEnd": 1536,
+    "fileSha256": "0a98a04b16da1898948b38ec3b4753110bdaffe63bb6ebb7847ed74622feae38",
+    "signedRegionSha256": "6cc0c87a76365004bf6e0e8f41fe50666805cbdb0e36fa0e620144bf85acda86"
+  }
+}
