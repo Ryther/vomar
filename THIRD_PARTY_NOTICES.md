@@ -1497,3 +1497,26 @@ and such source code may be obtained at <a href="http://www.eclipse.org/">http:/
 </body></html>
 
 ```
+
+## Desktop runtime and development tools
+
+Vomar-authored source is MIT. Native desktop builds use Python (PSF),
+PySide6/Qt Essentials and Shiboken (LGPL-3.0/GPL/commercial options as supplied by
+Qt), Bleak (MIT), CBOR2 (MIT), cryptography (Apache-2.0/BSD), IntelHex (BSD),
+platformdirs/keyring (MIT), Paho Python (EPL-2.0/EDL-1.0) and PyInstaller
+(GPL with its distribution exception). The dynamically linked onedir layout
+permits replacement of Qt libraries; rebuilding instructions are in
+`docs/desktop.md`. Bundles include available upstream license texts and a build
+environment inventory; native dependency reports identify linked libraries.
+
+The separately pinned xPack OpenOCD package is GPL-2.0 and includes its upstream
+notices and dependencies. Corresponding public sources and build recipes are at
+https://github.com/xpack-dev-tools/openocd-xpack/tree/v0.12.0-7 and its referenced
+OpenOCD sources. Do not treat DK driver installation as firmware authorization.
+No proprietary J-Link SDK is bundled. Native trusted OS signing/notarization is
+not provided by this initial packaging configuration.
+
+Codex CLI (Apache-2.0), OpenCode (MIT) and Claude Code (Anthropic's published
+terms) are development-only tools; their accounts, subscriptions and provider
+credentials are not included in the product or repository. Nordic/ZBOSS stack
+conditions above remain separate from the license on project-authored source.

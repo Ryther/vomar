@@ -5,12 +5,12 @@ import hashlib
 import struct
 import sys
 import cbor2
-from vomar_updater.core.engine import Identity,COMMON,LEGACY
+from vomar_updater.core.engine import Identity,COMMON,LEGACY,IdentityUnavailable
 
 SERVICE='8d53dc1d-1db7-4cd3-868b-8a527460aa84'
 CHARACTERISTIC='da2e7828-fbce-4e01-ae9e-261174997c48'
 
-class UnsupportedCommand(ValueError):pass
+class UnsupportedCommand(IdentityUnavailable):pass
 
 
 def decode_cbor(raw,*,signed=False):
@@ -98,13 +98,26 @@ class BleakSmp:
     macOS pairs when that protected characteristic is accessed, per CoreBluetooth.
     """
     def __init__(self):
-        self.client=None;self.authenticated=False;self.sequence=0;self._serial=asyncio.Lock();self._response=None;self._buffer=bytearray();self.security_evidence='not connected'
+        self.client=None;self.authenticated=False;self.sequence=0;self._serial=asyncio.Lock();self._response=None;self._buffer=bytearray();self.security_evidence='not connected';self.resource=None
     @staticmethod
     async def scan(timeout=8):
+        from .locking import FileLease
+        from platformdirs import user_runtime_path
+        lease=FileLease(user_runtime_path('Vomar')/'bluetooth.lock').acquire()
+        try:return await BleakSmp._scan(timeout)
+        finally:lease.close()
+    @staticmethod
+    async def _scan(timeout=8):
         from bleak import BleakScanner
         found=await BleakScanner.discover(timeout=timeout,return_adv=True,service_uuids=[SERVICE])
         return [{'id':d.address,'name':a.local_name or d.name or 'Unnamed recovery','rssi':a.rssi} for d,a in found.values()]
     async def connect(self,target):
+        from .locking import FileLease
+        from platformdirs import user_runtime_path
+        await self.close();self.resource=FileLease(user_runtime_path('Vomar')/'bluetooth.lock').acquire()
+        try:await self._connect(target)
+        except BaseException:await self.close();raise
+    async def _connect(self,target):
         if self.client is not None:await self.close()
         if sys.platform not in ('linux','darwin','win32'):raise ValueError('Unsupported Bluetooth security backend')
         from bleak import BleakClient,BleakScanner
@@ -160,14 +173,14 @@ class BleakSmp:
             if h is not None and (not isinstance(h,bytes) or len(h)!=32):raise ValueError('Malformed image hash')
             if type(i.get('active')) is not bool or type(i.get('bootable')) is not bool:raise ValueError('Image flags must be booleans')
             result[name]={'hash':h.hex() if h else None,'active':i['active'],'bootable':i['bootable'],'version':i.get('version')}
-        return result
+        self.authenticated=True;return result
     async def upload(self,raw,progress):
         offset=0
         while offset<len(raw):
             data={'off':offset,'data':raw[offset:offset+128]}
             if offset==0:data.update(len=len(raw),sha=hashlib.sha256(raw).digest())
             r=await self.request(2,1,1,data);next_offset=r.get('off')
-            if type(next_offset) is not int or next_offset!=min(offset+128,len(raw)):raise ValueError('Unexpected upload offset; preserve interrupted session')
+            if type(next_offset) is not int or not offset<next_offset<=len(raw) or (offset!=0 and next_offset!=min(offset+128,len(raw))):raise ValueError('Unexpected upload offset; preserve interrupted session')
             offset=next_offset;await progress(offset)
     async def reset(self):
         r=await self.request(2,0,5,{})
@@ -180,5 +193,7 @@ class BleakSmp:
     async def history(self):return await self.request(0,0x8041,0,{})
     async def close(self):
         self.authenticated=False;client=self.client;self.client=None
-        if client is not None:
-            await client.disconnect()
+        try:
+            if client is not None:await client.disconnect()
+        finally:
+            if self.resource:self.resource.close();self.resource=None

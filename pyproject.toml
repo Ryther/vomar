@@ -21,8 +21,8 @@ vomar = "vomar_updater.cli:main"
 vomar-gui = "vomar_updater.gui.app:main"
 
 [tool.setuptools]
-packages = ["vomar_updater", "vomar_updater.core", "vomar_updater.adapters", "vomar_updater.gui", "tools", "tools.firmware"]
-package-dir = {vomar_updater = "apps/desktop-updater/src/vomar_updater", tools = "tools", "tools.firmware" = "tools/firmware"}
+packages = ["vomar_updater", "vomar_updater.core", "vomar_updater.adapters", "vomar_updater.gui", "tools", "tools.firmware", "tools.release"]
+package-dir = {vomar_updater = "apps/desktop-updater/src/vomar_updater", tools = "tools", "tools.firmware" = "tools/firmware", "tools.release" = "tools/release"}
 
 [tool.setuptools.package-data]
 vomar_updater = ["resources/*"]

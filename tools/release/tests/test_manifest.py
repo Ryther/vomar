@@ -8,7 +8,7 @@ def fixture(tmp_path):
     records=[]
     for role in REQUIRED_ROLES:
         p=tmp_path/(role+'.dat');p.write_bytes(role.encode())
-        records.append({'role':role,'filename':p.name,'componentVersion':'1.0.0',**({'platform':role.split('-')[1],'architecture':role.split('-')[2]} if role.startswith('desktop-') else {})})
+        records.append({**({'androidVersionCode':20} if role=='android-apk' else {}),'role':role,'filename':p.name,'componentVersion':'1.0.0',**({'platform':role.split('-')[1],'architecture':role.split('-')[2]} if role.startswith('desktop-') else {})})
     return build_manifest('0.1.0','a'*40,records,tmp_path),tmp_path
 
 

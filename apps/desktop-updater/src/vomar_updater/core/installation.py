@@ -15,6 +15,7 @@ import time
 import zipfile
 import zlib
 from .packages import read_zip,strict_json,canonical
+from .admission import seal,require
 
 FLASH=0x100000;PAGE=4096;ANCHOR=0xb000;COMMIT_OFFSET=252;COMMIT=0xa60c17ed
 REGIONS={'flash.bin':(0,FLASH),'ficr.bin':(0x10000000,PAGE),'uicr.bin':(0x10001000,PAGE)}
@@ -56,13 +57,15 @@ def verify_original(raw):
     limits={**{n:s for n,(_,s) in REGIONS.items()},'manifest.json':65536,'README.txt':8192}
     entries=read_zip(raw,limits=limits,max_size=2*1024*1024)
     if set(entries)!=set(limits):raise ValueError('Original archive member set mismatch')
-    m=strict_json(entries['manifest.json']);ficr=entries['ficr.bin'];flash=entries['flash.bin'];uicr=entries['uicr.bin'];uid=identity(ficr)
+    m=strict_json(entries['manifest.json'])
+    if type(m) is not dict or type(m.get('schema')) is not int:raise ValueError('Exact original schema required')
+    ficr=entries['ficr.bin'];flash=entries['flash.bin'];uicr=entries['uicr.bin'];uid=identity(ficr)
     if any(len(entries[n])!=s for n,(_,s) in REGIONS.items()) or not entries['README.txt'].decode('utf-8').strip():raise ValueError('Original region size mismatch')
     stack=word(flash,0);reset=word(flash,4)
     if not 0x20000000<stack<=0x20040000 or stack%8 or not reset&1 or not 8<=reset&~1<FLASH:raise ValueError('Original vector geometry mismatch')
     if m.get('schema')==2:
         if set(m)!={'schema','type','target','regions','startedAt','verifiedAt','acquisition','provenance'} or m['type']!='nrf52840-openocd-halted-backup-v1':raise ValueError('Unsupported OpenOCD original format')
-        if m['target']!={'uid':[f'{uid[0]:08x}',f'{uid[1]:08x}'],'variant':uid[2],'part':0x52840,'commercialModelVerified':False}:raise ValueError('Original FICR identity mismatch')
+        if type(m['target'].get('variant')) is not int or m['target'].get('commercialModelVerified') is not False or m['target']!={'uid':[f'{uid[0]:08x}',f'{uid[1]:08x}'],'variant':uid[2],'part':0x52840,'commercialModelVerified':False}:raise ValueError('Original FICR identity mismatch')
         a=m['acquisition']
         if set(a)!={'cpuHalted','byteExactDoubleRead','flashWrite','uicrWrite','watchdog'} or any(a[k] is not v for k,v in [('cpuHalted',True),('byteExactDoubleRead',True),('flashWrite',False),('uicrWrite',False)]):raise ValueError('Original acquisition contract mismatch')
         profile=a['watchdog'];watchdog(profile,'paused-reset-before-main-v1')
@@ -84,11 +87,17 @@ def verify_original(raw):
         if m['scope']!=expected or any(type(x) is not bool for x in m['scope'].values()):raise ValueError('Original scope mismatch')
         p=m['provenance']
         if set(p)!={'appVersion','probeFirmware','usbVendorId','usbProductId','interfaceId','inputEndpoint','outputEndpoint','targetMillivolts'} or p['usbVendorId']!=0x1366 or p['usbProductId']!=0x1060 or not 1700<=p['targetMillivolts']<=3600 or not 0x81<=p['inputEndpoint']<=0x8f or not 1<=p['outputEndpoint']<=15:raise ValueError('Original USB provenance mismatch')
-        target=m['target']
-        if target.get('chip')!='nRF52840' or target.get('part')!='0x00052840' or target.get('uid')!=[f'0x{uid[0]:08x}',f'0x{uid[1]:08x}'] or target.get('commercialModelVerified') is not False:raise ValueError('Original target mismatch')
+        if any(type(p[k]) is not int for k in ('usbVendorId','usbProductId','interfaceId','inputEndpoint','outputEndpoint','targetMillivolts')) or not 0<=p['interfaceId']<=2147483647 or any(not isinstance(p[k],str) or not 1<=len(p[k].strip())<=limit for k,limit in (('appVersion',128),('probeFirmware',1024))):raise ValueError('Original provenance scalar types mismatch')
+        recognized=[]
+        for entry in [dict(id='vimar-30805-mesh',model='VIMAR30805',radio='mesh',offset=0x26000,size=213012,sha256='8c0408c49fe3e35758a69e511faa154c2f1237512e1c1bfdf1061221db53f927'),dict(id='vimar-30805-zigbee',model='VIMAR30805',radio='zigbee',offset=0x26000,size=343988,sha256='710f788a02eca3985d5826efacf47cef8d8fa29dde4684815c25c8c9a79690d5')]:
+            if sha(flash[entry['offset']:entry['offset']+entry['size']])==entry['sha256']:recognized.append(entry)
+        target={'chip':'nRF52840','part':'0x00052840','uid':[f'0x{uid[0]:08x}',f'0x{uid[1]:08x}'],'identitySource':'live FICR before/after both passes','commercialModelVerified':False,'model':'stock application recognized; hardware model unverified' if recognized else 'unknown nRF52840 device'}
+        if recognized:target.update(applicationDigestMatched=True,firmwareModel=','.join(dict.fromkeys(e['model'] for e in recognized)),recognizedApplications=recognized)
+        if m['target']!=target or m['target']['commercialModelVerified'] is not False:raise ValueError('Original target mismatch')
     else:raise ValueError('Unsupported original archive schema')
     for t in ('startedAt','verifiedAt'):
-        if not isinstance(m[t],str) or not m[t].endswith('Z'):raise ValueError('UTC acquisition time required')
+        import re
+        if not isinstance(m[t],str) or not re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z',m[t]):raise ValueError('UTC acquisition time required')
     if dt.datetime.fromisoformat(m['verifiedAt'])<dt.datetime.fromisoformat(m['startedAt']):raise ValueError('Acquisition time reversal')
     expected=[{'file':n,'start':f'0x{at:08x}','size':size,'sha256':sha(entries[n]),'verifiedCopies':2} for n,(at,size) in REGIONS.items()]
     if m['regions']!=expected:raise ValueError('Original region hashes mismatch')
@@ -97,6 +106,7 @@ def verify_original(raw):
 
 def capture_original(probe,check=lambda:None):
     if not probe.halted:raise ValueError('Explicitly approved exclusive halted lease required')
+    probe.capture_ready()
     started=dt.datetime.now(dt.timezone.utc).isoformat().replace('+00:00','Z');passes=[];before=probe.identity();profile=probe.watchdog()
     watchdog(profile,'paused-reset-before-main-v1')
     for _ in range(2):
@@ -125,11 +135,15 @@ class InstallPlan:
     body:bytes
     final:bytes
     watchdog_policy:str|None
+    _seal:bytes=b''
+    def assert_verified(self):require(self._seal,seal("install",self.original.raw,self.original.flash,self.original.ficr,self.original.uicr,self.original.identity,self.package_digest,self.family,self.body,self.final,self.watchdog_policy))
     @property
     def binding(self):return {'target':list(self.original.identity),'original':self.original.digest,'package':self.package_digest,'family':self.family,'body':sha(self.body),'installed':sha(self.final)}
 
 
 def prepare_install(original,package):
+    package.assert_verified()
+    if verify_original(original.raw)!=original:raise ValueError('Original material differs from its verified archive')
     original.require_fresh();m=package.manifest
     if package.schema!=3 or 'firstInstall' not in m:raise ValueError('Signed schema3 first-install authority required')
     entries=package.entries();descriptor=strict_json(entries['first-install.json']);loader=entries['loader.bin']
@@ -143,7 +157,8 @@ def prepare_install(original,package):
     for role,start in (('main',0xc000),('recovery',0xb0000)):
         blob=package.image(role);final[start:start+len(blob)]=blob
     body=bytearray(final);body[ANCHOR+COMMIT_OFFSET:ANCHOR+COMMIT_OFFSET+4]=b'\xff'*4
-    return InstallPlan(original,package.digest,descriptor['loaderContracts'][0]['sha256'],bytes(body),bytes(final),descriptor.get('watchdogHandoff'))
+    plan=InstallPlan(original,package.digest,descriptor['loaderContracts'][0]['sha256'],bytes(body),bytes(final),descriptor.get('watchdogHandoff'))
+    object.__setattr__(plan,'_seal',seal('install',plan.original.raw,plan.original.flash,plan.original.ficr,plan.original.uicr,plan.original.identity,plan.package_digest,plan.family,plan.body,plan.final,plan.watchdog_policy));return plan
 
 
 @dataclass(frozen=True)
@@ -160,7 +175,7 @@ class InstallReview:
 
 class InstallEngine:
     def __init__(self,store,on_event=lambda _:None):self.store=store;self.on_event=on_event;self._reviews={};self._consents={};self.stopped=False
-    def stop(self):self.stopped=True
+    def stop(self):self.stopped=True;self._reviews.clear();self._consents.clear()
     def check(self):
         if self.stopped:raise InterruptedError('Stopped by operator; target remains halted')
     def _guard(self,plan,probe):
@@ -168,7 +183,7 @@ class InstallEngine:
         if not probe.halted or probe.read(0x10001000,PAGE)!=plan.original.uicr or probe.read(0x10000000,PAGE)!=plan.original.ficr:raise ValueError('Live protected identity or UICR changed')
         watchdog(probe.watchdog(),plan.watchdog_policy)
     def review(self,plan,probe,export_path,*,resume_session=None,start=False):
-        self.stopped=False;self._guard(plan,probe)
+        plan.assert_verified();self.stopped=False;self._guard(plan,probe)
         if not self.store.reopen_receipt(plan.original.digest,export_path):raise ValueError('Reopen the exact exported protected original first')
         current=probe.read(0,FLASH)
         if len(current)!=FLASH:raise ValueError('Incomplete FLASH read')
@@ -177,6 +192,9 @@ class InstallEngine:
             old=next((s for s in self.store.sessions() if s['id']==resume_session),None)
             if old is None or old['binding']!=plan.binding:raise ValueError('Repair requires the same original/release/target binding')
             events=self.store.events(resume_session);head=sha(canonical(events))
+            receipts=[e for e in events if e['phase']=='original-export-reopened']
+            if len(receipts)!=1 or receipts[0]['detail'].get('digest')!=plan.original.digest:raise ValueError('Initial protected-original export receipt is missing or differs')
+            if any(s['binding']==plan.binding and any(e['phase']=='start-acknowledged' for e in self.store.events(s['id'])) for s in self.store.sessions()):raise ValueError('A start was acknowledged; initial-install repair is no longer authorized')
             frontier=max([e['detail'].get('address',-1) for e in events if e['phase']=='erase-intent'] or [-1])
             for at in range(0,FLASH,PAGE):
                 if at>frontier and current[at:at+PAGE]!=plan.original.flash[at:at+PAGE]:raise ValueError('Unissued page differs from protected original')
@@ -188,7 +206,7 @@ class InstallEngine:
         if self._reviews.get(review.token,(None,0))[0]!=review or self._reviews[review.token][1]<time.monotonic():raise ValueError('Installation review expired')
         c=secrets.token_hex(32);self._consents[c]=(review.token,time.monotonic()+120);return c
     def execute(self,plan,probe,review,consent):
-        self.stopped=False;c=self._consents.pop(consent,None)
+        plan.assert_verified();self.stopped=False;c=self._consents.pop(consent,None)
         if c is None or c[0]!=review.token or c[1]<time.monotonic() or self._reviews.pop(review.token,None) is None:raise ValueError('Fresh single-attempt installation consent required')
         if json.dumps(plan.binding,sort_keys=True)!=review.binding_json or probe.generation!=review.generation:raise ValueError('Reviewed lease/binding changed')
         self._guard(plan,probe)
@@ -201,12 +219,13 @@ class InstallEngine:
         else:
             if any(s['binding']==plan.binding for s in self.store.sessions()) and not review.start:raise ValueError('Existing transaction requires explicit repair review')
             session=self.store.begin(plan.binding)
+            if not review.start:self.store.record(session,'original-export-reopened',{'digest':plan.original.digest,'path':str(__import__('pathlib').Path(review.export_path).absolute())})
         def record(phase,address=None):
             self.check();self.store.record(session,phase,{} if address is None else {'address':address});self.on_event({'session':session,'phase':phase,'address':address})
         try:
             if review.start:
                 if current!=plan.final:raise ValueError('Installed bytes changed before start')
-                record('start-intent');probe.start();record('await-operator');return session
+                record('start-intent');probe.start();record('start-acknowledged');record('await-operator');return session
             if current!=plan.body and current!=plan.final:
                 for at in range(0,FLASH,PAGE):
                     self._guard(plan,probe);wanted=plan.body[at:at+PAGE]

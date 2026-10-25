@@ -58,21 +58,37 @@ internal class AndroidFleetReleases(context:Context) {
             while(true){coroutine.ensureActive();val n=input.read(b);if(n<0)break;require(n<=2*1024*1024-out.size());out.write(b,0,n)}
             JSONObject(out.toString("UTF-8"))
         }
-        require(!json.optBoolean("draft")&&!json.optBoolean("prerelease")){"A stable published release is required"}
+        require(json.has("draft")&&json.has("prerelease")&&!json.getBoolean("draft")&&!json.getBoolean("prerelease")){"A stable published release is required"}
         val assets=json.getJSONArray("assets")
-        val candidates=(0 until assets.length()).map{assets.getJSONObject(it)}.filter{it.getString("name").endsWith(".zip",true)&&it.optLong("size",0) in 1..PackageReader.MAX_ZIP.toLong()}
-        require(candidates.size==1){"Choose a local common ZIP: this release does not have exactly one bounded ZIP asset"}
-        val asset=candidates.single();onTotal(asset.getLong("size"));onProgress(0);val url=asset.getString("browser_download_url")
-        require(URL(url).host=="github.com"&&URL(url).path.startsWith("/$repo/releases/download/")){"Unexpected GitHub asset URL"}
-        val ref=download(url,PackageReader.MAX_ZIP){cache.import(it,{coroutine.ensureActive()},onProgress)}
-        coroutine.ensureActive();select(ref)
-        // Optional carrier location is chosen only after exact-byte verification.
+        val tag=json.getString("tag_name")
+        fun asset(name:String,size:Int):JSONObject {
+            val matching=(0 until assets.length()).map{assets.getJSONObject(it)}.filter{it.getString("name")==name}
+            require(matching.size==1&&matching.single().getLong("size")==size.toLong()){"Missing, duplicate or size-mismatched distribution asset"}
+            val item=matching.single();val url=URL(item.getString("browser_download_url"))
+            require(url.protocol=="https"&&url.host=="github.com"&&url.path=="/$repo/releases/download/$tag/$name"&&url.userInfo==null&&url.ref==null){"Unexpected GitHub asset URL"}
+            return item
+        }
+        val manifests=(0 until assets.length()).map{assets.getJSONObject(it)}.filter{it.getString("name")=="release-manifest.json"&&it.optLong("size",0) in 1..65536}
+        require(manifests.size==1){"Import a signed local ZIP: this release has no unique bounded distribution manifest"}
+        val metadataAsset=asset("release-manifest.json",manifests.single().getInt("size"))
+        val metadata=download(metadataAsset.getString("browser_download_url"),65536){input->
+            val out=java.io.ByteArrayOutputStream();val buffer=ByteArray(8192)
+            while(true){coroutine.ensureActive();val count=input.read(buffer);if(count<0)break;require(count<=65536-out.size());out.write(buffer,0,count)}
+            out.toByteArray().also{require(it.size==metadataAsset.getInt("size"))}
+        }
+        val selection=DistributionAssets.parse(metadata,tag)
+        val firmware=asset(selection.firmware.filename,selection.firmware.size)
+        onTotal(firmware.getLong("size"));onProgress(0)
+        val ref=download(firmware.getString("browser_download_url"),PackageReader.MAX_ZIP){cache.import(it,{coroutine.ensureActive()},onProgress)}
+        require(ref.digest==selection.firmware.sha256&&cache.file(ref).length()==selection.firmware.size.toLong()){"Firmware download differs from distribution metadata"}
+        coroutine.ensureActive()
         val ota=ref.zigbeeOta
         if(ota!=null) {
-            val matching=(0 until assets.length()).map{assets.getJSONObject(it)}.filter{it.getString("name").endsWith(".ota",true)&&it.optLong("size",-1)==ota.size}
-            if(matching.size==1) return@withContext setOtaSource(ref,matching.single().getString("browser_download_url"))
+            require(selection.ota.sha256==ota.sha256&&selection.ota.size.toLong()==ota.size){"Distribution carrier differs from signed firmware metadata"}
+            val carrier=asset(selection.ota.filename,selection.ota.size)
+            return@withContext select(setOtaSource(ref,carrier.getString("browser_download_url")))
         }
-        ref
+        select(ref)
     }
     suspend fun setOtaSource(ref:FleetReleaseRef,url:String):FleetReleaseRef=withContext(Dispatchers.IO){
         val pkg=load(ref);val metadata=pkg.manifest.zigbeeOta ?: error("This signed release contains no Zigbee OTA carrier")

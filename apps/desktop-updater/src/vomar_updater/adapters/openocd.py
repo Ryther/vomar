@@ -23,7 +23,9 @@ def tcl_quote(value):
 class OpenOcdProbe:
     def __init__(self,serial,executable=None):
         if not isinstance(serial,str) or not re.fullmatch('[A-Za-z0-9_.-]{1,80}',serial):raise ValueError('Explicit DK serial required')
-        self.serial=serial;self.executable=executable or shutil.which('openocd')
+        from importlib.resources import files
+        bundled=files('vomar_updater').joinpath('resources/probe/bin/openocd'+('.exe' if os.name=='nt' else ''))
+        self.serial=serial;self.executable=executable or (str(bundled) if bundled.is_file() else shutil.which('openocd'))
         if not self.executable:raise ValueError('OpenOCD is unavailable. Install the documented DK driver/tool package.')
         self.version=subprocess.run([str(self.executable),'--version'],capture_output=True,text=True,check=True).stderr.splitlines()[0]
         self.generation=secrets.token_hex(24);self.process=None;self.sock=None;self.halted=False;self.lock=threading.RLock();self.temp=None;self.resource=None
@@ -73,8 +75,12 @@ class OpenOcdProbe:
         if self.rpc('nrf52.cpu curstate').strip()!='halted':raise ValueError('CPU did not halt')
         self.halted=True;self.check(expected)
     def check(self,expected):
-        if self.process is None or self.process.poll() is not None or self.identity()!=expected:raise ValueError('Probe lease or live target changed')
+        if self.process is None or self.process.poll() is not None or struct.unpack('<II',self.read(0x10000060,8))!=expected[:2]:raise ValueError('Probe lease or live target changed')
         if self.halted and self.rpc('nrf52.cpu curstate').strip()!='halted':raise ValueError('Target unexpectedly left HALT')
+    def capture_ready(self):
+        if not self.halted:raise ValueError('Exclusive HALT is required for acquisition')
+        self._ready()
+        if self.rpc('read_memory 0x4001e504 32 1').strip() not in ('0','0x00000000','0x0'):raise ValueError('Original acquisition requires NVMC READONLY; retain HALT and inspect the current transaction')
     def watchdog(self):
         def w(at):return struct.unpack('<I',self.read(at,4))[0]
         return {'runStatus':w(0x40010400),'config':w(0x4001050c),'crv':w(0x40010504),'rren':w(0x40010508)}
@@ -106,7 +112,10 @@ class OpenOcdProbe:
             self._write(0x4001e504,[0]);self._ready()
     def start(self):
         if not self.halted:raise ValueError('Explicit verified halted target required')
-        self._ready();self.rpc('reset run');self.halted=False
+        self._ready()
+        if self.rpc('reset run').strip():raise ValueError('Reset/start completion is uncertain; inspect the target')
+        if self.rpc('nrf52.cpu curstate').strip()!='running':raise ValueError('CPU did not acknowledge RUNNING')
+        self.halted=False
     def close(self):
         # Only host resources: shutdown has no resume/reset command. Preserve the
         # target's last state even if Tcl shutdown cannot be acknowledged.

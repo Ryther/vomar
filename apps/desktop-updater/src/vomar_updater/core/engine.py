@@ -26,7 +26,7 @@ class Identity:
     def validate(self):
         import re
         if self.model!='VIMAR30805' or self.layout!=2 or len(self.uid)!=2 or any(not re.fullmatch('[0-9a-f]{8}',x) for x in self.uid):raise ValueError('Unsupported runtime identity')
-        if self.protocol not in (1,2) or not re.fullmatch('[0-9a-f]{64}',self.loader_sha256):raise ValueError('Invalid loader identity')
+        if type(self.protocol) is not int or type(self.layout) is not int or not isinstance(self.uid,tuple) or self.protocol not in (1,2) or not re.fullmatch('[0-9a-f]{64}',self.loader_sha256):raise ValueError('Invalid loader identity')
         if self.loader_kind not in (COMMON,LEGACY) or (self.protocol==1 and self.loader_kind!=LEGACY):raise ValueError('Invalid typed loader')
         if self.loader_kind==COMMON:
             if self.protocol!=2 or not isinstance(self.anchor_sha256,str) or not re.fullmatch('[0-9a-f]{64}',self.anchor_sha256):raise ValueError('Common loader requires anchor identity')
@@ -38,10 +38,13 @@ class Preview:
     token:str
     package_digest:str
     target:str
-    identity:Identity
+    identity:Identity|None
     operation:str
     observed_json:str
     original_digest:str|None
+    resume_session:str|None=None
+    journal_head:str|None=None
+    resume_role:str|None=None
     @property
     def fingerprint(self):return hashlib.sha256(json.dumps(asdict(self),sort_keys=True).encode()).hexdigest()
 
@@ -53,6 +56,9 @@ class Event:
     completed:int=0
     total:int=0
     session:str|None=None
+
+
+class IdentityUnavailable(ValueError):pass
 
 
 class BlePort(Protocol):
@@ -70,7 +76,7 @@ class Engine:
     def __init__(self,store:Store,ble:BlePort,*,lease=None,on_event=None):
         self.store=store;self.ble=ble;self.lease=lease or asyncio.Lock();self.on_event=on_event or (lambda _:None)
         self._previews={};self._consents={};self._stop=asyncio.Event()
-    def stop(self):self._stop.set()
+    def stop(self):self._stop.set();self._previews.clear();self._consents.clear()
     def check(self):
         if self._stop.is_set():raise asyncio.CancelledError('Stopped by operator')
     def emit(self,phase,message,session=None,completed=0,total=0):self.on_event(Event(phase,message,completed,total,session))
@@ -83,11 +89,14 @@ class Engine:
             if identity.protocol!=1 or identity.loader_sha256 not in m['allowedLoaderSha256']:raise ValueError('Loader not authorized')
         elif {'kind':identity.loader_kind,'sha256':identity.loader_sha256} not in m['loaderContracts']:raise ValueError('Typed loader not authorized')
     @staticmethod
-    def decision(package,images):
+    def decision(package,images,resume_role=None):
         m=package.manifest;r=images.get('recovery');p=images.get('primary')
         legacy=m.get('legacyRecoverySignedHashes',[m.get('legacyRecoverySignedHash')])
         if not r or not r.get('active') or not r.get('bootable') or r.get('hash') not in legacy+[m['targetRecoverySignedHash']]:raise ValueError('Unexpected active recovery')
-        if not p or not p.get('bootable'):raise ValueError('Primary is absent/unbootable; explicit interrupted-session repair required')
+        if not p or not p.get('bootable'):
+            if resume_role=='main' and r['hash']==m['targetRecoverySignedHash']:return 'upload-main'
+            if resume_role=='migration' and r['hash'] in legacy:return 'upload-migration'
+            raise ValueError('Primary is absent/unbootable; explicit interrupted-session repair required')
         h=p.get('hash')
         if r['hash'] in legacy:
             if 'migration' not in m:raise ValueError('No authorized migration image')
@@ -97,6 +106,29 @@ class Engine:
             if h==m['main']['signedRegionSha256']:return 'final-reset'
             if h in m['allowedSourceSignedHashes'] or h==m.get('migration',{}).get('signedRegionSha256'):return 'upload-main'
         raise ValueError('Unexpected primary image')
+    @staticmethod
+    def bootstrap_decision(package,images):
+        m=package.manifest;r=images.get('recovery',{});p=images.get('primary',{})
+        if package.schema not in (2,3) or not m.get('migration') or m['migration'].get('role')!='MIGRATION' or not r.get('active') or not r.get('bootable') or r.get('hash') not in m['legacyRecoverySignedHashes'] or not p.get('bootable') or p.get('hash') not in m['allowedSourceSignedHashes']:
+            raise ValueError('Legacy recovery/source is not authorized for shared preparation')
+    async def _bootstrap(self,package,preview,session,images):
+        self.bootstrap_decision(package,images)
+        if not self.ble.authenticated:raise ValueError('Protected legacy characteristic security unavailable')
+        self.store.record(session,'bootstrap-upload-intent');raw=package.image('migration')
+        async def progress(offset):
+            self.check()
+            if type(offset) is not int or not 0<=offset<=len(raw):raise ValueError('Invalid migration acknowledgment')
+            self.store.record(session,'bootstrap-progress',{'offset':offset})
+        await self.ble.upload(raw,progress);observed=await self.ble.images()
+        if observed.get('recovery')!=images['recovery'] or observed.get('primary',{}).get('hash')!=package.manifest['migration']['signedRegionSha256'] or not observed['primary'].get('bootable'):raise ValueError('Shared migration readback mismatch')
+        self.check();self.store.record(session,'bootstrap-reset-intent')
+        try:ack=await self.ble.migration(package.manifest['migration']['signedRegionSha256'],images['recovery']['hash'])
+        except IdentityUnavailable:
+            try:await self.ble.identity()
+            except IdentityUnavailable:ack=await self.ble.reset()
+            else:raise ValueError('Identity-capable recovery cannot use legacy reset fallback')
+        self.store.record(session,'await-reconnect',{'acknowledged':ack})
+        self.emit('await-operator','Recovery preparation requested. Inspect again to bind the live UID before any MAIN update.',session);return session
     async def _live(self,package,expected=None):
         self.check()
         i=await self.ble.identity()
@@ -104,13 +136,33 @@ class Engine:
         self.compatible(package,i)
         if expected is not None and i!=expected:raise ValueError('Live target/loader/anchor changed; preview again')
         return i
-    async def inspect(self,package:Package,target:str,operation='update',original_digest=None):
-        if operation not in ('update','trial'):raise ValueError('Unsupported BLE operation')
+    async def inspect(self,package:Package,target:str,operation='update',original_digest=None,resume_session=None):
+        package.assert_verified()
+        if operation not in ('update','trial','bootstrap'):raise ValueError('Unsupported BLE operation')
+        if bool(package.manifest.get('purpose'))!=(operation=='trial'):raise ValueError('Qualification candidates require the separate Bluetooth trial route')
         async with self.lease:
             self._stop.clear()
             try:
-                await self.ble.connect(target);i=await self._live(package);images=await self.ble.images();self.decision(package,images)
-                p=Preview(secrets.token_hex(24),package.digest,target,i,operation,json.dumps(images,sort_keys=True),original_digest)
+                await self.ble.connect(target)
+                try:i=await self._live(package)
+                except IdentityUnavailable:
+                    if operation not in ('bootstrap','trial'):raise ValueError('Legacy recovery requires explicit signed recovery preparation')
+                    i=None
+                images=await self.ble.images()
+                import dataclasses
+                prior=[s for s in self.store.sessions() if s['binding'].get('package')==package.digest and s['binding'].get('target')==target and s['binding'].get('identity')==(json.loads(json.dumps(dataclasses.asdict(i))) if i else None)]
+                previous=next((s for s in prior if s['id']==resume_session),None) if resume_session else (prior[0] if prior else None)
+                if resume_session and previous is None:raise ValueError('Interrupted session does not match this exact target/package')
+                events=self.store.events(previous['id']) if previous else []
+                resets=[e for e in events if 'reset' in e['phase'] or e['phase']=='await-operator']
+                if resets:
+                    if any(e['phase']=='await-operator' and e['detail'].get('acknowledged') is True for e in resets):raise ValueError('Reset already acknowledged; confirm physical operation in Activity instead of retrying')
+                    if not resume_session:raise ValueError('Uncertain reset requires an explicit interrupted-session review')
+                upload_intents=[e for e in events if e['phase'] in ('upload-main-intent','upload-migration-intent')]
+                resume_role=upload_intents[-1]['phase'].split('-')[1] if resume_session and upload_intents and not resets else None
+                if i is None:self.bootstrap_decision(package,images)
+                else:self.decision(package,images,resume_role)
+                p=Preview(secrets.token_hex(24),package.digest,target,i,operation,json.dumps(images,sort_keys=True),original_digest,resume_session,hashlib.sha256(json.dumps(events,sort_keys=True).encode()).hexdigest() if resume_session else None,resume_role)
                 self._previews[p.token]=(p,time.monotonic()+300);return p
             finally:await self.ble.close()
     def approve(self,preview):
@@ -121,18 +173,24 @@ class Engine:
         if record is None or record[0]!=preview.fingerprint or record[1]<time.monotonic():raise ValueError('Fresh operation-specific consent required')
         self._previews.pop(preview.token,None)
     async def execute(self,package,preview,consent):
-        self._claim(preview,consent)
+        package.assert_verified();self._claim(preview,consent)
         if package.digest!=preview.package_digest:raise ValueError('Package changed')
         if self.lease.locked():raise ValueError('Bluetooth is busy')
         async with self.lease:
-            self._stop.clear();session=self.store.begin({'package':package.digest,'target':preview.target,'identity':asdict(preview.identity),'operation':preview.operation,'original':preview.original_digest})
+            self._stop.clear()
+            if preview.resume_session:
+                head=hashlib.sha256(json.dumps(self.store.events(preview.resume_session),sort_keys=True).encode()).hexdigest()
+                if head!=preview.journal_head:raise ValueError('Session changed after review')
+            session=preview.resume_session or self.store.begin({'package':package.digest,'target':preview.target,'identity':asdict(preview.identity) if preview.identity else None,'operation':preview.operation,'original':preview.original_digest})
             self.store.put(package.raw,'package');self.emit('connecting','Connecting to reviewed device',session)
             try:
-                await self.ble.connect(preview.target);await self._live(package,preview.identity)
+                await self.ble.connect(preview.target)
+                if preview.identity is not None:await self._live(package,preview.identity)
                 images=await self.ble.images()
                 if json.dumps(images,sort_keys=True)!=preview.observed_json:raise ValueError('Images changed after review')
+                if preview.identity is None:return await self._bootstrap(package,preview,session,images)
                 for _ in range(4):
-                    await self._live(package,preview.identity);action=self.decision(package,images)
+                    await self._live(package,preview.identity);action=self.decision(package,images,preview.resume_role)
                     self.check();self.store.record(session,action+'-intent',{'images':images})
                     self.emit(action,action.replace('-',' ').capitalize(),session)
                     if action.startswith('upload-'):

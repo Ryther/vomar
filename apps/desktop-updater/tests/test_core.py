@@ -37,3 +37,29 @@ def test_restart_never_restores_consent_and_uncertainty_survives(tmp_path):
     assert s.sessions()[0]['uncertain'] is True
     assert 'consent' not in str(s.sessions())
     s.close()
+
+
+def test_constructed_or_replaced_package_cannot_gain_engine_admission():
+    from dataclasses import replace
+    from vomar_updater.core.packages import inspect_package
+    p=ROOT/'tools/android/test-fixtures/common-v3-synthetic';pkg=inspect_package((p/'one-common.zip').read_bytes(),(p/'public.der').read_bytes())
+    with pytest.raises(ValueError):replace(pkg,raw=b'arbitrary').assert_verified()
+
+
+def test_failed_publication_does_not_commit_object_reference(tmp_path,monkeypatch):
+    from vomar_updater.core.storage import Store
+    import vomar_updater.core.storage as storage
+    store=Store(tmp_path)
+    def fail(*args):raise OSError('simulated durable publication failure')
+    monkeypatch.setattr(storage,'publish_new',fail)
+    with pytest.raises(OSError):store.put(b'protected','original')
+    assert store.db.execute('SELECT COUNT(*) FROM objects').fetchone()[0]==0
+    store.close()
+
+
+def test_journal_corruption_blocks_review(tmp_path):
+    from vomar_updater.core.storage import Store
+    s=Store(tmp_path);session=s.begin({'target':'synthetic'});s.record(session,'write-intent',{'address':0})
+    with s.db:s.db.execute('UPDATE events SET detail=? WHERE session=?',('{"address":1044480}',session))
+    with pytest.raises(ValueError):s.events(session)
+    s.close()

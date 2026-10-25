@@ -38,4 +38,11 @@ class DistributionContractTest {
             assertEquals(id,c.getValue("accept").jsonPrimitive.boolean,accepted)
         }
     }
+    @Test fun syntheticOpenOcdOriginal() {
+        val root=File(requireNotNull(System.getProperty("vomar.root")))
+        val original=org.openvimar.installer.OriginalArchive.verify(File(root,"tests/contracts/fixtures/openocd-original.zip").readBytes())
+        assertEquals(1L,original.identity.uid0);assertEquals(2L,original.identity.uid1)
+        original.requireFirstInstallCompatible()
+    }
+
 }

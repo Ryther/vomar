@@ -16,3 +16,16 @@ def test_identity_has_exact_scalar_types():
     assert decode_identity(x,1).uid==('00000001','00000002')
     x['uid']=[True,2]
     with pytest.raises(ValueError):decode_identity(x,1)
+
+
+def test_server_upload_prefix_resume_is_bounded_and_reported():
+    import asyncio
+    from vomar_updater.adapters.smp import BleakSmp
+    async def scenario():
+        b=BleakSmp();seen=[];acks=[]
+        async def request(op,group,command,payload):
+            seen.append(payload['off']);return {'off':256 if payload['off']==0 else min(payload['off']+128,512)}
+        async def progress(offset):acks.append(offset)
+        b.request=request;await b.upload(bytes(512),progress)
+        assert seen==[0,256,384] and acks==[256,384,512]
+    asyncio.run(scenario())

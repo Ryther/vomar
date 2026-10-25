@@ -6,7 +6,9 @@ class FileLease:
     def __init__(self,path):self.path=Path(path);self.file=None
     def acquire(self):
         self.path.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
-        self.file=self.path.open('a+b');self.file.seek(0)
+        if self.path.is_symlink():raise ValueError('Resource lock cannot be a link')
+        fd=os.open(self.path,os.O_RDWR|os.O_CREAT|getattr(os,'O_NOFOLLOW',0),0o600)
+        self.file=os.fdopen(fd,'r+b',buffering=0);self.file.seek(0)
         if not self.file.read(1):self.file.write(b'0');self.file.flush()
         self.file.seek(0)
         try:

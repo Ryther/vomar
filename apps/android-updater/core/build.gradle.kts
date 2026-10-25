@@ -1,4 +1,4 @@
-plugins { kotlin("jvm"); kotlin("plugin.serialization") }
+plugins { jacoco; kotlin("jvm"); kotlin("plugin.serialization") }
 kotlin { jvmToolchain(21)
     sourceSets.main { kotlin.srcDir("../../../tools/android/first_install_contract/src") }
     sourceSets.main { kotlin.srcDir("../../../tools/android/first_install_resume_contract/src") }
@@ -16,3 +16,6 @@ java { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersi
 tasks.withType<Test>().configureEach {
     systemProperty("vomar.root", rootProject.projectDir.resolve("../..").canonicalPath)
 }
+
+jacoco { toolVersion = "0.8.14" }
+tasks.jacocoTestReport { dependsOn(tasks.test); reports { xml.required.set(true); html.required.set(true) } }

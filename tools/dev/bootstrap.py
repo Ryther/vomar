@@ -13,7 +13,7 @@ import tempfile
 import urllib.request
 import zipfile
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = next((p for p in Path(__file__).resolve().parents if (p/'firmware/west.yml').is_file()), Path.cwd())
 
 
 def run(*args, cwd=None):
@@ -47,8 +47,12 @@ def unpack(archive, dest):
         with tarfile.open(archive) as t:
             for i in t.getmembers():
                 check(i.name)
-                if i.issym() or i.islnk() or not (i.isfile() or i.isdir()):
-                    raise ValueError('Archive links/devices forbidden')
+                if not (i.isfile() or i.isdir() or i.issym() or i.islnk()):raise ValueError('Archive devices forbidden')
+                if i.issym() or i.islnk():
+                    link=Path(i.linkname)
+                    base=dest/i.name if i.islnk() else (dest/i.name).parent
+                    target=(dest/link) if i.islnk() else (base/link)
+                    if link.is_absolute() or '\\' in i.linkname or not target.resolve().is_relative_to(dest.resolve()):raise ValueError('Archive link escapes destination')
             t.extractall(dest,filter='data')
 
 
@@ -87,8 +91,11 @@ def workspace():
     for name in ('.codex','.claude','.config/opencode','.local/share/opencode'):
         dest=Path.home()/name;target=state/name
         target.mkdir(parents=True,exist_ok=True);dest.parent.mkdir(parents=True,exist_ok=True)
-        if not dest.exists(): dest.symlink_to(target,target_is_directory=True)
-    install_guide(ROOT/'.agents/skills/vomar-guide/SKILL.md',state/'skills/vomar-guide/SKILL.md',symlink=os.name!='nt')
+        if not dest.exists():
+            try:dest.symlink_to(target,target_is_directory=True)
+            except OSError:print('Assistant state remains in its private OS-managed home directory.')
+    for dest in (Path.home()/'.claude/skills/vomar-guide/SKILL.md',Path.home()/'.config/opencode/skills/vomar-guide/SKILL.md',Path.home()/'.agents/skills/vomar-guide/SKILL.md'):
+        install_guide(ROOT/'.agents/skills/vomar-guide/SKILL.md',dest,symlink=os.name!='nt')
     print(f'Development environment: {python}. Agent login remains private.')
 
 
@@ -97,7 +104,7 @@ def image(catalog):
     with tempfile.TemporaryDirectory() as d:
         d=Path(d);archive=d/'python.tar.xz';download(m['python'],archive);unpack(archive,d/'python')
         source=next((d/'python').iterdir())
-        run('./configure','--prefix=/opt/python','--with-ensurepip=install',cwd=source)
+        run('./configure','--prefix=/opt/python','--enable-shared','LDFLAGS=-Wl,-rpath=/opt/python/lib','--with-ensurepip=install',cwd=source)
         run('make',f'-j{min(os.cpu_count() or 2,8)}',cwd=source);run('make','install',cwd=source)
         arch={'x86_64':'x64','aarch64':'arm64'}.get(platform.machine())
         if arch is None: raise ValueError('Unsupported development architecture')
@@ -126,10 +133,11 @@ def firmware(m):
     python=env/'bin/python';west=env/'bin/west'
     run(python,'-m','pip','install','west==1.5.0')
     lock=ROOT/'firmware/west-lock.yml'
-    if not (ws/'.west').exists(): run(west,'init','-l',ROOT/'firmware',str(ws))
-    # Explicit manifest location, no hidden checkout-local overrides.
-    run(west,'config','manifest.path',os.path.relpath(ROOT/'firmware',ws),cwd=ws)
-    run(west,'config','manifest.file','west-lock.yml',cwd=ws)
+    manifest=ws/'vomar-manifest';manifest.mkdir(parents=True,exist_ok=True)
+    managed=manifest/'west.yml';managed.write_bytes(lock.read_bytes())
+    if not (ws/'.west').exists():run(west,'init','-l',manifest)
+    run(west,'config','manifest.path','vomar-manifest',cwd=ws)
+    run(west,'config','manifest.file','west.yml',cwd=ws)
     run(west,'update',cwd=ws)
     run(python,'-m','pip','install','-r',ws/'zephyr/scripts/requirements.txt','-r',ws/'nrf/scripts/requirements.txt')
     if not sdk.exists():

@@ -19,6 +19,7 @@ class Probe:
         if at>=0x10001000:return self.uicr[at-0x10001000:at-0x10001000+size]
         if at>=0x10000000:return self.ficr[at-0x10000000:at-0x10000000+size]
         return bytes(self.flash[at:at+size])
+    def capture_ready(self):assert self.halted
     def watchdog(self):return {'runStatus':0,'config':0,'crv':0,'rren':0}
     def erase_page(self,at,expected):
         self.check(expected);self.writes.append(('erase',at));self.flash[at:at+PAGE]=b'\xff'*PAGE
@@ -81,3 +82,11 @@ def test_watchdog_registers_match_authoritative_android_wire():
     p.read=read
     assert p.watchdog()=={'runStatus':0,'config':0,'crv':0,'rren':0}
     assert seen==[0x40010400,0x4001050c,0x40010504,0x40010508]
+
+
+def test_install_plan_replacement_cannot_change_original_identity(tmp_path):
+    from dataclasses import replace
+    probe,plan,store,path=setup(tmp_path)
+    forged=replace(plan,original=replace(plan.original,identity=(3,4,1)))
+    with pytest.raises(ValueError):InstallEngine(store).review(forged,probe,path)
+    store.close()

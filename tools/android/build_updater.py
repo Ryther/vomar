@@ -14,10 +14,11 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / 'apps/android-updater'
-SDK = ROOT / 'work/android-sdk'
+SDK = Path(os.environ.get('ANDROID_HOME', ROOT / 'work/android-sdk'))
 TOOLS = SDK / 'build-tools/35.0.0'
-APP_VERSION = '1.0.6'
-APP_VERSION_CODE = 26
+_OWNER = (APP / 'app/build.gradle.kts').read_text()
+APP_VERSION = re.search(r'versionName="([0-9]+\.[0-9]+\.[0-9]+)"', _OWNER)[1]
+APP_VERSION_CODE = int(re.search(r'versionCode=([0-9]+)', _OWNER)[1])
 
 def reserve_output(path):
     path.mkdir(parents=True, exist_ok=False)
@@ -27,7 +28,7 @@ def release_status():
             'android_instrumentation':'not_run_by_apk_build',
             'real_bundle':{'status':'not_assessed_by_apk_build','reason':'APK build does not assess firmware qualification or per-device package availability; consult the separately pinned firmware release evidence.'}}
 
-def audit_manifest(badging, xml):
+def audit_manifest(badging, xml, version=APP_VERSION, version_code=APP_VERSION_CODE):
     if not re.search(r"(?m)^minSdkVersion:'26'$", badging) or not re.search(r"(?m)^targetSdkVersion:'35'$", badging):
         raise ValueError('Unexpected APK SDK: require min26/target35')
     # GitHub Releases is an approved online source; private firmware validation
@@ -35,7 +36,7 @@ def audit_manifest(badging, xml):
     for forbidden in ('application-debuggable',):
         if forbidden in badging: raise ValueError('Forbidden APK manifest property: '+forbidden)
     if not re.search(r'android:allowBackup[^\n]*=false', xml): raise ValueError('Backup must be explicitly disabled')
-    if f"versionName='{APP_VERSION}'" not in badging or f"versionCode='{APP_VERSION_CODE}'" not in badging:
+    if f"versionName='{version}'" not in badging or f"versionCode='{version_code}'" not in badging:
         raise ValueError('Unexpected APK version')
 
 def audit_entries(apk, public, fixture, anchor_path='res/raw/firmware_public.der'):

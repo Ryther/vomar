@@ -5,6 +5,7 @@ Gradle, private builders or SDKs. Frozen builds collect these imports explicitly
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from .admission import seal,require
 import io
 import json
 import re
@@ -41,6 +42,8 @@ class Package:
     schema:int
     model:str
     version:str
+    _seal:bytes=b''
+    def assert_verified(self):require(self._seal,seal("package",self.raw,self.manifest_json,self.digest,self.schema,self.model,self.version))
     @property
     def manifest(self):return strict_json(self.manifest_json)
     def entries(self):return read_zip(self.raw)
@@ -94,4 +97,18 @@ def inspect_package(raw,public_key,app_version='1.0.0'):
             if canonical(meta)!=canonical(m[role]):raise ValueError('Legacy signed image mismatch')
     else:raise ValueError('Unsupported package schema')
     if version(app_version)<version(m['minAppVersion']):raise ValueError('A newer updater is required')
-    return Package(raw,mraw,sha(raw),m['schemaVersion'],m.get('model','VIMAR30805'),m['main']['version'])
+    return _admitted(raw,mraw,m)
+
+
+def inspect_candidate(raw,public_key,app_version='1.0.0'):
+    """Separate single-device qualification route, never a normal/fleet release."""
+    from tools.firmware.package_common_android_update_v3 import _validate_common_v3_bundle
+    key=serialization.load_pem_public_key(public_key) if public_key.startswith(b'-----') else serialization.load_der_public_key(public_key)
+    m=_validate_common_v3_bundle(raw,key,expected_purpose='qualification-candidate')
+    if version(app_version)<version(m['minAppVersion']):raise ValueError('A newer updater is required')
+    return _admitted(raw,canonical(m),m)
+
+
+def _admitted(raw,mraw,m):
+    p=Package(raw,mraw,sha(raw),m['schemaVersion'],m.get('model','VIMAR30805'),m['main']['version'])
+    object.__setattr__(p,'_seal',seal('package',p.raw,p.manifest_json,p.digest,p.schema,p.model,p.version));return p

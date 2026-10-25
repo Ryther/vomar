@@ -44,13 +44,16 @@ def validate(value, directory=None):
     if type(value['artifacts']) is not list or not 10<=len(value['artifacts'])<=32:raise ValueError('Incomplete or oversized distribution')
     roles=set();names=set()
     for a in value['artifacts']:
-        exact(a,ARTIFACT,{'platform','architecture'})
+        exact(a,ARTIFACT,{'platform','architecture','androidVersionCode'})
         role=a['role'];name=a['filename']
         if role not in REQUIRED_ROLES|OPTIONAL_ROLES or role in roles:raise ValueError('Unknown/duplicate artifact role')
         if not isinstance(name,str) or not re.fullmatch('[A-Za-z0-9][A-Za-z0-9._-]{0,159}',name) or name in names:raise ValueError('Unsafe/duplicate asset name')
         if type(a['size']) is not int or not 0<a['size']<=2**31:raise ValueError('Artifact size outside bounds')
         if not isinstance(a['sha256'],str) or not re.fullmatch('[0-9a-f]{64}',a['sha256']):raise ValueError('Invalid artifact hash')
         if not isinstance(a['componentVersion'],str) or not re.fullmatch(SEMVER,a['componentVersion']):raise ValueError('Invalid component version')
+        if role=='android-apk':
+            if type(a.get('androidVersionCode')) is not int or not 1<=a['androidVersionCode']<=2147483647:raise ValueError('Native Android versionCode required')
+        elif 'androidVersionCode' in a:raise ValueError('Unexpected Android versionCode')
         if role.startswith('desktop-'):
             _,os_name,arch=role.split('-')
             if arch=='setup':arch='x64'
