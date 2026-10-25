@@ -992,6 +992,15 @@
 !/tests/contracts/fixtures/legacy-v1-duplicate-entry.zip
 !/apps/android-updater/core/src/test/kotlin/org/openvimar/updater/core/DistributionContractTest.kt
 
+!/apps/desktop-updater/src/vomar_updater/adapters/smp.py
+!/apps/desktop-updater/src/vomar_updater/adapters/openocd.py
+!/apps/desktop-updater/src/vomar_updater/adapters/locking.py
+!/apps/desktop-updater/src/vomar_updater/core/installation.py
+!/apps/desktop-updater/tests/test_smp.py
+!/apps/desktop-updater/tests/test_installation.py
+!/tests/contracts/fixtures/openocd-original.zip
+!/tests/contracts/originals.json
+
 # Account state and acquired/generated artifacts always remain private.
 /_test*/
 /_tmp*/

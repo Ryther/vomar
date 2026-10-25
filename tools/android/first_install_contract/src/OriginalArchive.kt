@@ -58,6 +58,7 @@ object OriginalArchive {
     fun verify(input:ByteArray):VerifiedOriginal {
         require(input.size in 22..MAX_ZIP);val bytes=input.copyOf();val entries=StrictZip.read(bytes,limits,MAX_ZIP)
         val raw=obj(StrictJson.parse(entries.getValue("manifest.json")))
+        if(raw["schema"]==2L)return verifyOpenOcd(bytes,entries,raw)
         val halted=raw["type"]=="nrf52840-quiescent-first-install-backup"
         val m=keys(raw,setOf("schema","type","target","byteExactDoubleRead","startedAt","verifiedAt","snapshotAtomic","protocol","scope","provenance","regions")+(if(halted)setOf("acquisition") else emptySet()))
         require(m["schema"]==1L&&(halted||m["type"]=="nrf52840-read-only-double-backup")&&m["byteExactDoubleRead"]==true&&m["snapshotAtomic"]==false)
@@ -87,6 +88,27 @@ object OriginalArchive {
         val stack=word(flash,0);val reset=word(flash,4)
         require(stack>0x20000000L&&stack<=0x20040000L&&stack%8==0L&&reset and 1L==1L&&(reset and 0xfffffffeL) in 8L until 0x100000L)
         exact(m["target"],targetFor(flash,f))
+        return VerifiedOriginal(bytes,flash,f,uicr,i)
+    }
+    /** Truthful OpenOCD provenance; never labels this as raw J-Link USB. */
+    private fun verifyOpenOcd(bytes:ByteArray,e:Map<String,ByteArray>,raw:Map<String,Any?>):VerifiedOriginal {
+        val m=keys(raw,setOf("schema","type","target","regions","startedAt","verifiedAt","acquisition","provenance"))
+        require(m["schema"]==2L&&m["type"]=="nrf52840-openocd-halted-backup-v1")
+        val f=e.getValue("ficr.bin");val flash=e.getValue("flash.bin");val uicr=e.getValue("uicr.bin")
+        require(f.size==4096&&flash.size==0x100000&&uicr.size==4096&&e.getValue("README.txt").toString(Charsets.UTF_8).isNotBlank())
+        val i=identityFromFicr(f)
+        exact(m["target"],mapOf("uid" to listOf("%08x".format(i.uid0),"%08x".format(i.uid1)),"variant" to i.variant,"part" to 0x52840L,"commercialModelVerified" to false))
+        val a=keys(m["acquisition"],setOf("cpuHalted","byteExactDoubleRead","flashWrite","uicrWrite","watchdog"))
+        require(a["cpuHalted"]==true&&a["byteExactDoubleRead"]==true&&a["flashWrite"]==false&&a["uicrWrite"]==false)
+        ObservedWatchdogProfile.fromContract(a["watchdog"])
+        val p=keys(m["provenance"],setOf("transport","version","serial"));require(p["transport"]=="openocd")
+        listOf("version","serial").forEach{val v=p[it];require(v is String&&v.isNotBlank()&&v.length<=1024)}
+        val start=Instant.parse(m["startedAt"] as String);val end=Instant.parse(m["verifiedAt"] as String);require(end>=start)
+        val regions=m["regions"] as? List<*>;require(regions?.size==3)
+        listOf("flash.bin" to 0L,"ficr.bin" to 0x10000000L,"uicr.bin" to 0x10001000L).forEachIndexed{n,(file,at)->
+            exact(requireNotNull(regions)[n],mapOf("file" to file,"start" to "0x%08x".format(at),"size" to e.getValue(file).size.toLong(),"sha256" to sha256(e.getValue(file)),"verifiedCopies" to 2L))}
+        val stack=word(flash,0);val reset=word(flash,4)
+        require(stack>0x20000000L&&stack<=0x20040000L&&stack%8==0L&&reset and 1L==1L&&(reset and 0xfffffffeL) in 8L until 0x100000L)
         return VerifiedOriginal(bytes,flash,f,uicr,i)
     }
     fun identityFromFicr(ficr:ByteArray):TargetIdentity {

@@ -99,8 +99,9 @@ class Engine:
         raise ValueError('Unexpected primary image')
     async def _live(self,package,expected=None):
         self.check()
+        i=await self.ble.identity()
         if not self.ble.authenticated:raise ValueError('Authenticated Bluetooth bond required; OS security is unavailable')
-        i=await self.ble.identity();self.compatible(package,i)
+        self.compatible(package,i)
         if expected is not None and i!=expected:raise ValueError('Live target/loader/anchor changed; preview again')
         return i
     async def inspect(self,package:Package,target:str,operation='update',original_digest=None):
