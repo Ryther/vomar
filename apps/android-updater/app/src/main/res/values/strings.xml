@@ -5,7 +5,7 @@
     <string name="update_step">Install the update</string>
     <string name="result_step">Confirm return online</string>
     <string name="initial_status">Import a ZIP package to begin.</string>
-    <string name="empty_package">Choose a signed ZIP package for your dimmer. You can update without saving a registry record.</string>
+    <string name="empty_package">Choose a signed firmware ZIP to begin.</string>
     <string name="action_import">Choose local ZIP…</string>
     <string name="action_details">Technical details</string>
     <string name="action_permissions">Allow Bluetooth</string>
@@ -54,7 +54,7 @@
     <string name="ready_instructions">Stay near the powered dimmer. Use Start Bluetooth recovery in Home Assistant or Zigbee2MQTT. Android pairing code: 824005. Gesture entry depends on the installed firmware.</string>
     <string name="connection_help">Connection instructions</string>
     <string name="hide_connection_help">Hide connection instructions</string>
-    <string name="connection_help_text">The phone connects only to the dimmer bound to this signed legacy package. Complete pairing in the Android dialog and wait for the result here. Check Bluetooth reads images without installing firmware. Use Resume after an interrupted update. Ordinary Bluetooth sessions on supporting firmware show blue / green and return to Zigbee after 60 seconds idle. Other independent recovery entries show blue / red and remain active. Hold both buttons for 5 seconds to request a safe Zigbee return on supporting firmware.</string>
+    <string name="connection_help_text">The phone connects only to the selected dimmer. Complete pairing in the Android dialog and wait for the result here. Check Bluetooth reads images without installing firmware. Use Resume after an interrupted update. Ordinary Bluetooth sessions on supporting firmware show blue / green and return to Zigbee after 60 seconds idle. Other independent recovery entries show blue / red and remain active. Hold both buttons for 5 seconds to request a safe Zigbee return on supporting firmware.</string>
     <string name="more_options">More options</string>
     <string name="fewer_options">Close other options</string>
     <string name="change_package">Change local ZIP…</string>

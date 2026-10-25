@@ -26,6 +26,7 @@ internal class SavedConnectionsUi(
     private var topicId:String?=null
     private var topicName=""
     private var topicBase=""
+    private var returnFromTopics=false
     private var draft:BrokerProfile?=null
     private var dirty=false
     private var busy=false
@@ -43,6 +44,14 @@ internal class SavedConnectionsUi(
     private fun add(view:View,container:LinearLayout=parent!!,gap:Int=8):View {container.addView(view,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(gap)});return view}
     private fun text(value:String,strong:Boolean=false,secondary:Boolean=true,container:LinearLayout=parent!!)=NativeUi.label(activity,value,if(strong)20 else 15,strong,secondary).also{add(it,container)}
     private fun action(label:String,enabled:Boolean=true,filled:Boolean=false,container:LinearLayout=parent!!,run:()->Unit)=NativeUi.button(activity,label,filled){if(!busy)run()}.also{it.isEnabled=enabled&&!busy;controls.add(it);add(it,container)}
+    private fun formActions(label:String,enabled:Boolean=true,cancel:()->Unit,save:()->Unit):Button {
+        val row=LinearLayout(activity).apply{gravity=Gravity.END or Gravity.CENTER_VERTICAL}
+        val cancelButton=NativeUi.button(activity,"Cancel"){if(!busy)cancel()}
+        val saveButton=NativeUi.button(activity,label,filled=true){if(!busy)save()}.apply{isEnabled=enabled&&!busy}
+        row.addView(cancelButton,LinearLayout.LayoutParams(-2,-2))
+        row.addView(saveButton,LinearLayout.LayoutParams(0,-2,1f).apply{leftMargin=dp(8)})
+        controls.addAll(listOf(cancelButton,saveButton));add(row,gap=16);return saveButton
+    }
     private fun field(label:String,value:String,input:NativeUi.Input=NativeUi.Input.TEXT,changed:(String)->Unit):EditText {
         text(label,secondary=false)
         return NativeUi.field(activity,label,value,input=input).also { f->add(f);controls.add(f);f.addTextChangedListener(object:TextWatcher{
@@ -57,7 +66,8 @@ internal class SavedConnectionsUi(
         r.addView(info,LinearLayout.LayoutParams(0,-2,1f));r.addView(ImageView(activity).apply{setImageDrawable(NativeUi.Icon(activity,"right",activity.getColor(R.color.ui_text_secondary)));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(dp(24),dp(24)))
         controls.add(r);add(r,gap=0);add(View(activity).apply{setBackgroundColor(activity.getColor(R.color.ui_line))},gap=0).layoutParams.height=dp(1)
     }
-    fun openList(){screen="list";draft=null;dirty=false;failure=null}
+    fun openList(){screen="list";draft=null;dirty=false;failure=null;returnFromTopics=false}
+    fun openTopics(id:String){profileId=id;screen="topics";draft=null;dirty=false;failure=null;returnFromTopics=true}
     fun render(container:LinearLayout) {parent=container;draw()}
     private fun draw() {
         val container=parent ?: return
@@ -84,7 +94,8 @@ internal class SavedConnectionsUi(
         val profiles=try{network.loadProfiles()}catch(_:Exception){text("Saved connections could not be read. Your data has not been changed.",secondary=false);return}
         if(profiles.isEmpty()){text("No saved connections",true,false);text("Save your broker and Zigbee2MQTT topics on this phone.");action("Add connection"){add()}}
         profiles.forEach { p->row(p.label,"${if(network.state.value.connected&&network.activeProfileId==p.id)"Connected" else "Not connected"} · ${p.networks.size} ${if(p.networks.size==1)"topic" else "topics"}"){profileId=p.id;draft=null;dirty=false;go("detail")} }
-        text("One connection at a time.");action("Import an exported device list"){offlineImport()}
+        if(profiles.size>1)text("One active connection at a time.")
+        action("Import from a file"){offlineImport()}
     }
     private fun detail() {
         val p=current() ?: run{screen="list";draw();return}
@@ -95,7 +106,6 @@ internal class SavedConnectionsUi(
         val unavailable=saved&&!network.credentialsAvailable(p)
         text(if(unavailable)"Saved credentials unavailable" else if(saved)"Credentials saved on this phone" else "No credentials saved",secondary=false,container=panel)
         action(if(saved)"Change credentials" else "Add credentials",container=panel){dirty=false;go("credentials")}
-        if(saved){text("Username   Saved",container=panel);text("Password   Saved",container=panel)}
         add(panel)
         row("Zigbee topics (${p.networks.size})","Names appear when adding devices."){draft=null;go("topics")}
         val held=network.connectionInUse(p)
@@ -127,17 +137,15 @@ internal class SavedConnectionsUi(
         field("Broker address (required)",d.serverUri,NativeUi.Input.ADDRESS){draft=draft!!.copy(serverUri=it);label()}.tag="network.address"
         text("Use the MQTT broker address, rather than the Zigbee2MQTT web address.")
         val consent=CheckBox(activity).apply{text="Allow an unencrypted connection on my local network";isChecked=d.allowInsecureLocal;minHeight=dp(48);setTextColor(activity.getColor(R.color.ui_text));setOnCheckedChangeListener{_,v->dirty=true;draft=draft!!.copy(allowInsecureLocal=v);label()}};add(consent);controls.add(consent)
-        text("Changing the broker address requires credentials for the new address.")
         row("Zigbee topics (${d.networks.size})","Configure one to three named topics."){go("topics")}
         val changedEndpoint=original!=null && runCatching{normalizeBrokerUri(d.serverUri)!=original.serverUri}.getOrDefault(false)
         // The address field can change after this render. Check again when Save is pressed.
         if(changedEndpoint)text("The new broker will not receive the old credentials.")
-        action("Cancel"){discard{draft=null;go(if(original==null)"list" else "detail")}}
-        submit=action(if(online())"Save connection" else "Save connection",d.networks.isNotEmpty(),filled=true) {
+        submit=formActions("Save connection",d.networks.isNotEmpty(),{discard{draft=null;go(if(original==null)"list" else "detail")}}) {
             val candidate=draft!!.copy(label=draft!!.label.trim(),serverUri=draft!!.serverUri.trim())
             val issues=candidate.validationIssues()
-            if(issues.isNotEmpty()){showIssues(issues);return@action}
-            try{BrokerProfileStore.replaceInCatalog(network.loadProfiles(),if(original!=null&&original.serverUri!=candidate.validated().serverUri)candidate.copy(networks=candidate.networks.map{it.copy(id=id())})else candidate)}catch(_:Exception){failure="Choose a different connection and topic name.";draw();return@action}
+            if(issues.isNotEmpty()){showIssues(issues);return@formActions}
+            try{BrokerProfileStore.replaceInCatalog(network.loadProfiles(),if(original!=null&&original.serverUri!=candidate.validated().serverUri)candidate.copy(networks=candidate.networks.map{it.copy(id=id())})else candidate)}catch(_:Exception){failure="Choose a different connection and topic name.";draw();return@formActions}
             if(original!=null && original.serverUri!=candidate.validated().serverUri){
                 AlertDialog.Builder(activity).setTitle("Credentials for the new broker").setMessage("Save this address without the previous credentials, then use Change credentials before connecting. Saved devices keep their previous topic association.").setNegativeButton("Keep editing",null).setPositiveButton("Save without credentials"){_,_->
                     val rebound=candidate.copy(networks=candidate.networks.map{it.copy(id=id())})
@@ -153,9 +161,7 @@ internal class SavedConnectionsUi(
     private fun topics() {
         val p=draft?:current() ?: return
         p.networks.forEach{n->row(n.label,n.baseTopic){topicId=n.id;go("topic")}}
-        if(p.networks.isEmpty())text("No topics yet")
-        text("Names appear when adding devices.")
-        action("Add topic",p.networks.size<3){add()}
+        if(p.networks.isEmpty()){text("No topics yet");action("Add topic"){add()}}
         if(p.networks.size==3)text("Up to 3 topics per connection.")
     }
     private fun topic() {
@@ -168,18 +174,13 @@ internal class SavedConnectionsUi(
         field("Topic name (required)",name){name=it;topicName=it;update()}
         field("MQTT base topic (required)",base,NativeUi.Input.IDENTIFIER){base=it;topicBase=it;update()}
         text("Use the base topic from Zigbee2MQTT.")
-        text("Shown when adding devices");val preview=text(name.ifBlank{"Topic name"},secondary=false)
-        // Update the preview without rebuilding input fields.
-        val nameField=(parent!!.getChildAt(1) as? EditText)
-        nameField?.addTextChangedListener(object:TextWatcher{override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun afterTextChanged(s:Editable?){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){preview.text=s.toString().ifBlank{"Topic name"}}})
         val held=network.connectionInUse(current())
-        action("Cancel"){dirty=false;go("topics")}
-        submit=action("Save topic",true,true){
+        submit=formActions("Save topic",true,{discard{go("topics")}}){
             val baseChanged=old!=null && old.baseTopic!=base.trim()
             val updated=ZigbeeNetwork(if(baseChanged)id() else old?.id?:id(),name.trim(),base.trim())
             val candidate=p.copy(networks=if(old==null)p.networks+updated else p.networks.map{if(it.id==old.id)updated else it})
             val issues=candidate.validationIssues().filterNot{it.field==BrokerValidationField.BROKER || it.field==BrokerValidationField.CONSENT}
-            if(issues.isNotEmpty()){showIssues(issues);return@action}
+            if(issues.isNotEmpty()){showIssues(issues);return@formActions}
             fun save(){if(draft!=null){draft=candidate;dirty=true;go("topics")}else operate{network.saveProfile(candidate,reconnect=online()&&connectionTransportChanged(p,candidate));dirty=false;screen="topics"}}
             if(baseChanged)AlertDialog.Builder(activity).setTitle("Change MQTT base topic?").setMessage("Saved devices keep their previous source. Import devices from the new topic separately.").setNegativeButton("Keep editing",null).setPositiveButton(if(online())"Save and reconnect" else "Save topic"){_,_->save()}.show() else save()
         }
@@ -195,29 +196,30 @@ internal class SavedConnectionsUi(
         val unavailable=network.hasCredentials(p)&&!network.credentialsAvailable(p)
         text(if(unavailable)"Saved credentials unavailable. Enter new credentials, or use no credentials." else "Existing credentials stay saved until you save.")
         var changeUsername=!network.hasCredentials(p)||unavailable
-        val usernameSummary=column();text("Username   Saved · unchanged",container=usernameSummary)
+        val usernameSummary=column();text("Keep saved username",container=usernameSummary)
         val user=NativeUi.field(activity,"Username (optional)",input=NativeUi.Input.USERNAME).apply{isSaveEnabled=false;visibility=if(changeUsername)View.VISIBLE else View.GONE}
         val change=action("Change username",container=usernameSummary){changeUsername=true;user.visibility=View.VISIBLE;dirty=true;usernameSummary.visibility=View.GONE}
         if(changeUsername)usernameSummary.visibility=View.GONE
-        add(usernameSummary);text("Username (optional)",secondary=false);add(user)
-        text("When changing the username, leave it blank to remove it.")
+        add(usernameSummary);val userLabel=text("Username (optional)",secondary=false).apply{visibility=user.visibility};add(user)
+        val userHelp=text("Leave blank to remove the username.").apply{visibility=user.visibility}
         text("New password",secondary=false)
         val pass=NativeUi.field(activity,"New password",input=NativeUi.Input.PASSWORD).apply{isSaveEnabled=false};add(pass)
         text(if(unavailable)"Enter a new password to replace unavailable credentials." else if(network.hasCredentials(p))"Leave blank to keep the saved password." else "Password is optional when no credentials are saved.")
-        val clear=CheckBox(activity).apply{text="Use no credentials";minHeight=dp(48);setTextColor(activity.getColor(R.color.ui_text))};add(clear)
-        val empty=CheckBox(activity).apply{text="Use an empty password";minHeight=dp(48);setTextColor(activity.getColor(R.color.ui_text))};add(empty)
+        val options=column()
+        val clear=CheckBox(activity).apply{text="Use no credentials";minHeight=dp(48);setTextColor(activity.getColor(R.color.ui_text))};add(clear,options)
+        val empty=CheckBox(activity).apply{text="Use an empty password";minHeight=dp(48);setTextColor(activity.getColor(R.color.ui_text))};add(empty,options)
+        add(NativeUi.disclosure(activity,"Sign-in options","Hide sign-in options",options));add(options,gap=0)
         val held=network.connectionInUse(p)
         if(held)text("Wait for the current update to finish.")
-        action("Cancel"){discard{dirty=false;go("detail")}}
-        val save=action(if(online())"Save and reconnect" else "Save credentials",false,true){
+        val save=formActions(if(online())"Save and reconnect" else "Save credentials",false,{discard{dirty=false;go("detail")}}){
             val username=user.text.toString().ifEmpty{null};val password=if(empty.isChecked)charArrayOf() else pass.text.toString().takeIf{it.isNotEmpty()}?.toCharArray()
             val anonymous=clear.isChecked;val replaceUsername=changeUsername;user.text.clear();pass.text.clear()
             operate{try{network.editCredentials(p.id,replaceUsername,username,password,anonymous,online());dirty=false;screen="detail"}finally{password?.fill('\u0000')}}
         }
-        fun update(){dirty=changeUsername||pass.text.isNotEmpty()||clear.isChecked||empty.isChecked;save.text=if(online())"Save and reconnect" else "Save credentials";save.isEnabled=dirty&&(!unavailable||pass.text.isNotEmpty()||clear.isChecked||empty.isChecked)&&!network.connectionInUse(p)&&!busy;user.isEnabled=!clear.isChecked;pass.isEnabled=!clear.isChecked&&!empty.isChecked}
+        fun update(){dirty=changeUsername||pass.text.isNotEmpty()||clear.isChecked||empty.isChecked;save.text=if(online())"Save and reconnect" else "Save credentials";save.isEnabled=dirty&&(!unavailable||pass.text.isNotEmpty()||clear.isChecked||empty.isChecked)&&!network.connectionInUse(p)&&!busy;user.isEnabled=!clear.isChecked;empty.isEnabled=!clear.isChecked;pass.isEnabled=!clear.isChecked&&!empty.isChecked}
         val watcher=object:TextWatcher{override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun afterTextChanged(s:Editable?){update()};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){}}
         user.addTextChangedListener(watcher);pass.addTextChangedListener(watcher)
-        change.setOnClickListener{changeUsername=true;user.visibility=View.VISIBLE;usernameSummary.visibility=View.GONE;update();user.requestFocus()}
+        change.setOnClickListener{changeUsername=true;user.visibility=View.VISIBLE;userLabel.visibility=View.VISIBLE;userHelp.visibility=View.VISIBLE;usernameSummary.visibility=View.GONE;update();user.requestFocus()}
         clear.setOnCheckedChangeListener{_,_->update()};empty.setOnCheckedChangeListener{_,_->update()}
         secretFields.addAll(listOf(user,pass));controls.addAll(listOf(user,pass,clear,empty));availabilityRefresh={update()};update()
     }
@@ -240,11 +242,12 @@ internal class SavedConnectionsUi(
     fun confirmLeave(run:()->Unit):Boolean {if(!dirty)return false;discard{draft=null;screen="list";run()};return true}
     fun back():Boolean {
         if(busy)return true
+        if(screen=="topics"&&returnFromTopics){returnFromTopics=false;screen="list";return false}
         when(screen){"list"->return false;"topics"->{go(if(draft!=null)"edit" else "detail")};"topic"->{discard{go("topics")}};"edit"->{discard{draft=null;go(if(current()==null)"list" else "detail")}};"credentials"->{discard{go("detail")}};else->{draft=null;go("list")}}
         return true
     }
-    fun saveState()=Bundle().apply{putString("screen",if(screen=="credentials")"detail" else screen);putString("profile",profileId);putString("topic",topicId);putString("topicName",topicName);putString("topicBase",topicBase);draft?.let{p->putString("draftId",p.id);putString("name",p.label);putString("address",safeNetworkAddressDraft(p.serverUri));putBoolean("consent",p.allowInsecureLocal);putStringArrayList("topicIds",ArrayList(p.networks.map{it.id}));putStringArrayList("topicNames",ArrayList(p.networks.map{it.label}));putStringArrayList("topicBases",ArrayList(p.networks.map{it.baseTopic}))}}
-    fun restoreState(saved:Bundle){profileId=saved.getString("profile");topicId=saved.getString("topic");topicName=saved.getString("topicName","");topicBase=saved.getString("topicBase","");screen=saved.getString("screen","list");saved.getString("draftId")?.let{id->val ids=saved.getStringArrayList("topicIds").orEmpty();val names=saved.getStringArrayList("topicNames").orEmpty();val bases=saved.getStringArrayList("topicBases").orEmpty();draft=BrokerProfile(id,saved.getString("address", ""),ids.take(3).mapIndexedNotNull{i,n->if(i<names.size&&i<bases.size)ZigbeeNetwork(n,names[i],bases[i])else null},saved.getBoolean("consent"),saved.getString("name",""))};dirty=draft!=null}
+    fun saveState()=Bundle().apply{putString("screen",if(screen=="credentials")"detail" else screen);putString("profile",profileId);putBoolean("returnFromTopics",returnFromTopics);putString("topic",topicId);putString("topicName",topicName);putString("topicBase",topicBase);draft?.let{p->putString("draftId",p.id);putString("name",p.label);putString("address",safeNetworkAddressDraft(p.serverUri));putBoolean("consent",p.allowInsecureLocal);putStringArrayList("topicIds",ArrayList(p.networks.map{it.id}));putStringArrayList("topicNames",ArrayList(p.networks.map{it.label}));putStringArrayList("topicBases",ArrayList(p.networks.map{it.baseTopic}))}}
+    fun restoreState(saved:Bundle){returnFromTopics=saved.getBoolean("returnFromTopics");profileId=saved.getString("profile");topicId=saved.getString("topic");topicName=saved.getString("topicName","");topicBase=saved.getString("topicBase","");screen=saved.getString("screen","list");saved.getString("draftId")?.let{id->val ids=saved.getStringArrayList("topicIds").orEmpty();val names=saved.getStringArrayList("topicNames").orEmpty();val bases=saved.getStringArrayList("topicBases").orEmpty();draft=BrokerProfile(id,saved.getString("address", ""),ids.take(3).mapIndexedNotNull{i,n->if(i<names.size&&i<bases.size)ZigbeeNetwork(n,names[i],bases[i])else null},saved.getBoolean("consent"),saved.getString("name",""))};dirty=draft!=null}
     fun detach(){val retained=dirty;secretFields.forEach{it.text.clear()};secretFields.clear();dirty=retained;parent=null}
     fun close(){detach()}
 }

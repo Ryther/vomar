@@ -11,7 +11,7 @@ spec.loader.exec_module(m)
 # Exact package/SDK lines captured from pinned aapt2 35.0.0 during failed regeneration:
 # experiments/android-updater/20261022T150311Z/aapt2-badging.txt
 CAPTURED_BADGING = "package: name='org.openvimar.updater' versionCode='1' versionName='0.1.0' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'\nminSdkVersion:'26'\ntargetSdkVersion:'35'\n"
-CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='22'").replace("versionName='0.1.0'", "versionName='1.0.2'")
+CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='23'").replace("versionName='0.1.0'", "versionName='1.0.3'")
 
 def test_patchReleaseAcceptedAndPreviousApkRejected():
     patched = CURRENT_BADGING
@@ -27,6 +27,9 @@ def test_patchReleaseAcceptedAndPreviousApkRejected():
     prior = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='21'").replace("versionName='0.1.0'", "versionName='1.0.1'")
     with pytest.raises(ValueError, match='version'):
         m.audit_manifest(prior, 'android:allowBackup=false')
+    prior_metadata = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='22'").replace("versionName='0.1.0'", "versionName='1.0.2'")
+    with pytest.raises(ValueError, match='version'):
+        m.audit_manifest(prior_metadata, 'android:allowBackup=false')
 
 def test_apkBuildDoesNotInventCurrentFirmwareQualification():
     status = m.release_status()

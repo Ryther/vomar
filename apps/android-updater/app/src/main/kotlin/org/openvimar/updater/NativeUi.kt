@@ -18,7 +18,7 @@ import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 
-/** Shared native expression of the approved fleet prototype, including dialogs
+/** Shared native components for the approved app design, including dialogs
  * and diagnostics. State, transport authority and content stay with callers. */
 internal object NativeUi {
     fun themedContext(base:Context):Context {

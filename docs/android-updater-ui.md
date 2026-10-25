@@ -1,6 +1,6 @@
 # Android updater guided interface
 
-Historical interface notes for apps 0.1.4/0.1.5. For the current 1.0.0 interface
+Historical interface notes for apps 0.1.4/0.1.5. For the current 1.0.3 interface
 and qualification scope, see [the updater guide](android-updater.md).
 
 App 0.1.4 implements the four priorities from the Android 0.1.3 critique:

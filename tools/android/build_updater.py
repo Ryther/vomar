@@ -16,8 +16,8 @@ ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / 'apps/android-updater'
 SDK = ROOT / 'work/android-sdk'
 TOOLS = SDK / 'build-tools/35.0.0'
-APP_VERSION = '1.0.2'
-APP_VERSION_CODE = 22
+APP_VERSION = '1.0.3'
+APP_VERSION_CODE = 23
 
 def reserve_output(path):
     path.mkdir(parents=True, exist_ok=False)

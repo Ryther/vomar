@@ -1,4 +1,16 @@
-# Vimar Updater Android 1.0.2
+# Vimar Updater Android 1.0.3
+
+App 1.0.3 (versionCode 23) refines the production interface within the approved
+native design. Devices offers firmware review only when saved devices can use
+the selected package. An empty inventory starts with Add device. Device details
+show status and firmware first; manual checks, recovery and source information
+are disclosed on demand. Saved Zigbee versions remain explicitly marked `(saved)`.
+
+Connections use one saved-credentials summary, a compact credential form and
+separate named topics without a simulated Add device preview. Topic creation
+uses the toolbar plus; forms group Cancel and Save. Add device's Edit topics
+opens the active connection's topic list and returns to its origin. Updates and
+Settings use task-oriented language and show the installed app version.
 
 App 1.0.2 (versionCode 22) fixes stale metadata for saved Zigbee devices. While
 the selected MQTT connection is active, device-topic firmware reports update
@@ -20,11 +32,15 @@ for continuous press/drag/release, normal tap, keyboard and accessibility, witho
 the previous Use list mode switch or Done step.
 
 The signed APK is delivered locally under
-`experiments/android-updater/releases/1.0.2/`. Its incremented version code and
+`experiments/android-updater/releases/1.0.3/`. Its incremented version code and
 existing release signer support upgrading the installed 1.0.0 app. Package ID,
 firmware trust key and permissions remain unchanged. Firmware versioning and
-qualification remain independent. Native gesture/accessibility and live-broker
-acceptance are still separate from the software build and APK audits.
+qualification remain independent. The signed 1.0.3 APK passed native checks on
+an isolated API 35 software emulator, including the continuous Show gesture,
+credential privacy, restored topic navigation, dark/light appearance, 130% text
+and tablet layout. Live-broker, full TalkBack and physical-phone acceptance
+remain separate checks. Build and screenshot evidence is recorded under
+`experiments/android-updater/builds/1.0.3/production-polish/`.
 
 App0.6.5 completed the approved operation-clarity pass: persistent Bluetooth
 target/phase, actionable MQTT failures and inline field errors, non-secret
@@ -49,7 +65,7 @@ with a separate private candidate selection, foreground lifetime, Stop and
 report export. Normal release, fleet and Zigbee routes still reject candidates.
 
 For exact phone steps, see [Update a mounted dimmer by Bluetooth](android-bluetooth-trial.md).
-The app version is 1.0.2. Firmware packages have independent versions and
+The app version is 1.0.3. Firmware packages have independent versions and
 qualification records.
 
 App0.6.3 explicitly queues the initial system pairing request after LE service

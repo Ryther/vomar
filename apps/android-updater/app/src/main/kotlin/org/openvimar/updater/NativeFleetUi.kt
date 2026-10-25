@@ -86,7 +86,7 @@ internal class NativeFleetUi(
     private var commonPending=false
     private var bootstrapPending=false
     private var currentServiceStatus=""
-    private var sourceMessage="Download a release from GitHub or choose a local ZIP."
+    private var sourceMessage=""
     private var releasesChecked=false
     private var deviceRows:LinearLayout?=null
     private var historyReader:((DeviceRecord)->Unit)?=null
@@ -94,6 +94,8 @@ internal class NativeFleetUi(
     private val historyMessages=mutableMapOf<String,String>()
     private data class HistoryResult(val observedAt:Long,val save:()->Unit)
     private val historyResults=mutableMapOf<String,HistoryResult>()
+    private val diagnosticsExpanded=mutableSetOf<String>()
+    private val informationExpanded=mutableSetOf<String>()
     private val expanded=activity.resources.configuration.screenWidthDp>=600
     private val filters=listOf("All","Up to date","Update available","Not updatable")
     init {
@@ -216,7 +218,7 @@ internal class NativeFleetUi(
         pageId=id;detailId=null;renderPage();scroll.scrollTo(0,0)
     }
     fun showSession(){navigate("session")}
-    private fun adoptCommon(){releaseLoad?.cancel();releaseLoad=scope.launch{runCatching{withContext(Dispatchers.IO){runtime.releases.adoptCurrentCommon()}}.onSuccess{if(it!=null)release=it}.onFailure{if(it is CancellationException)throw it;sourceNotice(it.message?:"Cannot select this common release.")};if(pageId!="session")refreshPage()}}
+    private fun adoptCommon(){releaseLoad?.cancel();releaseLoad=scope.launch{runCatching{withContext(Dispatchers.IO){runtime.releases.adoptCurrentCommon()}}.onSuccess{if(it!=null)release=it}.onFailure{if(it is CancellationException)throw it;sourceNotice(it.message?:"Cannot select this firmware package.")};if(pageId!="session")refreshPage()}}
     fun commonReleasePending(value:Boolean){if(commonPending!=value){commonPending=value;renderPage();if(value&&releaseInitialised&&release==null&&!sourceBusy)adoptCommon()}}
     fun commonBootstrapPending(value:Boolean){if(bootstrapPending!=value){bootstrapPending=value;renderPage()}}
     fun serviceStatus(value:String){if(currentServiceStatus!=value){currentServiceStatus=value;if(pageId=="session"&&bootstrapPending)renderPage()}}
@@ -268,7 +270,7 @@ internal class NativeFleetUi(
         sessionView.visibility=if(session)View.VISIBLE else View.GONE;scroll.visibility=if(session)View.GONE else View.VISIBLE
         title.maxLines=2
         title.text=when(pageId){"activity"->"Activity";"updates"->"Updates";"settings"->"Settings";"tools"->"Tools";"add"->"Add device";"device"->"Device";"session"->"Update session";"review"->"Review update";"network"->"Connections";"zigbee-import"->"Add device";else->"Devices"}
-        subtitle.text=when(pageId){"devices"->"${store.devices.size} devices · saved on this phone";"activity"->"Updates, grouped by start";"updates"->"One release for compatible dimmers";"settings"->"Connections and preferences";"session"->"Bluetooth · selected dimmer";else->""}
+        subtitle.text=when(pageId){"devices"->"${store.devices.size} ${if(store.devices.size==1)"device" else "devices"} · saved on this phone";"activity"->"Update history";"updates"->"Firmware packages";"settings"->"Connections and preferences";"session"->"Bluetooth · selected dimmer";else->""}
         subtitle.visibility=if(subtitle.text.isBlank())View.GONE else View.VISIBLE
         backButton.visibility=if(pageId in listOf("devices","activity","settings"))View.GONE else View.VISIBLE
         addButton.visibility=if(pageId=="devices")View.VISIBLE else View.GONE
@@ -291,17 +293,18 @@ internal class NativeFleetUi(
         }}
     }
     private fun devices(){
-        val pkg=state.packageSummary
-        val releaseStrip=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(16),dp(10),dp(8),dp(10));background=NativeUi.shape(activity,color(R.color.ui_panel),10)}
-        val releaseText=column()
-        releaseText.addView(text(if(release!=null)"Release ${release!!.version}" else if(pkg!=null)"Release ${pkg.targetVersion}" else "No release imported",15,true))
-        add(text(if(release!=null||pkg!=null)"Ready to review" else "One package for compatible dimmers",13,secondary=true),releaseText,3)
-        releaseStrip.addView(releaseText,LinearLayout.LayoutParams(0,-2,1f))
-        releaseStrip.addView(button(if(release!=null||pkg!=null)"Open" else "Import") {navigate("updates")}.apply{tag="fleet.release.action";contentDescription=if(release!=null||pkg!=null)"Open release" else "Import release";isEnabled=!state.busy})
-        add(releaseStrip,gap=4)
+        val available=release?.let{target->store.devices.filter{FleetPolicy.status(it,target).eligibility==Eligibility.UPDATE}}.orEmpty()
+        if(available.isNotEmpty()){
+            val strip=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(16),dp(10),dp(8),dp(10));background=NativeUi.shape(activity,color(R.color.ui_panel),10)}
+            val info=column();info.addView(text("Firmware ${release!!.version}",15,true))
+            add(text(if(available.size==1)"1 device can be updated" else "${available.size} devices can be updated",13,secondary=true),info,3)
+            strip.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+            strip.addView(button("Review update"){selected.clear();selected.addAll(available.map{it.id});navigate("review")}.apply{tag="fleet.release.action";isEnabled=!state.busy})
+            add(strip,gap=4)
+        }
         if(store.devices.isEmpty()){
             section("Add your first dimmer")
-            copy("Find it over Bluetooth, then save its name and room for future updates.")
+            copy("Find a nearby dimmer or import one from Zigbee2MQTT.")
             action("Add device",filled=true){navigate("add")}
             action("Import from Zigbee"){networkImport()}
             return
@@ -362,7 +365,7 @@ internal class NativeFleetUi(
         copy("${selected.size} selected",footer,false)
         val compatible=store.devices.count{it.id in selected&&deviceStatus(it).eligibility==Eligibility.UPDATE}
         action("Review update · $compatible compatible",footer,filled=true,enabled=release!=null&&!state.busy&&!jobBusy){navigate("review")}
-        if(release==null)copy("Select a common release in Settings → Update packages.",footer)
+        if(release==null)copy("Choose firmware in Settings → Firmware updates.",footer)
         action("Clear selection",footer){selected.clear();renderPage()}
     }
     private fun eligibilityColor(status:Eligibility)=color(when(status){Eligibility.CURRENT->R.color.ui_current;Eligibility.UPDATE->R.color.ui_available;Eligibility.BLOCKED->R.color.ui_error})
@@ -371,51 +374,58 @@ internal class NativeFleetUi(
         title.text=record.name;title.maxLines=2;title.tooltipText=record.name
         if(record.room.isNotBlank())copy(record.room,secondary=false)
         val status=deviceStatus(record)
-        section(status.label).setTextColor(eligibilityColor(status.eligibility));copy(status.reason)
+        copy(status.label,secondary=false).setTextColor(eligibilityColor(status.eligibility))
+        val savedVersion=record.networkId!=null&&ZigbeeDeviceMetadata.savedReading(record,record.networkId in activeZigbeeTopics(),network.state.value.devices.firstOrNull{it.networkId==record.networkId&&it.ieee==record.ieee})
+        copy(record.installedVersion?.let{"Firmware $it${if(savedVersion)" (saved)" else ""}"}?:"Firmware version not available.",secondary=false)
+        if(status.eligibility==Eligibility.BLOCKED)copy(status.reason)
         if(release!=null&&status.eligibility==Eligibility.UPDATE)action("Review update",filled=true){selected.clear();selected.add(record.id);navigate("review")}
-        if(record.address!=null&&record.uid.size==2)action("Check Bluetooth",enabled=!state.busy&&!jobBusy){perform("Check Bluetooth"){withContext(Dispatchers.IO){runtime.inspectDevice(record)}}}
+        val diagnostics=column()
+        if(record.address!=null&&record.uid.size==2)action("Check Bluetooth",diagnostics,enabled=!state.busy&&!jobBusy){perform("Check Bluetooth"){withContext(Dispatchers.IO){runtime.inspectDevice(record)}}}
         if(record.networkId!=null&&record.ieee!=null){
-            action("Check Zigbee update",enabled=network.state.value.connected&&!jobBusy){perform("Check Zigbee update"){val result=withContext(Dispatchers.IO){network.check(record.networkId,record.ieee)};sourceNotice(if(result.available)"The server reports an available update. Compatibility is checked separately." else "The server reports no available update.")}}
-            action("Turn on Bluetooth",enabled=network.state.value.connected&&!jobBusy){AlertDialog.Builder(activity).setTitle("Turn on Bluetooth?").setMessage("${record.name} temporarily leaves Zigbee. Keep your phone nearby to connect.").setNegativeButton("Cancel",null).setPositiveButton("Turn on"){_,_->perform("Turn on Bluetooth"){withContext(Dispatchers.IO){network.prepareBluetooth(record.networkId,record.ieee)};navigate("add")}}.show()}
+            action("Check Zigbee update",diagnostics,enabled=network.state.value.connected&&!jobBusy){perform("Check Zigbee update"){val result=withContext(Dispatchers.IO){network.check(record.networkId,record.ieee)};sourceNotice(if(result.available)"An update is available. Compatibility is checked before installation." else "No update available.")}}
+            action("Turn on Bluetooth",diagnostics,enabled=network.state.value.connected&&!jobBusy){AlertDialog.Builder(activity).setTitle("Turn on Bluetooth?").setMessage("${record.name} temporarily leaves Zigbee. Keep your phone nearby to connect.").setNegativeButton("Cancel",null).setPositiveButton("Turn on"){_,_->perform("Turn on Bluetooth"){withContext(Dispatchers.IO){network.prepareBluetooth(record.networkId,record.ieee)};navigate("add")}}.show()}
         }
-        if(FleetPolicy.matches(record,state.packageSummary))action("Open legacy session"){showSession()}
+        if(FleetPolicy.matches(record,state.packageSummary))action("Open update session",diagnostics){showSession()}
         if(record.address!=null&&record.uid.size==2&&record.firmwareKind!=FirmwareKind.STOCK){
-            section("Diagnostics")
-            copy("Turn on Bluetooth first, then read saved restart reasons and reset flags. Full records are included in the history report.")
-            action("Read recovery history",enabled=!state.busy&&!jobBusy&&historyReader!=null){historyReader?.invoke(record)}
-            historyMessages[record.id]?.let{value->add(text(value,15).apply{accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE;setPadding(dp(12),dp(12),dp(12),dp(12));background=NativeUi.shape(activity,color(R.color.ui_panel))})}
+            copy("Read saved restart history over Bluetooth.",diagnostics)
+            action("Read recovery history",diagnostics,enabled=!state.busy&&!jobBusy&&historyReader!=null){historyReader?.invoke(record)}
+            historyMessages[record.id]?.let{value->add(text(value,15).apply{accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE;setPadding(dp(12),dp(12),dp(12),dp(12));background=NativeUi.shape(activity,color(R.color.ui_panel))},diagnostics)}
             historyResults[record.id]?.let{result->
-                copy("Saved reading · ${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(result.observedAt))}")
-                action("Save history report"){result.save()}
+                copy("Saved reading · ${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(result.observedAt))}",diagnostics)
+                action("Save history report",diagnostics){result.save()}
             }
+        }
+        if(diagnostics.childCount>0){
+            add(NativeUi.disclosure(activity,"Diagnostics","Hide diagnostics",diagnostics,record.id in diagnosticsExpanded){if(it)diagnosticsExpanded.add(record.id)else diagnosticsExpanded.remove(record.id)});add(diagnostics,gap=0)
         }
         action("Edit name and room"){editRecord(record)}
         action("Remove from Devices"){
             AlertDialog.Builder(activity).setTitle("Remove ${record.name}?").setMessage("Only this phone’s organisational record is removed. Update checkpoints and reports are retained.").setNegativeButton("Cancel",null).setPositiveButton("Remove"){_,_->store.devices.removeAll{it.id==record.id};selected.remove(record.id);store.save();navigate("devices")}.show()
         }
-        section("Device identity")
-        copy(record.installedVersion?.let{"Reported firmware $it"}?:"Firmware has not been checked yet.")
+        val information=column()
         if(record.networkId!=null){
-            record.observedAt?.let{copy("Version info received · ${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(it))}")}
-            copy(if(record.networkId in activeZigbeeTopics())"Zigbee2MQTT connected · device information updates automatically." else "Connection not active · showing saved device information.")
-            if(ZigbeeDeviceMetadata.savedReading(record,record.networkId in activeZigbeeTopics(),network.state.value.devices.firstOrNull{it.networkId==record.networkId&&it.ieee==record.ieee}))copy("This is a saved reading. A new device report can update it.")
+            record.observedAt?.let{copy("Version received · ${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(it))}",information)}
+            copy(if(record.networkId in activeZigbeeTopics())"Zigbee2MQTT connected" else "Zigbee2MQTT disconnected",information)
+            if(savedVersion)copy("Showing the last saved version.",information)
         }
-        copy("Saved details help select a device. Every update checks its live identity and image compatibility again.")
+        if(record.address!=null)copy("Bluetooth: ${record.address}",information)
+        if(information.childCount>0){
+            add(NativeUi.disclosure(activity,"Device information","Hide device information",information,record.id in informationExpanded){if(it)informationExpanded.add(record.id)else informationExpanded.remove(record.id)});add(information,gap=0)
+        }
     }
     private fun addDevice(){
         section("Turn on Bluetooth")
-        copy("For a dimmer running our firmware, hold both buttons for 5 seconds. Keep the dimmer powered and stay nearby.")
+        copy("With custom firmware, hold both buttons for 5 seconds. Keep the dimmer powered and nearby.")
         action("Search Bluetooth",filled=true,enabled=!state.busy){searchBluetooth()}
-        copy("Choose the dimmer from the results, then give it a name and room. An update package is not required to add a device.")
         val modes=column().apply{visibility=View.GONE}
         copy("Blue / green: a Bluetooth session. It returns to Zigbee after a minute without activity; an update keeps it open.",modes)
         copy("Blue / red: recovery. Hold both buttons for 5 seconds to request a safe return to Zigbee. Earlier firmware may need the app to exit recovery.",modes)
         action("About Bluetooth modes"){modes.visibility=if(modes.visibility==View.VISIBLE)View.GONE else View.VISIBLE}
         add(modes,gap=0)
         section("Import from Zigbee")
-        copy("Find custom dimmers and original Vimar 30805 devices on your named Zigbee2MQTT topics.")
+        copy("Choose devices from your saved Zigbee2MQTT connection.")
         action("Choose Zigbee devices"){networkImport()}
-        settingRow("Older Bluetooth firmware","Use its existing signed package for the first preparation"){navigate("updates")}
+        settingRow("Update without adding a device","Choose a firmware package first"){navigate("updates")}
     }
     private fun editRecord(record:DeviceRecord){
         val form=column().apply{setPadding(dp(24),dp(8),dp(24),dp(16))}
@@ -443,10 +453,10 @@ internal class NativeFleetUi(
     private fun activityPage(){
         runtime.queue.groups.value.sortedByDescending{it.createdAt}.forEach{renderGroup(it)}
         if(store.batches.isEmpty()&&runtime.queue.groups.value.isEmpty()){
-            section("Your update history starts here")
-            copy("Starting an update creates a group, including when you update a single dimmer. Transfer evidence and your online confirmation stay distinct.")
+            section("No updates yet")
+            copy("Updates appear here with their progress and results.")
             if(state.packageSummary!=null)action("Open update session",filled=true){showSession()} else action("Choose local ZIP…",filled=true,enabled=!state.busy&&!sourceBusy){choosePackage()}
-            if(state.hasCheckpoint)copy("An existing engine checkpoint is available. Open the update session to resume it explicitly.")
+            if(state.hasCheckpoint)copy("An unfinished update is saved. Open the update session to resume it.")
             return
         }
         store.batches.forEachIndexed{index,batch->
@@ -462,37 +472,35 @@ internal class NativeFleetUi(
                     }
                     action(if(state.busy)"Open progress and Stop" else if(state.hasCheckpoint && !state.imagesVerified)"Open session to resume" else "Open session details",filled=true){showSession()}
                     action("Export current report…",enabled=state.reportAvailable && !state.busy){exportReport()}
-                } else copy("Historical group. Its summary is retained; this updater exports the report for the currently loaded package only.")
+                } else copy("Earlier update · only its summary is available here.")
             }
             divider()
         }
     }
     private fun updates(){
         if(commonPending){
-            section("Common release ready")
-            copy("One signed release can update compatible dimmers. Choose a nearby dimmer; its identity and loader compatibility are checked during the connection.")
+            if(release==null)section("Firmware ready")
             action("Choose Bluetooth dimmer",filled=true,enabled=!state.busy){searchBluetooth()}
         }
         release?.let{current->
-            section("Release ${current.version}")
-            copy("Signature verified · common package",secondary=false)
+            section("Firmware ${current.version}")
+            copy("Package verified",secondary=false)
             if(current.zigbeeOta!=null){
-                copy(if(current.zigbeeOta.source.isBlank())"Add a published HTTPS carrier URL to enable Zigbee updates. Bluetooth remains available." else "Zigbee carrier verified at its published URL.")
-                action("Set Zigbee carrier URL"){val input=NativeUi.field(activity,"https://…/firmware.ota",current.zigbeeOta.source,input=NativeUi.Input.ADDRESS);val dialog=AlertDialog.Builder(activity).setTitle("Zigbee carrier source").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Verify URL"){_,_->perform("Verify carrier"){release=runtime.releases.setOtaSource(current,input.text.toString().trim())}}.create();dialog.show()}
+                copy(if(current.zigbeeOta.source.isBlank())"Zigbee updates need a download URL. Bluetooth is available." else "Zigbee download verified.")
+                action("Zigbee download URL"){val input=NativeUi.field(activity,"https://…/firmware.ota",current.zigbeeOta.source,input=NativeUi.Input.ADDRESS);val dialog=AlertDialog.Builder(activity).setTitle("Zigbee download URL").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Verify URL"){_,_->perform("Verify carrier"){release=runtime.releases.setOtaSource(current,input.text.toString().trim())}}.create();dialog.show()}
             }
         }
-        action(if(sourceBusy)"Checking releases…" else "Check releases",filled=true,enabled=!sourceBusy){checkReleases()}
-        copy(sourceMessage).accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
-        section("Local package")
-        copy("Choose a signed release ZIP saved on your phone.")
+        action(if(sourceBusy)"Checking for updates…" else "Check for updates",filled=!commonPending,enabled=!sourceBusy){checkReleases()}
+        if(sourceMessage.isNotBlank())copy(sourceMessage).accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
+        section("From this phone")
         action("Choose local ZIP…",enabled=!state.busy&&!sourceBusy){choosePackage()}
-        state.packageSummary?.let{pkg->copy("Loaded: ${pkg.name} · target ${pkg.targetVersion}",secondary=false);action("Open update session"){showSession()}}
+        state.packageSummary?.let{pkg->copy("Selected firmware: ${pkg.targetVersion}",secondary=false);action("Open update session"){showSession()}}
         val source=column()
         val repo=store.preferences.getString("source",ReleaseSource.DEFAULT)?:ReleaseSource.DEFAULT
         copy(repo,source,false);action("Change source",source){editSource()}
-        add(NativeUi.disclosure(activity,"Release source","Hide release source",source,sourceSettingsExpanded){sourceSettingsExpanded=it},gap=16);add(source,gap=0)
+        add(NativeUi.disclosure(activity,"Download source","Hide download source",source,sourceSettingsExpanded){sourceSettingsExpanded=it},gap=16);add(source,gap=0)
         val details=column()
-        copy("Packages are checked against this app’s trusted firmware key. A download address or release name cannot bypass signature checks.",details)
+        copy("Only packages signed with this app’s trusted firmware key are accepted.",details)
         copy("Device compatibility is checked again before an update starts.",details)
         add(NativeUi.disclosure(activity,"Package details","Hide package details",details,packageDetailsExpanded){packageDetailsExpanded=it},gap=0);add(details,gap=0)
         if(!releasesChecked && store.preferences.getBoolean("autoCheck",true)){releasesChecked=true;checkReleases()}
@@ -502,7 +510,7 @@ internal class NativeFleetUi(
         val dialog=AlertDialog.Builder(activity).setTitle("GitHub release source").setView(input).setNegativeButton("Cancel",null).setNeutralButton("Use project default"){_,_->setSource(ReleaseSource.DEFAULT)}.setPositiveButton("Save",null).create()
         dialog.setOnShowListener{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener{val parsed=ReleaseSource.parse(input.text.toString());if(parsed==null)input.error="Enter a public GitHub owner/repository URL" else{setSource("https://github.com/$parsed");dialog.dismiss()}}};dialog.show()
     }
-    private fun setSource(source:String){releaseFetch?.cancel();sourceBusy=false;store.preferences.edit().putString("source",source).apply();sourceMessage="Source saved. Check releases to load published ZIP assets.";releasesChecked=true;renderPage()}
+    private fun setSource(source:String){releaseFetch?.cancel();sourceBusy=false;store.preferences.edit().putString("source",source).apply();sourceMessage="Source saved. Check for updates to download firmware.";releasesChecked=true;renderPage()}
     private fun checkReleases(){
         if(sourceBusy)return
         val source=store.preferences.getString("source",ReleaseSource.DEFAULT)?:ReleaseSource.DEFAULT
@@ -523,20 +531,22 @@ internal class NativeFleetUi(
         settingRow("Appearance",theme){
             AlertDialog.Builder(activity).setTitle("Appearance").setSingleChoiceItems(themes,themes.indexOf(theme)){dialog,which->store.preferences.edit().putString("theme",themes[which]).apply();dialog.dismiss();activity.recreate()}.setNegativeButton("Cancel",null).show()
         }
-        settingRow("Update packages","GitHub releases or a local ZIP"){navigate("updates")}
+        settingRow("Firmware updates","Download a release or choose a ZIP"){navigate("updates")}
         section("Connections")
-        settingRow("Zigbee2MQTT",runCatching{if(network.state.value.connected)"${network.loadProfile()?.label} · Connected" else "${network.loadProfiles().size} saved connections · Not connected"}.getOrDefault("Saved connections unavailable")){navigate("network")}
+        val connections=runCatching{
+            if(network.state.value.connected)"${network.loadProfile()?.label} · Connected"
+            else {val count=network.loadProfiles().size;"$count saved ${if(count==1)"connection" else "connections"} · Not connected"}
+        }.getOrDefault("Saved connections unavailable")
+        settingRow("Zigbee2MQTT",connections){navigate("network")}
         settingRow("Bluetooth","Android permissions and pairing"){requestBluetooth()}
         section("Advanced")
-        settingRow("Tools","First installation, DK diagnostics and firmware testing"){navigate("tools")}
+        settingRow("Tools","Initial setup, recovery and diagnostics"){navigate("tools")}
         section("Release checks")
         add(CheckBox(activity).apply{text="Check GitHub when Updates opens";setTextColor(color(R.color.ui_text));minHeight=dp(48);isChecked=store.preferences.getBoolean("autoCheck",true);setOnCheckedChangeListener{_,checked->store.preferences.edit().putBoolean("autoCheck",checked).apply()}})
-        section("Local data")
-        copy("Names and rooms stay on this phone. Original firmware backups are saved separately from update packages.")
-        copy("Vimar Updater\nFor custom-firmware Vimar 30805 dimmers.")
+        val appVersion=runCatching{activity.packageManager.getPackageInfo(activity.packageName,0).versionName}.getOrNull()
+        copy(listOfNotNull("Vimar Updater",appVersion).joinToString(" · "))
     }
     private fun tools(){
-        copy("Choose a task. These tools do not start an update or access a device until you ask.")
         section("Install")
         settingRow("First installation","Back up a stock dimmer and review its first installation with the DK"){activity.startActivity(Intent(activity,InitialInstallActivity::class.java))}
         section("Check and recover")
@@ -545,12 +555,12 @@ internal class NativeFleetUi(
         if(state.reportAvailable){section("Reports");action("Save latest update report",enabled=!state.busy){exportReport()}}
     }
     private fun reviewUpdate(){
-        val target=release?:run{copy("Choose a common release first.");action("Choose release"){navigate("updates")};return}
+        val target=release?:run{copy("Choose a firmware package first.");action("Choose release"){navigate("updates")};return}
         val records=store.devices.filter{it.id in selected}
         val included=records.filter{deviceStatus(it).eligibility==Eligibility.UPDATE}
         val excluded=records-included.toSet()
         copy("${included.size} compatible · ${excluded.size} excluded",secondary=false)
-        copy("Release ${target.version}. Bluetooth needs this phone nearby. Each dimmer is checked again before an update starts.")
+        copy("Firmware ${target.version}. Keep this phone nearby for Bluetooth updates.")
         section("Run order")
         val modes=RadioGroup(activity)
         listOf("Sequential" to "Finish one dimmer before starting the next.","Across networks" to "One Zigbee update per network and one Bluetooth connection.").forEachIndexed{i,(label,help)->modes.addView(RadioButton(activity).apply{id=View.generateViewId();text="$label\n$help";textSize=14f;setTextColor(color(R.color.ui_text));setPadding(0,dp(8),0,dp(8));minHeight=dp(64);tag=i})}
@@ -614,8 +624,8 @@ internal class NativeFleetUi(
                 }
                 if(job.route==FleetRoute.ZIGBEE&&job.state in setOf(FleetJobState.UNCERTAIN_RESET,FleetJobState.AWAITING_RETURN))action("Check server status",filled=true,enabled=!jobBusy&&network.state.value.connected){perform("Check update status"){runtime.queue.reconcile(job.id,FleetJobReconciler{network.reconcile(it)})}}
                 if(job.route==FleetRoute.BLE&&job.state in setOf(FleetJobState.PAUSED,FleetJobState.UNCERTAIN_RESET,FleetJobState.AWAITING_RETURN)){
-                    action("Recheck Bluetooth evidence",filled=job.state!=FleetJobState.AWAITING_RETURN,enabled=!jobBusy&&!state.busy){perform("Read update evidence"){withContext(Dispatchers.IO){runtime.refreshBleEvidence(job.id)}}}
-                    action("Review exact device session",enabled=!jobBusy&&!state.busy){perform("Select device session"){withContext(Dispatchers.IO){runtime.selectBleSession(job.id)};(activity as? MainActivity)?.refreshSelectedSession();showSession()}}
+                    action("Verify firmware over Bluetooth",filled=job.state!=FleetJobState.AWAITING_RETURN,enabled=!jobBusy&&!state.busy){perform("Read update evidence"){withContext(Dispatchers.IO){runtime.refreshBleEvidence(job.id)}}}
+                    action("Open device session",enabled=!jobBusy&&!state.busy){perform("Select device session"){withContext(Dispatchers.IO){runtime.selectBleSession(job.id)};(activity as? MainActivity)?.refreshSelectedSession();showSession()}}
                 }
                 if(job.route==FleetRoute.BLE&&job.state==FleetJobState.AWAITING_RETURN)action("Confirm this dimmer is back online",filled=true){AlertDialog.Builder(activity).setTitle("Is ${job.device.name} back online?").setMessage("Confirm only after checking this exact dimmer in Zigbee2MQTT or Home Assistant.").setNegativeButton("Not yet",null).setPositiveButton("Back online"){_,_->FleetUpdateService.command(activity,FleetUpdateService.RETURN,group.id,job.id)}.show()}
 
@@ -664,7 +674,7 @@ internal class NativeFleetUi(
         }
         zigbeeSelection.retainAll(network.state.value.devices.filter{r->profile.networks.any{it.id==r.networkId}}.map{it.id}.toSet())
         submit.isEnabled=zigbeeSelection.isNotEmpty();add(submit)
-        action("Edit topics"){navigate("network")}
+        action("Edit topics"){rememberRoute();pageId="network";connectionsUi.openTopics(profile.id);renderPage();scroll.scrollTo(0,0)}
     }
     private fun watch(field:EditText,changed:(String)->Unit){
         field.addTextChangedListener(object:TextWatcher{

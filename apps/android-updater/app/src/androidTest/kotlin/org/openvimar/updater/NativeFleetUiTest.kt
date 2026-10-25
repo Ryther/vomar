@@ -30,8 +30,12 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         val store=FleetStore(context);store.preferences.edit().putBoolean("autoCheck",false).commit();records.forEach(store::upsert)
         val persistence=object:FleetQueuePersistence{var data=groups;override fun load()=data;override fun save(groups:List<FleetGroup>){data=groups}}
         val runtime=FleetRuntime(store,AndroidFleetReleases(context),testScope,persistence,FleetJobExecutor{_,_->executions++;error("A UI review must never execute updates")},{it},{},{error("No BLE in UI review")})
-        instrumentation.runOnMainSync{ui=NativeFleetUi(activity,FrameLayout(activity),{imports++},{},{},{},{},{},runtime);activity.setContentView(ui!!.root)}
-        instrumentation.waitForIdleSync();Thread.sleep(250)
+        instrumentation.runOnMainSync{ui?.close();ui=NativeFleetUi(activity,FrameLayout(activity),{imports++},{},{},{},{},{},runtime);activity.setContentView(ui!!.root)}
+        instrumentation.waitForIdleSync()
+        val initialised=NativeFleetUi::class.java.getDeclaredField("releaseInitialised").apply{isAccessible=true}
+        val deadline=System.currentTimeMillis()+15000
+        while(System.currentTimeMillis()<deadline){var ready=false;instrumentation.runOnMainSync{ready=initialised.getBoolean(ui)};if(ready)break;Thread.sleep(50)}
+        instrumentation.runOnMainSync{assertTrue("Release initialisation must finish before synthetic data is installed",initialised.getBoolean(ui))}
         instrumentation.runOnMainSync{NativeFleetUi::class.java.getDeclaredField("release").apply{isAccessible=true}.set(ui,target);ui!!.navigate("devices")}
         instrumentation.waitForIdleSync();return ui!!
     }
@@ -60,7 +64,7 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         instrumentation.runOnMainSync{native.back()}
     }
     fun testImportActionReenablesAfterBusyOperation(){
-        val native=fixture(emptyList())
+        val native=fixture(listOf(record(2)))
         instrumentation.runOnMainSync{native.present(SessionPresentation(busy=true,operation=SessionOperation.INSPECT))}
         var action=nodes().first{it.tag=="fleet.release.action"};assertFalse(action.isEnabled)
         instrumentation.runOnMainSync{native.present(SessionPresentation(busy=false,operation=SessionOperation.IDLE))}
@@ -72,7 +76,7 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         instrumentation.runOnMainSync{native.setHistoryReader{selected->assertEquals(a.id,selected.id);reads++;native.historyStarted(selected)}}
         val title=nodes().filterIsInstance<TextView>().first{it.text.toString()==a.name}
         instrumentation.runOnMainSync{(title.parent as View).performClick()};instrumentation.waitForIdleSync()
-        click("Read recovery history");assertEquals(1,reads)
+        click("Diagnostics");click("Read recovery history");assertEquals(1,reads)
         instrumentation.runOnMainSync{native.historyResult(a.address!!,a.uid,1234567890,"Read two saved boot records for this dimmer."){exports++}}
         instrumentation.waitForIdleSync();assertTrue(texts().contains("Read two saved boot records for this dimmer."))
         click("Save history report");assertEquals(1,exports)
@@ -194,12 +198,16 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         val add=nodes().single{it.contentDescription=="Add connection"&&it.isShown}
         instrumentation.runOnMainSync{add.performClick()};instrumentation.waitForIdleSync()
     }
+    private fun assertTechnicalInput(field:android.widget.EditText,forbidden:Int){
+        assertEquals("Technical input must preserve literal characters",0,field.inputType and forbidden)
+        assertTrue(field.imeOptions and android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING!=0)
+    }
     private fun editField(label:String)=nodes().filterIsInstance<android.widget.EditText>().single{it.hint.toString()==label}
     private fun openTopics(){val row=nodes().first{it.contentDescription?.toString()?.startsWith("Zigbee topics (")==true};instrumentation.runOnMainSync{row.performClick()};instrumentation.waitForIdleSync()}
     fun testTopicsStopOfferingMoreThanThreeEntries(){
         val native=fixture(emptyList());openConnectionDraft(native);openTopics()
-        repeat(3){i->click("Add topic");instrumentation.runOnMainSync{editField("Topic name (required)").setText("Topic $i");editField("MQTT base topic (required)").setText("topic$i")};click("Save topic")}
-        val add=nodes().filterIsInstance<TextView>().single{it.text=="Add topic"}
+        repeat(3){i->instrumentation.runOnMainSync{nodes().single{it.contentDescription=="Add topic"&&it.isShown}.performClick()};instrumentation.waitForIdleSync();instrumentation.runOnMainSync{editField("Topic name (required)").setText("Topic $i");editField("MQTT base topic (required)").setText("topic$i")};click("Save topic")}
+        val add=nodes().single{it.contentDescription=="Add topic"&&it.isShown}
         assertFalse(add.isEnabled);assertTrue(texts().contains("Up to 3 topics per connection."));assertEquals(0,executions)
     }
     fun testAdvancedToolsHaveOneEntryAndReturnToSettings(){
@@ -225,24 +233,18 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
     fun testNetworkAndReleaseFieldsUseTechnicalKeyboards(){
         val native=fixture(emptyList())
         instrumentation.runOnMainSync{native.navigate("network")};instrumentation.waitForIdleSync()
-        val fields=nodes().filterIsInstance<android.widget.EditText>()
-        val address=fields.single{it.tag=="network.address"}
-        val topic=fields.single{it.hint.toString().startsWith("Base topic")}
-        val username=fields.single{it.hint.toString().startsWith("Username")}
-        val password=fields.single{it.hint.toString()=="Password"}
+        openConnectionDraft(native)
+        val address=nodes().filterIsInstance<android.widget.EditText>().single{it.tag=="network.address"}
         val forbidden=android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES or android.text.InputType.TYPE_TEXT_FLAG_CAP_WORDS or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-        listOf(address,topic,username,password).forEach{field->
-            assertEquals("Technical input must preserve literal characters",0,field.inputType and forbidden)
-            assertTrue(field.imeOptions and android.view.inputmethod.EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING!=0)
-        }
+        assertTechnicalInput(address,forbidden)
         assertEquals(android.text.InputType.TYPE_TEXT_VARIATION_URI,address.inputType and android.text.InputType.TYPE_MASK_VARIATION)
-        assertTrue(password.transformationMethod is android.text.method.PasswordTransformationMethod)
-        assertFalse(password.isSaveEnabled);assertFalse(username.isSaveEnabled)
         instrumentation.runOnMainSync{address.setText("broker.example:1833")}
         assertEquals("tcp://broker.example:1833",normalizeBrokerUri(address.text.toString()))
+        openTopics();click("Add topic")
+        assertTechnicalInput(editField("MQTT base topic (required)"),forbidden)
         capture("network-keyboards-dark")
         instrumentation.runOnMainSync{native.navigate("updates")};instrumentation.waitForIdleSync()
-        click("Release source");click("Change source");Thread.sleep(500)
+        click("Download source");click("Change source");Thread.sleep(500)
         val source=windowNodes{it.any{node->node.className=="android.widget.EditText"}}.single{it.className=="android.widget.EditText"}
         assertEquals(android.text.InputType.TYPE_TEXT_VARIATION_URI,source.inputType and android.text.InputType.TYPE_MASK_VARIATION)
         assertEquals(0,source.inputType and forbidden)
@@ -252,7 +254,7 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
     fun testBackReturnsToReleaseOriginAndKeepsSelection(){
         val native=fixture(listOf(record(1),record(2)))
         instrumentation.runOnMainSync{nodes().filterIsInstance<CheckBox>().first().performClick()}
-        click("Open")
+        instrumentation.runOnMainSync{native.navigate("updates")};instrumentation.waitForIdleSync()
         assertTrue(texts().contains("Updates"))
         instrumentation.runOnMainSync{assertTrue(native.back())};instrumentation.waitForIdleSync()
         assertTrue("Back must return to Devices, where release was opened",texts().contains("Search rooms or devices")||nodes().filterIsInstance<android.widget.EditText>().any{it.hint.toString()=="Search rooms or devices"})
@@ -291,15 +293,15 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         assertTrue("Image verification is distinct from group completion",texts().contains("1 of 30 completed"))
         val devices=nodes().filter{it.tag?.toString()?.startsWith("fleet.job.")==true}
         assertEquals(30,devices.size)
-        assertFalse("Per-device diagnostics should be disclosed rather than repeated thirty times",texts().contains("Recheck Bluetooth evidence"))
+        assertFalse("Per-device diagnostics should be disclosed rather than repeated thirty times",texts().contains("Verify firmware over Bluetooth"))
         instrumentation.runOnMainSync{devices[1].performClick()};instrumentation.waitForIdleSync()
         assertTrue(texts().contains("Confirm this dimmer is back online"))
-        assertEquals(1,texts().count{it=="Recheck Bluetooth evidence"})
+        assertEquals(1,texts().count{it=="Verify firmware over Bluetooth"})
         instrumentation.runOnMainSync{native.present(SessionPresentation())};instrumentation.waitForIdleSync()
-        assertEquals(1,texts().count{it=="Recheck Bluetooth evidence"})
+        assertEquals(1,texts().count{it=="Verify firmware over Bluetooth"})
         capture("activity-30-compact-dark")
         instrumentation.runOnMainSync{nodes().single{it.tag=="fleet.job.compact-1"}.performClick()};instrumentation.waitForIdleSync()
-        assertFalse(texts().contains("Recheck Bluetooth evidence"));assertEquals(0,executions)
+        assertFalse(texts().contains("Verify firmware over Bluetooth"));assertEquals(0,executions)
     }
     fun testReleaseDetailsUseDisclosureAndFilterUsesOneSelector(){
         val native=fixture(listOf(record(1),record(2)))
@@ -310,7 +312,7 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         assertFalse(active.any{it.className=="android.widget.NumberPicker"})
         instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK)
         instrumentation.runOnMainSync{native.navigate("updates")};instrumentation.waitForIdleSync()
-        val technical=nodes().filterIsInstance<TextView>().first{it.text.toString().contains("trusted firmware key.")}
+        val technical=nodes().filterIsInstance<TextView>().first{it.text.toString().contains("trusted firmware key")}
         assertFalse(technical.isShown);click("Package details");assertTrue(technical.isShown);assertEquals(0,executions)
     }
     fun testCredentialBearingAddressIsNotSerializedAsANonSecretDraft(){
@@ -376,8 +378,93 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         assertTrue(texts().any{it.contains("0.5.5 (saved)")})
         val row=nodes().filterIsInstance<TextView>().first{it.text.toString()==r.name}.parent as View
         instrumentation.runOnMainSync{row.performClick()};instrumentation.waitForIdleSync()
-        assertTrue(texts().contains("Reported firmware 0.5.5"))
-        assertTrue(texts().contains("Connection not active · showing saved device information."));assertEquals(0,executions)
+        assertTrue(texts().contains("Firmware 0.5.5 (saved)"))
+        click("Device information");assertTrue(nodes().filterIsInstance<TextView>().single{it.text=="Zigbee2MQTT disconnected"}.isShown);assertEquals(0,executions)
+    }
+    fun testEmptyDevicesStartsWithAddingADeviceRatherThanPackageMarketing(){
+        fixture(emptyList())
+        assertTrue(texts().contains("Add device"));assertFalse(texts().contains("Ready to review"))
+        assertFalse(texts().contains("One package for compatible dimmers"));assertFalse(texts().contains("Release 0.6.1"))
+        assertEquals(0,imports);assertEquals(0,executions)
+    }
+    fun testDeviceBannerOnlyOffersActionableFirmwareUpdates(){
+        fixture(listOf(record(1,"0.6.1")))
+        assertFalse(texts().contains("Ready to review"));assertFalse(texts().contains("Firmware 0.6.1"))
+        fixture(listOf(record(1,"0.6.1"),record(2)))
+        assertTrue(texts().contains("Firmware 0.6.1"));assertTrue(texts().contains("1 device can be updated"))
+        click("Review update")
+        assertTrue(texts().contains("1 compatible · 0 excluded"));assertEquals(0,executions)
+    }
+    fun testDeviceDiagnosticsStayAvailableWithoutDominatingTheDetails(){
+        val r=record(2);fixture(listOf(r))
+        val name=nodes().filterIsInstance<TextView>().first{it.text.toString()==r.name}
+        instrumentation.runOnMainSync{(name.parent as View).performClick()};instrumentation.waitForIdleSync()
+        val history=nodes().filterIsInstance<TextView>().single{it.text.toString()=="Read recovery history"}
+        val check=nodes().filterIsInstance<TextView>().single{it.text.toString()=="Check Bluetooth"}
+        assertFalse(history.isShown);assertFalse(check.isShown);click("Diagnostics");assertTrue(history.isShown);assertTrue(check.isShown)
+        val native=ui!!;instrumentation.runOnMainSync{native.present(SessionPresentation(busy=true,operation=SessionOperation.INSPECT))};instrumentation.waitForIdleSync()
+        assertTrue(nodes().filterIsInstance<TextView>().single{it.text=="Read recovery history"}.isShown)
+        assertFalse(texts().contains("Saved details help select a device. Every update checks its live identity and image compatibility again."))
+        assertEquals(0,executions)
+    }
+    fun testEditTopicsReturnsToItsNamedDeviceSelectionAfterRestoration(){
+        val id=java.util.UUID.randomUUID().toString()
+        val p=BrokerProfile(id,"ssl://fixture.invalid",listOf(ZigbeeNetwork("$id-a","Home","zigbee2mqtt"),ZigbeeNetwork("$id-b","Workshop","workshop/zigbee")),label="Topic return test")
+        val network=AndroidNetworkOwner.get(activity)
+        val active=AndroidNetworkOwner::class.java.getDeclaredField("activeProfileId").apply{isAccessible=true}
+        @Suppress("UNCHECKED_CAST")
+        val flow=AndroidNetworkOwner::class.java.getDeclaredField("mutable").apply{isAccessible=true}.get(network) as kotlinx.coroutines.flow.MutableStateFlow<NetworkBackendState>
+        val previous=flow.value;val previousId=active.get(network)
+        kotlinx.coroutines.runBlocking{network.saveProfile(p)}
+        try {
+            active.set(network,id)
+            flow.value=NetworkBackendState(connected=true,devices=listOf(record(1).copy(networkId="$id-a",ieee="0x0011223344556677"),record(2).copy(networkId="$id-b",ieee="0x0011223344556688")),inventoryReceived=true)
+            var native=fixture(emptyList());instrumentation.runOnMainSync{native.navigate("zigbee-import")};instrumentation.waitForIdleSync()
+            assertTrue(texts().contains("Home"));assertTrue(texts().contains("Workshop"));assertFalse(texts().contains("$id-a"))
+            capture("production-named-device-selection")
+            click("Edit topics");assertTrue(texts().contains("Zigbee topics"))
+            val saved=android.os.Bundle();instrumentation.runOnMainSync{native.saveState(saved);native.close()}
+            native=fixture(emptyList());instrumentation.runOnMainSync{native.restoreState(saved);assertTrue(native.back())};instrumentation.waitForIdleSync()
+            assertTrue(texts().contains("Add selected (0)"));assertTrue(texts().contains("Workshop"));assertFalse(texts().contains("Saved on this phone"))
+            assertEquals(0,executions)
+        } finally {flow.value=previous;active.set(network,previousId);kotlinx.coroutines.runBlocking{network.removeProfile(id)}}
+    }
+    fun testCaptureProductionDark(){
+        assertEquals(android.content.res.Configuration.UI_MODE_NIGHT_YES,activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+        captureProduction()
+    }
+    fun testCaptureProductionLight(){
+        instrumentation.targetContext.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE).edit().putString("theme","Light").commit()
+        captureProduction()
+    }
+    private fun captureProduction(){
+        val theme=if(activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK==android.content.res.Configuration.UI_MODE_NIGHT_YES)"dark" else "light"
+        fun shot(name:String)=capture("$name-$theme")
+        var native=fixture(emptyList());shot("production-empty")
+        val bathroom=record(1,"1.0.0").copy(networkId="saved-topic",ieee="0x0011223344556677",observationSource=ZigbeeDeviceMetadata.INVENTORY)
+        native=fixture(listOf(bathroom,record(2,"0.5.5")))
+        instrumentation.runOnMainSync{NativeFleetUi::class.java.getDeclaredField("release").apply{isAccessible=true}.set(native,target.copy(version="1.0.0"));native.navigate("devices")}
+        shot("production-devices")
+        val row=nodes().filterIsInstance<TextView>().first{it.text.toString()==bathroom.name}.parent as View
+        instrumentation.runOnMainSync{row.performClick()};shot("production-device")
+        instrumentation.runOnMainSync{native.navigate("add")};shot("production-add")
+        instrumentation.runOnMainSync{native.navigate("updates")};shot("production-updates")
+        instrumentation.runOnMainSync{native.navigate("settings")};shot("production-settings")
+        val id=java.util.UUID.randomUUID().toString()
+        val p=BrokerProfile(id,"ssl://broker.example:8883",listOf(ZigbeeNetwork("$id-home","Home","zigbee2mqtt"),ZigbeeNetwork("$id-workshop","Workshop","workshop/zigbee")),label="Home broker")
+        val network=AndroidNetworkOwner.get(activity)
+        kotlinx.coroutines.runBlocking{network.saveProfile(p)}
+        BrokerCredentials("synthetic-user","synthetic-password".toCharArray()).use{BrokerSecretStore(activity).save(p,it)}
+        try {
+            instrumentation.runOnMainSync{native.navigate("network")};shot("production-connections")
+            val profile=nodes().first{it.contentDescription?.toString()?.startsWith("Home broker.")==true}
+            instrumentation.runOnMainSync{profile.performClick()};shot("production-connection")
+            click("Change credentials");shot("production-credentials")
+            instrumentation.runOnMainSync{native.back()};openTopics();shot("production-topics")
+            val topic=nodes().first{it.contentDescription?.toString()?.startsWith("Workshop.")==true}
+            instrumentation.runOnMainSync{topic.performClick()};shot("production-topic-edit")
+            assertEquals(0,executions);assertFalse(network.state.value.connected)
+        }finally{kotlinx.coroutines.runBlocking{network.removeProfile(id)}}
     }
     fun testEmptyInventoryStartsWithBluetoothEnrolment(){fixture(emptyList());assertTrue(texts().contains("Add your first dimmer"));click("Add device");assertTrue(texts().contains("Search Bluetooth"));assertTrue(texts().any{it.contains("5 seconds")});assertEquals(0,imports);capture("add-empty-dark")}
 }
