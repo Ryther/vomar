@@ -42,6 +42,13 @@ do not replace it with GitHub's generated default setup. Verify successful
 extraction and uploaded analyses for all configured languages. An API response
 saying there are no analyses is not proof that code scanning is disabled.
 
+If an upload reports that code scanning is not enabled, inspect **Settings →
+Advanced Security → CodeQL analysis** as the repository owner. Retain the
+existing advanced workflow rather than generating a default setup. Check the
+actual UI state if feature APIs reject an enable request; do not interpret a
+missing analysis as a requirement to purchase a private-repository plan for this
+public project.
+
 ## Create protected environments
 
 Create these environments with a custom deployment branch policy allowing only
