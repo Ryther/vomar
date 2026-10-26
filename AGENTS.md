@@ -36,6 +36,40 @@ local handoff. A green status badge is not evidence of complete device safety.
 This repository is a local research workspace for reverse engineering the
 Vimar View Wireless Linea 30805 dimmer and preparing a custom nRF52840 firmware.
 
+## Commit messages and push readiness
+
+Every authored commit and pull request title must use the Conventional Commit
+format accepted by `.cz.toml`. Component names are scopes, not commit types:
+use `feat(android): ...` or `fix(android): ...`, never `android: ...`.
+Release Please owns version/changelog proposals; do not use `cz bump`.
+
+Before declaring a branch ready to push, refresh the destination remote ref and
+validate **every outgoing commit**, including commits inherited through merges
+or rebases. For a push to `origin/main`, use the pinned development environment:
+
+```sh
+git fetch origin main
+cz check --rev-range origin/main..HEAD
+git diff --check
+python -m tools.release.public_tree --include-untracked --output _test/public-tree.json
+python -m tools.release.install_check_tools --output _test/check-tools
+_test/check-tools/gitleaks git --redact --no-banner --log-opts=HEAD
+```
+
+Run the range check when outgoing commits exist; use the actual destination
+instead of `origin/main` when pushing elsewhere. Checking only `HEAD`, a PR
+title, YAML syntax or passing application tests does not validate that range.
+Correct invalid unpublished messages within the user's authorization; never
+weaken the validator to accept them. Rewriting pushed history needs explicit
+authorization. Preserve commit contents and unrelated work when rewording.
+
+Review author/committer metadata and historical content for personal information
+as well as secrets before an OSS publication. Report the checked ref/SHA,
+results, any remaining findings and unverified remote settings. A clean secret
+scan does not establish that Git author names or email addresses are anonymous.
+Push only the authorized branch; do not use `--all`, `--mirror` or force-push
+implicitly. Verify the remote branch SHA after pushing.
+
 Before substantial work, read:
 
 - `docs/goals.md`
