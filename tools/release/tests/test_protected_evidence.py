@@ -31,8 +31,9 @@ def test_missing_or_stale_delivered_graph_review_cannot_pass():
 
 def test_pr_and_release_require_their_respective_sonar_analysis():
     root=Path(__file__).resolve().parents[3];policy=json.loads((root/'.github/required-checks.json').read_text())
-    assert 'Sonar required' in policy['pullRequest'] and 'Sonar required' in policy['release']
-    assert set(policy['pullRequest'])<=set(policy['release'])
+    assert 'sonar-pr / Sonar required' in policy['pullRequest']
+    assert 'Sonar required' in policy['release']
+    assert (set(policy['pullRequest'])-{'sonar-pr / Sonar required'}) <= set(policy['release'])
 
 
 def test_publisher_rejects_missing_protected_reviews_before_crypto_or_publication(tmp_path,monkeypatch):
