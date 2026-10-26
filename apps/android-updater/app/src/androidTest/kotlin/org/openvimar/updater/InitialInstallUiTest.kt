@@ -161,7 +161,7 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
             InitialInstallActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(screen)
         }
         instrumentation.waitForIdleSync()
-        val views=nodes(screen.window.decorView);val bar=views.filterIsInstance<android.widget.ProgressBar>().single()
+        val views=nodes(screen.window.decorView);val bar=views.filterIsInstance<android.widget.ProgressBar>().single{it.tag=="initial.progress"}
         assertFalse(bar.isIndeterminate);assertEquals(490,bar.progress)
         val scroll=views.filterIsInstance<android.widget.ScrollView>().single()
         instrumentation.runOnMainSync{scroll.scrollTo(0,10000)};instrumentation.waitForIdleSync()
@@ -179,6 +179,65 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
         }
         instrumentation.waitForIdleSync();assertTrue(bar.isShown);assertEquals(500,bar.progress)
         captureProgress("owner-prestart-progress")
+    }
+    fun testLightRepairProgressUsesTheSelectedNativeTheme(){
+        val prefs=instrumentation.targetContext.getSharedPreferences("fleet-ui",android.content.Context.MODE_PRIVATE)
+        val previous=prefs.getString("theme",null)
+        try{
+            assertTrue(prefs.edit().putString("theme","Light").commit())
+            testRepairShowsSeparateStageTotalAndMeasuredEstimate()
+            assertEquals(android.content.res.Configuration.UI_MODE_NIGHT_NO,activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK)
+        }finally{val edit=prefs.edit();if(previous==null)edit.remove("theme") else edit.putString("theme",previous);assertTrue(edit.commit())}
+    }
+    fun testRepairShowsSeparateStageTotalAndMeasuredEstimate(){
+        setActivityInitialTouchMode(true);instrumentation.setInTouchMode(true)
+        val screen=activity;instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync{
+            (field("observing").get(screen) as? kotlinx.coroutines.Job)?.cancel()
+            field("snapshot").set(screen,InitialInstallSnapshot(InitialInstallPhase.INSTALLING,resume=true,
+                progressDone=0x1d000,progressTotal=0x100000,progressLabel="Repairing firmware",
+                overallProgressPermille=186,etaMillis=120000,progressMeasuredAtMillis=System.nanoTime()/1_000_000))
+            InitialInstallActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(screen)
+        }
+        instrumentation.waitForIdleSync();val all=nodes(screen.window.decorView)
+        val bars=all.filterIsInstance<android.widget.ProgressBar>().filter{it.isShown};assertEquals(2,bars.size)
+        assertEquals(110,bars.single{it.tag=="initial.progress"}.progress)
+        assertEquals(186,bars.single{it.tag=="initial.overall.progress"}.progress)
+        assertTrue(all.filterIsInstance<TextView>().any{it.text.toString()=="Overall repair · 18%"})
+        assertTrue(all.filterIsInstance<TextView>().any{it.text.toString()=="About 2 min remaining"})
+        val phaseLocation=IntArray(2);val overallLocation=IntArray(2)
+        bars.single{it.tag=="initial.progress"}.getLocationOnScreen(phaseLocation)
+        bars.single{it.tag=="initial.overall.progress"}.getLocationOnScreen(overallLocation)
+        assertTrue("Overall bar must be below current phase",overallLocation[1]>phaseLocation[1])
+        val path=File(instrumentation.targetContext.getExternalFilesDir("ui-review-v107"),"repair-overall.png");path.parentFile!!.mkdirs()
+        instrumentation.uiAutomation.takeScreenshot().let{bitmap->try{path.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}}finally{bitmap.recycle()}}
+        instrumentation.runOnMainSync{
+            val previous=field("snapshot").get(screen) as InitialInstallSnapshot
+            field("snapshot").set(screen,previous.copy(phase=InitialInstallPhase.STARTING,progressDone=0x80000,progressLabel="Checking firmware",overallProgressPermille=500))
+            InitialInstallActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(screen)
+        }
+        instrumentation.waitForIdleSync()
+        assertTrue(nodes(screen.window.decorView).filterIsInstance<TextView>().any{it.text.toString()=="Overall verification · 50%"})
+    }
+    fun testStaleEstimateAndTerminalStatesDoNotShowAFalseCountdown(){
+        setActivityInitialTouchMode(true);instrumentation.setInTouchMode(true)
+        val screen=activity;instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync{
+            (field("observing").get(screen) as? kotlinx.coroutines.Job)?.cancel()
+            field("snapshot").set(screen,InitialInstallSnapshot(InitialInstallPhase.INSTALLING,resume=true,
+                progressDone=4096,progressTotal=0x100000,progressLabel="Repairing firmware",
+                overallProgressPermille=112,etaMillis=120000,progressMeasuredAtMillis=System.nanoTime()/1_000_000-20000))
+            InitialInstallActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(screen)
+        }
+        instrumentation.waitForIdleSync()
+        assertTrue(nodes(screen.window.decorView).filterIsInstance<TextView>().any{it.isShown&&it.text.toString()=="Estimating remaining time…"})
+        instrumentation.runOnMainSync{
+            val previous=field("snapshot").get(screen) as InitialInstallSnapshot
+            field("snapshot").set(screen,previous.copy(phase=InitialInstallPhase.FAILED))
+            InitialInstallActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(screen)
+        }
+        instrumentation.waitForIdleSync()
+        assertTrue(nodes(screen.window.decorView).filterIsInstance<android.widget.ProgressBar>().none{it.isShown})
     }
     fun testIdleScreenRemainsScrollableWithVisibleSystemInsets(){
         setActivityInitialTouchMode(true);instrumentation.setInTouchMode(true)

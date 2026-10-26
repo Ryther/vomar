@@ -29,7 +29,7 @@ def test_process_wide_gate_keeps_one_owner_until_explicit_release_and_rejects_st
     subprocess.run([*programming,'gate'],check=True)
 
 
-@pytest.mark.parametrize('scenario',['wire-policy','wire-wait','wire-posted-read','wire-core-registers','wire-cache'])
+@pytest.mark.parametrize('scenario',['wire-policy','wire-wait','wire-posted-read','wire-core-registers','wire-cache','wire-performance','wire-flash-wait','wire-flash-fault','wire-flash-parity','wire-flash-ready','lease-erase-ready-deadline'])
 def test_real_jlink_programming_wire_obeys_independent_per_clock_target(programming,scenario):
     subprocess.run([*programming,scenario],check=True)
 

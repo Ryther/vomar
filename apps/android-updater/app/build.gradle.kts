@@ -8,7 +8,7 @@ android {
     // Kotlin internal ABI names differ between debug/release modules.
     testBuildType=providers.gradleProperty("vimarTestBuildType").orElse("debug").get().also { require(it in setOf("debug","release")) }
     namespace="org.openvimar.updater"; compileSdk=35
-    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=26; versionName="1.0.6"; testInstrumentationRunner="android.test.InstrumentationTestRunner" }
+    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=27; versionName="1.0.7"; testInstrumentationRunner="android.test.InstrumentationTestRunner" }
     compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget="17" }
 }

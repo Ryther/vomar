@@ -18,6 +18,8 @@ internal data class InitialInstallSnapshot(val phase:InitialInstallPhase=Initial
     val watchdog:ObservedWatchdogProfile?=null,val watchdogHandoff:String?=null,
     val programmingPreparation:String?=null,val installStep:String?=null,val installAddress:Int?=null,
     val progressDone:Int=0,val progressTotal:Int=0,val progressLabel:String="",
+    val stageDone:Int?=null,val stageTotal:Int?=null,val overallProgressPermille:Int?=null,
+    val etaMillis:Long?=null,val progressMeasuredAtMillis:Long?=null,
     val resume:Boolean=false,val resumeHeadSha256:String?=null,val resumeFrontierPage:Int?=null,val resumeClassification:String?=null)
 internal class InitialInstallReceipt private constructor(val binding:InstallBinding,val ficrSha256:String,val uicrSha256:String) {
     private val available=AtomicBoolean(true)
@@ -53,6 +55,13 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
     private val persistence:InitialInstallPersistence,private val journal:InstallJournalStore,
     private val resumeConnect:((InstallCaptureRequest,()->Boolean,(Long)->ResumeHardwareAuthority)->InitialInstallConnection)?=null,
     private val observed:(InitialInstallSnapshot)->Unit={}) {
+    private var progressTracker:OperationProgressTracker?=null
+    private fun measured(label:String,done:Int,total:Int,stageDone:Int=done,stageTotal:Int=total){
+        val estimate=progressTracker?.update(label,stageDone,stageTotal)
+        snapshot=snapshot.copy(progressLabel=label,progressDone=done,progressTotal=total,stageDone=stageDone,stageTotal=stageTotal,
+            overallProgressPermille=estimate?.permille,etaMillis=estimate?.remainingMillis,progressMeasuredAtMillis=estimate?.measuredAtMillis)
+        observed(snapshot)
+    }
     private val cancelled=AtomicBoolean(false)
     private var connection:InitialInstallConnection?=null
     private var original:VerifiedOriginal?=null;private var material:OriginalMaterial?=null
@@ -88,7 +97,9 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
             publish(snapshot.copy(phase=InitialInstallPhase.CAPTURING,resetCatchUsed=link.lease.resetCatchUsed,watchdog=link.lease.watchdogProfile,watchdogHandoff=link.lease.watchdogHandoff,
                 cpuDisposition="last observed halted; exclusive connection retained",message="Capturing two complete quiescent original passes"))
             val started=Instant.now();val passes=mutableListOf<Map<String,ByteArray>>();var readBytes=0
-            fun progress(label:String,done:Int,total:Int){if(done!=total&&done-snapshot.progressDone<16384)return;snapshot=snapshot.copy(progressDone=done,progressTotal=total,progressLabel=label);observed(snapshot)}
+            progressTracker=OperationProgressTracker(linkedMapOf("Reading backup 1/2" to 1,"Reading backup 2/2" to 1))
+            fun progress(label:String,done:Int,total:Int){if(done!=total&&done-snapshot.progressDone<16384)return
+                val passSize=0x100000+8192;measured(label,done,total,done-if(label.endsWith("2/2"))passSize else 0,passSize)}
             repeat(2){
                 stopped();require(link.lease.currentIdentity()==request.target)
                 passes+=listOf("flash.bin","ficr.bin","uicr.bin").associateWith{file->stopped();link.lease.readOriginalRegion(file){done->progress("Reading backup ${passes.size+1}/2",readBytes+done,2*(0x100000+8192))}.also{readBytes+=it.size}}
@@ -151,7 +162,8 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
         try{
             stopped();val link=checkNotNull(connection)
             publish(snapshot.copy(phase=InitialInstallPhase.INSTALLING,progressDone=0,progressTotal=0,progressLabel="",message="Explicit repair: validating all unissued original pages before bounded reconstruction"))
-            val result=ExplicitResumeEngine().runWithProgress(prepared,link.lease.authorizer(prepared.binding),onProgress={label,done,total->snapshot=snapshot.copy(progressLabel=label,progressDone=done,progressTotal=total);observed(snapshot)},checkCancelled=::stopped);val outcome=result.outcome
+            progressTracker=OperationProgressTracker(linkedMapOf("Checking repair" to 1,"Repairing firmware" to 6,"Verifying repair" to 1,"Final verification" to 1))
+            val result=ExplicitResumeEngine().runWithProgress(prepared,link.lease.authorizer(prepared.binding),onProgress={label,done,total->measured(label,done,total)},checkCancelled=::stopped);val outcome=result.outcome
             snapshot=snapshot.copy(mutationMayHaveStarted=outcome.mutationMayHaveStarted,commitMayHaveBeenWritten=outcome.commitMayHaveBeenWritten,journalFailure=outcome.journalFailure,installStep=outcome.stoppedAt.name,installAddress=outcome.address,
                 resumeHeadSha256=result.journalHeadSha256?:snapshot.resumeHeadSha256,resumeClassification=result.mode?.name?:snapshot.resumeClassification)
             val disposition=closeConnection()
@@ -171,7 +183,10 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
                 c.reviewOneBench(request.target,request.requestId,link.lease.generation,review.reviewedReleaseSha256).use{permit->c.preparePlan(original,permit,request.requestId,link.lease.generation)}}
             require(plan.binding==binding)
             publish(snapshot.copy(phase=InitialInstallPhase.INSTALLING,progressDone=0,progressTotal=0,progressLabel="",message="Writing with durable intent and erased anchor commit until final verification"))
-            val outcome=FirstInstallEngine().run(plan,link.lease.authorizer(binding),journal,onProgress={label,done,total->snapshot=snapshot.copy(progressLabel=label,progressDone=done,progressTotal=total);observed(snapshot)},checkCancelled=::stopped)
+            val stages=linkedMapOf("Checking original" to 1,"Installing" to 6,"Verifying installation" to 1,"Verifying firmware" to 1)
+            progressTracker=OperationProgressTracker(stages)
+            val outcome=FirstInstallEngine().run(plan,link.lease.authorizer(binding),journal,onProgress={label,done,total->
+                measured(label,done,total,done-stages.keys.indexOf(label)*0x100000,0x100000)},checkCancelled=::stopped)
             // Teardown itself can fail after commit acknowledgement. Preserve
             // the engine's uncertainty before entering that failure boundary.
             snapshot=snapshot.copy(mutationMayHaveStarted=outcome.mutationMayHaveStarted,
@@ -216,6 +231,7 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
         require(review.requestId==request.requestId&&review.bindingId==proof.binding.id&&review.reviewedReleaseSha256==proof.binding.releaseSha256)
         try{
             stopped();proof.consume(review);receipt=null
+            progressTracker=OperationProgressTracker(linkedMapOf("Checking firmware" to 1))
             publish(snapshot.copy(phase=InitialInstallPhase.STARTING,progressDone=0,progressTotal=0,progressLabel="",message="Rechecking complete verified image, UID and UICR before explicit reset/start"))
             persistence.recordStart(proof.binding,request.requestId,false);stopped()
             val link=connect(request,cancelled::get,proof);connection=link;link.lease.retainHaltForPriorUncertainty()
@@ -224,7 +240,7 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
             fun hash(bytes:ByteArray)=java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it.toInt() and 255)}
             require(hash(link.lease.readOriginalRegion("ficr.bin"))==proof.ficrSha256&&hash(link.lease.readOriginalRegion("uicr.bin"))==proof.uicrSha256){"Verified target FICR/UICR changed"}
             require(hash(link.lease.readOriginalRegion("flash.bin"){done->
-                if(done==0x100000||done-snapshot.progressDone>=16384){snapshot=snapshot.copy(progressDone=done,progressTotal=0x100000,progressLabel="Checking firmware");observed(snapshot)}
+                if(done==0x100000||done-snapshot.progressDone>=16384){measured("Checking firmware",done,0x100000)}
             })==proof.binding.installedSha256){"Complete verified FLASH changed; CPU remains halted"}
             stopped();link.lease.startVerifiedReset();require(link.lease.startAcknowledged)
             persistence.recordStart(proof.binding,request.requestId,true)
@@ -245,4 +261,28 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
         forgetMemory()
     }
     private fun forgetMemory(){original=null;material=null;qualified=null;candidate=null;reviewedResume=null}
+}
+
+internal data class OperationProgress(val permille:Int,val remainingMillis:Long?,val measuredAtMillis:Long)
+/** Weighted completed work, never a simulated animation. A new phase needs
+ * fresh timing samples; unknown/stalled work cannot produce a countdown. */
+internal class OperationProgressTracker(private val stages:Map<String,Int>,private val now:()->Long={System.nanoTime()/1_000_000}) {
+    private val names=stages.keys.toList();private val total=stages.values.sum().also{require(it>0&&stages.values.all{w->w>0})}
+    private var index=-1;private var phaseStarted=0L;private var initialDone=0;private var previousDone=0;private var advancedAt=0L;private var high=0
+    fun update(label:String,done:Int,size:Int):OperationProgress {
+        require(size>0&&done in 0..size);val time=now();val next=names.indexOf(label);require(next>=0)
+        if(next<index)return OperationProgress(high,null,time)
+        if(next!=index){index=next;phaseStarted=time;initialDone=done;previousDone=done;advancedAt=time}
+        if(done>previousDone){advancedAt=time;previousDone=done}
+        val before=names.take(index).sumOf{stages.getValue(it)};val weight=stages.getValue(label)
+        val completed=before.toDouble()+weight.toDouble()*done/size
+        high=maxOf(high,(completed*1000/total).toInt()).coerceAtMost(1000)
+        val elapsed=time-phaseStarted;val gained=weight.toDouble()*(done-initialDone)/size
+        val eta=when{
+            high==1000->0L
+            elapsed<3000||gained<=0||time-advancedAt>=15000->null
+            else->((total-completed)*elapsed/gained).takeIf{it.isFinite()&&it>=0&&it<=7*24*60*60*1000.0}?.toLong()
+        }
+        return OperationProgress(high,eta,time)
+    }
 }
