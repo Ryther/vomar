@@ -25,8 +25,8 @@ passed within the recorded scope; it does not qualify initial installation,
 stock restoration, power-cut recovery or physical dimmer behavior. Earlier
 successful trials apply to their recorded versions and routes.
 
-The Android version owner is the app's Gradle configuration (currently 1.0.3,
-versionCode 23). Firmware, Android, desktop and the coordinated distribution
+The Android version owner is the app's Gradle configuration (currently 1.0.6,
+versionCode 26). Firmware, Android, desktop and the coordinated distribution
 have independent versions. The distribution manifest starts at 0.0.0; this
 checkout does not certify a published distribution or active remote services.
 Badges summarize their linked services and do not prove physical qualification.

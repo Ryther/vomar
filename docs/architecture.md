@@ -45,8 +45,9 @@ audits remain required independently of product-quality metrics.
    for the original or automatically release an uncertain halted CPU.
 
 First installation has a separate reviewed HALT, two byte-equal original reads,
-private export/reopen, bounded FLASH installation and a separately reviewed
-start. It never implies consent to erase, recover, rewrite UICR or replace a
+private save/reopen, bounded FLASH installation and a separately reviewed
+start. Android 1.0.6 offers an additional original export; desktop requires
+its export/reopen contract. It never implies consent to erase, recover, rewrite UICR or replace a
 bootloader. See [installation](installation.md) and
 [the Android first-install contract](android-first-install.md).
 

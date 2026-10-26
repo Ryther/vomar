@@ -34,8 +34,10 @@ without a GitHub account.
    permission for that installer source, review and grant it deliberately.
 3. Open the app. Devices and Settings should be available without a broker or
    a connected dimmer. Check the installed app version in Settings.
-4. In Settings → Updates, select the intended signed common firmware ZIP or
-   configured release source. Package verification alone starts no write.
+4. In Settings → Updates, select the common firmware ZIP or configured release
+   source. Android 1.0.6 detects qualified, beta and local packages in one chooser;
+   local/beta selection needs explicit confirmation. Component image signatures
+   and compatibility remain mandatory. Package selection starts no write.
 5. Grant Bluetooth permissions when using a Bluetooth action. An optional
    Zigbee2MQTT connection is configured separately under Settings → Zigbee2MQTT.
 
@@ -88,8 +90,10 @@ signature, roles and compatibility contract. Neither result proves a working
 device or authorizes a write.
 
 For an existing compatible custom target, use its explicit review flow and
-confirm live identity before deciding on an update. Qualification-candidate
-Bluetooth trials and initial bench installation are separate procedures:
+confirm live identity before deciding on an update. In Android 1.0.6 the entry
+is Devices → device → Update firmware. Initial bench installation is a separate
+guided procedure. Manual local/beta admission may relax outer signatures but
+never image signatures, compatibility or consent. See:
 [Bluetooth trial](android-bluetooth-trial.md) and
 [first installation](android-first-install.md). Physical intervention requires
 the operator's separate approval; do not start it from an installation check.

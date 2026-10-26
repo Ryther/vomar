@@ -22,8 +22,9 @@ loader. Signed role/profile, slot geometry, component-pair and finite loader
 contracts constrain updates. The compressed Zigbee OTA installer stages an
 image outside its destination and authenticates it before reconstruction; BLE
 provides the independent recovery route. The common Android package also carries
-migration and stock-restoration helpers. The current app has no operational
-stock-restoration UI merely because those helpers are present. See
+migration and stock-restoration helpers. Android 1.0.6 offers explicit original restoration from a device with its
+retained matching original; its physical qualification is still pending. The
+presence of restoration helpers alone does not qualify that path. See
 [loader contracts](../firmware/loader_contract/README.md),
 [common restore engine](../firmware/common_restore/README.md),
 [Android workflow](android-updater.md) and [OTA contract](zigbee-ota.md).

@@ -15,7 +15,10 @@ backup, household configuration, account credential or signing key.
    can alternatively support an eligible Zigbee2MQTT update after fresh checks.
 4. First installation is an isolated bench procedure, with mains disconnected.
    Select the exact DK, explicitly review HALT, acquire two equal full originals,
-   save privately, export and reopen the same bytes. Only then review installation.
+   save privately and reopen the same bytes. Android 1.0.6 keeps this verified
+   original on the phone and offers an additional export; desktop requires its
+   explicit export/reopen. Keep an independent original copy before deleting app
+   data. Only then review installation.
    Preserve the original permanently; it is specific to that physical target.
 5. Successful FLASH readback ends halted. Review verified start separately.
    Acknowledged transfer/reset is not proof that lamp, buttons, Zigbee or BLE work.

@@ -26,9 +26,10 @@ archive, OTA carrier or individual image. Check the download source, size/hash
 and package version. The app's public trust anchor is independent of GitHub;
 changing the download URL does not authorize a new signer.
 
-A qualification candidate is intentionally rejected by ordinary release/fleet
-routes. Use only the separately authorized qualification path; do not remove
-metadata or substitute binaries. An empty release list can be a genuine current
+A qualification candidate is intentionally rejected by online release/fleet
+routes. Android 1.0.6 has one manual firmware chooser with explicit local/beta
+review; desktop has a separate qualification route. Do not remove metadata or
+substitute binaries to bypass either client's image/compatibility checks. An empty release list can be a genuine current
 state: a local signed package remains usable without a GitHub token. Do not
 invent a release or treat an empty list as proof of a Bluetooth failure.
 
@@ -68,7 +69,9 @@ or assume that a submitted reset completed successfully.
 Explicit resume/repair must revalidate the same target, original and release,
 then request fresh review. Missing/corrupt journals, unknown bytes or changed
 originals block repair. Successful FLASH readback may intentionally leave the
-CPU halted; start is a separately reviewed action. See
+CPU halted; start is a separately reviewed action. Android 1.0.6 retains the original privately on the phone and associates it
+with the device; exporting an independent copy is optional but needed to retain
+recovery material across app-data deletion or uninstall. See
 [Android first installation](android-first-install.md) and
 [Desktop first installation and repair](desktop.md#first-installation-and-repair).
 

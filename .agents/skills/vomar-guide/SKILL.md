@@ -58,16 +58,21 @@ probe attached; device access is a separate explicit action.
 
 ## Select a package and configure optional connections
 
-In Settings → Updates, choose the signed common firmware ZIP or configured
-release source. Desktop archives are application installers; the canonical
+In Settings → Updates, choose the common firmware ZIP or configured release
+source. Android 1.0.6 uses a single firmware chooser that detects qualified,
+beta and local packages and requests confirmation for manual local/beta use. Desktop archives are application installers; the canonical
 `vomar-firmware-VERSION.zip` is a firmware package selected by role and verified
 bytes. Do not unpack it into images to bypass validation.
 
 A distribution checksum detects changed downloads; the client's independent
 public trust anchor verifies signed firmware. A different GitHub source never
-approves a new signer. An accepted package does not start an update. Ordinary
-release/fleet/Zigbee paths reject qualification candidates. Candidates require
-an independently authorized bench or Bluetooth trial route.
+approves a new image signer. An accepted package does not start an update. Online
+release/fleet/Zigbee paths reject qualification candidates. In Android 1.0.6,
+manual local/beta review may admit missing outer artifact/descriptor signatures;
+component image signatures, hashes, model/layout and loader compatibility remain
+mandatory. An unsigned descriptor cannot grant active-watchdog capability. This
+manual exception neither qualifies a package nor approves a device write.
+Desktop candidate handling remains a separate explicit qualification route.
 
 Broker integration is optional. On Android use Settings → Zigbee2MQTT to choose
 and explicitly connect a saved broker profile and its named Zigbee topics. On
@@ -115,8 +120,10 @@ isolated target/probe arrangement must be used by the operator.
 Android exposes Settings → Tools → First installation. DK tools is a separate
 read-only monitor/backup tool. The first-install flow selects the exact probe,
 reads identity, separately reviews HALT, captures two byte-equal complete
-originals, then saves and reopens the same original ZIP. The original is private
-and specific to that target. Preserve an independent copy permanently.
+originals, then saves and reopens the same original ZIP privately on the phone.
+Android 1.0.6 links it to Devices by UID and offers optional export; clearing app
+data or uninstalling can delete that private copy. Preserve an independent
+export permanently. Desktop separately requires its reviewed export/reopen.
 
 The flow validates live watchdog/loader compatibility; an unexpected profile
 blocks progress rather than authorizing a workaround. FLASH installation has
@@ -124,9 +131,13 @@ another review, bounded page checks and unchanged-UICR verification. It ends
 halted; verified start is separately reviewed. Never suggest recover, mass erase,
 UICR writes, bootloader replacement or automatically releasing an uncertain CPU.
 
-A qualification candidate needs the separate deliberate bench selection. Normal
-release selection refuses it. Having captured/exported an original does not
-prove installation, restoration or blackout recovery works.
+Android 1.0.6 has one **Choose firmware** action for qualified, beta and local
+packages, with explicit local/beta review rather than a qualification submenu.
+The flow is firmware → device → backup → install → start. Existing-device
+Bluetooth work is under **Devices → device → Update firmware**. Explicit original
+restoration is offered from a device with its retained matching original; it
+needs separate review and remains physically unqualified. Capturing/exporting
+an original does not prove installation, restoration or blackout recovery.
 
 ## Stop, resume and repair
 
