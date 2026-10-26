@@ -1,0 +1,129 @@
+name: Pull request Sonar quality
+on:
+  workflow_call:
+    inputs:
+      sha: {type: string, required: true}
+      coverage-result: {type: string, required: true}
+    secrets:
+      SONAR_TOKEN: {required: false}
+permissions: {contents: read}
+concurrency:
+  group: sonar-pr-${{ github.repository }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  cloud:
+    if: inputs.coverage-result == 'success' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    outputs:
+      report_present: ${{ steps.report.outputs.artifact-id != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.event.pull_request.base.sha }}', path: trusted, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha }}', path: candidate, fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with: {pattern: '*reports-${{ inputs.sha }}', path: reports, merge-multiple: true}
+      - name: Require target history in the analyzed checkout
+        env: {PR_BASE_SHA: '${{ github.event.pull_request.base.sha }}', PR_BASE_REF: '${{ github.event.pull_request.base.ref }}'}
+        run: |
+          git -C candidate cat-file -e "$PR_BASE_SHA^{commit}"
+          git -C candidate update-ref "refs/remotes/origin/$PR_BASE_REF" "$PR_BASE_SHA"
+          git -C candidate merge-base HEAD "$PR_BASE_SHA"
+      - name: Validate exact candidate reports without credentials
+        env: {CANDIDATE_SHA: '${{ inputs.sha }}'}
+        run: |
+          PYTHONPATH=trusted python - <<'PY'
+          import os
+          from tools.release.prepare_pr_analysis import prepare
+          prepare('reports', 'candidate', os.environ['CANDIDATE_SHA'])
+          PY
+      - name: Scan source as data using protected PR settings
+        id: scan
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD: ${{ github.event.pull_request.head.ref }}
+          PR_BASE: ${{ github.event.pull_request.base.ref }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          test -n "$SONAR_TOKEN"
+          mkdir -p sonar-report/task
+          chmod 0777 sonar-report/task
+          image=$(python -c 'import json; print(json.load(open("trusted/.github/sonar-community.json"))["sonarsource/sonar-scanner-cli"])')
+          docker run --rm -w "$GITHUB_WORKSPACE/candidate" \
+            -e SONAR_TOKEN -e SONAR_HOST_URL=https://sonarcloud.io -e SONAR_USER_HOME=/tmp/sonar-user \
+            -v "$GITHUB_WORKSPACE/candidate:$GITHUB_WORKSPACE/candidate:ro" \
+            -v "$GITHUB_WORKSPACE/reports:/reports:ro" \
+            -v "$GITHUB_WORKSPACE/trusted/.github/sonar-pr.properties:/settings.properties:ro" \
+            -v "$GITHUB_WORKSPACE/sonar-report/task:/sonar-task" "$image" \
+            -Dproject.settings=/settings.properties -Dsonar.working.directory=/sonar-task \
+            -Dsonar.python.coverage.reportPaths=/reports/python-coverage.xml \
+            -Dsonar.javascript.lcov.reportPaths=/reports/lcov.info \
+            -Dsonar.coverage.jacoco.xmlReportPaths=/reports/core-jacoco.xml,/reports/app-jacoco.xml \
+            "-Dsonar.pullrequest.key=$PR_NUMBER" "-Dsonar.pullrequest.branch=$PR_HEAD" \
+            "-Dsonar.pullrequest.base=$PR_BASE" "-Dsonar.scm.revision=$CANDIDATE_SHA" \
+            -Dsonar.qualitygate.wait=true > sonar-report/scanner.log 2>&1
+      - name: Export complete PR findings
+        if: always()
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SCAN_OUTCOME: ${{ steps.scan.outcome }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+        run: |
+          test -s sonar-report/task/report-task.txt
+          PYTHONPATH=trusted python -m tools.release.sonar_report --project Ryther_vomar --pull-request "$PR_NUMBER" --sha "$CANDIDATE_SHA" --task-file sonar-report/task/report-task.txt
+          cat sonar-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          test "$SCAN_OUTCOME" = success
+      - id: report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'sonar-pr-cloud-${{ inputs.sha }}', path: sonar-report, if-no-files-found: error, retention-days: 90}
+  community:
+    if: inputs.coverage-result == 'success' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      report_present: ${{ steps.report.outputs.artifact-id != '' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.event.pull_request.base.sha }}', path: trusted, persist-credentials: false}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha }}', path: candidate, fetch-depth: 0, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with: {pattern: '*reports-${{ inputs.sha }}', path: reports, merge-multiple: true}
+      - name: Compare baseline and candidate without repository credentials
+        env: {CANDIDATE_SHA: '${{ inputs.sha }}'}
+        run: |
+          sudo sysctl -w vm.max_map_count=1048576
+          PYTHONPATH=trusted python -m tools.release.sonar_local --base trusted --candidate candidate --reports reports --output sonar-report --sha "$CANDIDATE_SHA"
+      - name: Summarize the comparison
+        if: always()
+        run: test -s sonar-report/report.md && cat sonar-report/report.md >> "$GITHUB_STEP_SUMMARY"
+      - id: report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with: {name: 'sonar-pr-community-${{ inputs.sha }}', path: sonar-report, if-no-files-found: error, retention-days: 90}
+  required:
+    name: Sonar required
+    if: always()
+    needs: [cloud, community]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.event.pull_request.base.sha }}', path: trusted, persist-credentials: false}
+      - name: Require coverage and the selected scanner with its report
+        env:
+          SONAR_EVENT_NAME: ${{ github.event_name }}
+          SONAR_TRUSTED_PR: ${{ github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]' }}
+          SONAR_COVERAGE_RESULT: ${{ inputs.coverage-result }}
+          SONAR_CLOUD_RESULT: ${{ needs.cloud.result }}
+          SONAR_COMMUNITY_RESULT: ${{ needs.community.result }}
+          SONAR_REPORT_PRESENT: ${{ (needs.cloud.result == 'success' && needs.cloud.outputs.report_present == 'true') || (needs.community.result == 'success' && needs.community.outputs.report_present == 'true') }}
+        run: PYTHONPATH=trusted python -m tools.release.sonar_gate

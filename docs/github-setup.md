@@ -6,10 +6,20 @@ branch settings, remote secrets, tags or published releases automatically.
 - Protect main and require review plus the `pullRequest` checks listed in
   [.github/required-checks.json](https://github.com/Ryther/vomar/blob/main/.github/required-checks.json).
   They are produced for PR candidates, including the aggregate CodeQL lane.
-  `Sonar required` is an additional **release** gate produced only by protected
-  main analysis. Do not require it for PR merging: forks/Dependabot do not receive
-  the reusable Cloud token. Contributor community analysis reports unsupported
-  analyzers explicitly; a partial scan does not pass the release gate.
+  `Sonar required` is now required for PRs as well as releases, with different
+  scopes: PR Python/JavaScript/Kotlin analysis plus mandatory firmware CodeQL;
+  protected main/release Sonar additionally analyzes firmware C. Inspect actual
+  check runs for a normal PR and a fork/Dependabot PR before enabling the rule.
+- Establish the reviewed infrastructure on the trusted base before enforcing
+  its new PR checks. Scanner settings/exporters come from that base; the first
+  bootstrap PR cannot supply token-bearing helpers from its own untrusted code.
+- Set repository `SONAR_TOKEN` to a least-privilege PR analysis credential for
+  trusted same-repository Cloud scans, including the project Browse permission
+  needed to export findings. Never grant it to fork/Dependabot runs.
+  The protected main/release token remains in its dedicated environment.
+  Keep automatic Sonar analysis disabled when using these CI scans; initialize
+  the main baseline and verify PR analysis support and required language
+  analyzers on the actual project.
 - Use separate protected environments: release-proposal, release-signing,
   release-publication and sonar-analysis. Restrict them to the protected default
   branch/workflow and require reviewers for signer/publication access.
@@ -18,7 +28,8 @@ branch settings, remote secrets, tags or published releases automatically.
   before use. Never upload a local generated development identity as a replacement.
 - Store RELEASE_PROPOSAL_TOKEN separately from RELEASE_PUBLICATION_TOKEN. Give
   each only the repository permissions its workflow needs; untrusted validation
-  never inherits them. SONAR_TOKEN belongs only to protected analysis/publication.
+  never inherits them. The main/release SONAR_TOKEN belongs to protected analysis/publication; the
+  separate repository PR analysis credential never grants publication access.
 - Configure public Sonar project Ryther_vomar with the required analyzers and an
   explicit quality gate. Verify real language extraction and report completeness.
   A missing token or unsupported analyzer fails; it is not a successful scan.

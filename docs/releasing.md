@@ -51,9 +51,11 @@ step only after exact physical evidence and protected environments are configure
 Credentialed Sonar analysis uses protected settings/helpers and candidate source
 as data. Every language needs its actual reports. Missing coverage, target
 compilation, extraction scope or current analysis fails the gate. Fork/Dependabot
-must not receive reusable Cloud/signing/release credentials; local community
-analysis has explicit language limitations and cannot substitute an unsupported
-C/Kotlin analyzer for full release analysis.
+must not receive reusable Cloud/signing/release credentials. PR Community
+analysis covers Python, JavaScript and Kotlin; its complete findings and
+baseline comparison are published as artifacts. Firmware C has the separate
+mandatory CodeQL check. The PR result cannot replace the full protected
+main/release Sonar analysis with actual C compilation/coverage.
 
 Repository workflows are configuration, not evidence that GitHub protections,
 credentials, Pages or Sonar are live. Configure and inspect them through the

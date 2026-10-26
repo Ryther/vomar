@@ -29,9 +29,9 @@ def test_missing_or_stale_delivered_graph_review_cannot_pass():
         with pytest.raises(ValueError):dependency_review(m,value,inventories,now='2026-10-25T12:00:00Z')
 
 
-def test_pr_protection_does_not_require_main_only_sonar():
+def test_pr_and_release_require_their_respective_sonar_analysis():
     root=Path(__file__).resolve().parents[3];policy=json.loads((root/'.github/required-checks.json').read_text())
-    assert 'Sonar required' not in policy['pullRequest'] and 'Sonar required' in policy['release']
+    assert 'Sonar required' in policy['pullRequest'] and 'Sonar required' in policy['release']
     assert set(policy['pullRequest'])<=set(policy['release'])
 
 

@@ -11,7 +11,28 @@ verification in a pull request.
 
 ## Verification
 
-The existing self-contained source checks are documented in README.md. Run
+Inside the Dev Container, set up the locked development environment:
+
+```sh
+python tools/dev/bootstrap.py workspace
+VOMAR_PYTHON=/home/vscode/.cache/vomar/dev-venv/bin/python
+"$VOMAR_PYTHON" -m pytest tools/release/tests tools/dev/tests
+"$VOMAR_PYTHON" -m tools.release.check_workflows
+"$VOMAR_PYTHON" -m mkdocs build --strict
+```
+
+For desktop/GUI checks, install `requirements-desktop.lock` in a disposable
+Python 3.13 environment, install this project with `--no-deps`, and run
+`python -m pytest apps/desktop-updater/tests` (`QT_QPA_PLATFORM=offscreen` for
+headless UI checks). Do not overlay those runtime dependencies into the SDK.
+The broader self-contained firmware/Android host suites are
+`python -m pytest tools/firmware/tests tools/hardware/tests tools/android/tests`.
+Run `npm test --prefix integrations/zigbee2mqtt` for the converter. Native
+firmware and Android builds additionally require the explicit SDK setup in
+[Development](docs/development.md). Their authoritative CI commands are in
+`.github/workflows/validate.yml` and `security.yml`.
+
+Run
 relevant focused tests while working and all affected required checks before
 handoff. Preserve reported skips: unavailable private artifacts and physical
 tests are not successful qualification.
@@ -49,3 +70,26 @@ one exact commit and all required signed/verified artifacts before publication.
 Do not move published tags, overwrite differing assets or convert host test
 results into physical qualification. Signing and publication credentials never
 enter untrusted PR execution or shared examples.
+
+## Pull request analysis
+
+The PR template records the tested SHA, commands/results, user journeys,
+documentation impact and unverified scenarios. Keep the self-contained
+`.agents/skills/vomar-guide/SKILL.md` aligned with user procedures, not merely
+with contributor commands; Claude's alias points to the same source.
+
+`Sonar required` is produced on PRs after actual Python, JavaScript and Kotlin
+coverage. Trusted same-repository PRs use Cloud with protected base settings;
+fork/Dependabot PRs use disposable Community without repository credentials.
+Both publish report artifacts. Missing coverage, the expected scanner or its
+report fails the aggregate. Firmware C has mandatory CodeQL; full main/release
+Sonar additionally requires actual C compilation/coverage and exact revision.
+A scoped PR scan does not certify full release analysis or hardware behavior.
+
+Workflow/settings changes take effect from the trusted base after merge. The
+initial infrastructure baseline must be reviewed and established before making
+its new PR checks mandatory; do not execute bootstrap PR helpers with secrets.
+Pages publication is opt-in with `ENABLE_PAGES=true`. Build the site locally
+with the locked environment, follow install → verify → troubleshoot and
+contribute → checks → release links, and review rendered navigation after
+changes. A local strict build does not prove Pages is deployed.

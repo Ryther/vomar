@@ -1,17 +1,37 @@
-# Vomar
+# Vomar documentation
 
 Vomar is an independent firmware and updater project for compatible Vimar 30805
-dimmers. A distribution contains firmware, Android, desktop GUI/CLI and a
-Zigbee2MQTT converter. It is not an official Vimar product.
+dimmers. A coordinated distribution contains firmware, Android, desktop GUI/CLI
+and a Zigbee2MQTT converter. Firmware 1.0.0 remains a qualification candidate;
+its thirteen physical checks are pending. Installing a client or checking source
+code does not qualify a physical device.
 
-Current firmware 1.0.0 is a **qualification candidate**. Its thirteen physical
-checks remain false. Source tests and an APK build do not qualify a physical
-installation, restoration, power-cut recovery or dimmer operation.
+## What do you want to do?
 
-Start with [installation and recovery](offline-guide.md), or set up the
-[development container](development.md). The [desktop guide](desktop.md)
-explains the private original, explicit review and interrupted-session flows.
+- **[Install or update the client](installation.md):** Choose Android or the
+  matching native desktop package and verify first startup.
+- **[Use Android](android-updater.md)** or **[use desktop GUI/CLI](desktop.md):**
+  Select a package, connect deliberately and review an operation.
+- **[Fix a problem](troubleshooting.md):** Diagnose a failure or interrupted
+  session while preserving originals and uncertain target state.
+- **[Understand package and recovery rules](offline-guide.md):** Distinguish
+  shared firmware from device-private originals and operation consent.
+- **[Review first installation](android-first-install.md)** or a
+  **[Bluetooth qualification trial](android-bluetooth-trial.md):** Separate,
+  explicitly authorized procedures with physical checks still pending.
+- **[Give an assistant the user guide](https://github.com/Ryther/vomar/blob/main/.agents/skills/vomar-guide/SKILL.md):**
+  Self-contained setup, diagnosis, upgrade and removal guidance.
 
-Published firmware is independently verified against the installed public trust
-anchor. GitHub metadata selects downloads; it does not authorize device writes.
-No account, household registry or original device dump is included in OSS.
+## Contribute or understand the design
+
+- [Architecture](architecture.md): component ownership, trust and persistence.
+- [Development](development.md) and [contribution rules](../CONTRIBUTING.md):
+  container, test environments, commands and review evidence.
+- [Release a distribution](releasing.md) and [configure GitHub](github-setup.md):
+  version proposals, exact candidate checks, credentials and publication.
+- [Research evidence](research-summary.md): confirmed observations, hypotheses
+  and remaining hardware limits.
+
+The guides track repository source. Compare installed app/package versions with
+release notes before applying steps from a newer revision. A downloaded package,
+green badge or acknowledged reset does not prove physical operation.

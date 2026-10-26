@@ -35,7 +35,7 @@ static checks and mocked daemon responses do not establish that it boots.
 
 `python tools/dev/bootstrap.py workspace` installs locked development tools into
 private state. `codex --version`, `opencode --version` and `claude --version`
-check the three assistants without login. The canonical guide is under
+check the three assistants without login. The self-contained end-user guide is under
 `.agents/skills/vomar-guide`. Claude uses its relative alias; OpenCode also reads
 AGENTS.md and the same skill directory. A Windows checkout with disabled symlinks
 uses a hash-owned private fallback; user-customized skills are never overwritten.

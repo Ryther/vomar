@@ -3,20 +3,33 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule: {interval: weekly}
+    groups:
+      codeql:
+        patterns: ["github/codeql-action/*"]
+    commit-message:
+      prefix: build(deps)
   - package-ecosystem: pip
     directory: /
     schedule: {interval: weekly}
     open-pull-requests-limit: 5
+    commit-message:
+      prefix: build(deps)
   - package-ecosystem: npm
     directory: /.devcontainer/assistants
     schedule: {interval: weekly}
     groups:
       assistant-tools: {patterns: ['*']}
+    commit-message:
+      prefix: build(deps)
   - package-ecosystem: gradle
     directory: /apps/android-updater
     schedule: {interval: weekly}
     groups:
       kotlin-android: {patterns: ['org.jetbrains.kotlin*', 'com.android*']}
+    commit-message:
+      prefix: build(deps)
   - package-ecosystem: devcontainers
     directory: /
     schedule: {interval: weekly}
+    commit-message:
+      prefix: build(deps)

@@ -1,74 +1,94 @@
-# Vimar 30805 research and custom firmware
+# Vomar
 
-Custom nRF52840 firmware, an Android updater and a Zigbee2MQTT converter for the
-Vimar View Wireless Linea 30805 dimmer. The project replaces the radio-side
-firmware while retaining the original secondary power-controller firmware.
+> **AI-assisted code warning:** This project includes code produced with AI coding
+> agents. Tests and reviews do not establish that it is safe or correct on your
+> hardware. Preserve each device's original backup and use an isolated, explicitly
+> authorized qualification procedure before trusting a firmware candidate.
 
-Firmware **1.0.0 is a signed qualification candidate**. Its bounded standalone-DK
-runtime trial passed, including authenticated BLE identity/hash checks, recovery
-transitions, persistent fault diagnostics and exact restoration of the DK's
-prior FLASH/UICR/FICR. Its thirteen physical qualification flags remain false;
-this is not a qualified fleet release. Earlier Vimar update and stock-restoration
-trials succeeded on their specific historical images and routes. They do not
-qualify the new common first-install and restoration paths.
+[![CI](https://github.com/Ryther/vomar/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/Ryther/vomar/actions/workflows/validate.yml)
+[![CodeQL](https://github.com/Ryther/vomar/actions/workflows/codeql.yml/badge.svg?branch=main)](https://github.com/Ryther/vomar/actions/workflows/codeql.yml)
+[![Sonar quality gate](https://sonarcloud.io/api/project_badges/measure?project=Ryther_vomar&metric=alert_status)](https://sonarcloud.io/dashboard?id=Ryther_vomar)
+[![Documentation](https://github.com/Ryther/vomar/actions/workflows/pages.yml/badge.svg?branch=main)](https://github.com/Ryther/vomar/actions/workflows/pages.yml)
+[![Latest release](https://img.shields.io/github/v/release/Ryther/vomar)](https://github.com/Ryther/vomar/releases/latest)
+[![License](https://img.shields.io/github/license/Ryther/vomar)](LICENSE)
 
-Android **1.0.0** retains the existing 0.6.5 interface and behavior, with release
-version metadata updated. App and firmware versions and qualification are
-independent. The app includes Bluetooth update trials, optional Zigbee2MQTT/MQTT
-integration, and a reviewed phone → DK → target first-install flow. The complete
-phone-driven first-install/repair/start route still needs physical qualification.
+Vomar provides custom nRF52840 firmware, Android and desktop updater clients,
+and a Zigbee2MQTT converter for compatible Vimar View Wireless Linea 30805
+hardware. It retains the original secondary power-controller firmware. This is
+an independent project, not an official Vimar product.
+
+## Current status
+
+Firmware **1.0.0 is a signed qualification candidate** with thirteen physical
+qualification checks still pending. Its bounded standalone-DK runtime trial
+passed within the recorded scope; it does not qualify initial installation,
+stock restoration, power-cut recovery or physical dimmer behavior. Earlier
+successful trials apply to their recorded versions and routes.
+
+The Android version owner is the app's Gradle configuration (currently 1.0.3,
+versionCode 23). Firmware, Android, desktop and the coordinated distribution
+have independent versions. The distribution manifest starts at 0.0.0; this
+checkout does not certify a published distribution or active remote services.
+Badges summarize their linked services and do not prove physical qualification.
 
 ## Start here
 
-- [Research summary and evidence limits](docs/research-summary.md): architecture,
-  recovered interfaces, protection behavior and reproducible analysis.
-- [Firmware builds and profiles](firmware/README.md).
-- [Android updater](docs/android-updater.md), [first installation](docs/android-first-install.md)
-  and [Bluetooth trials](docs/android-bluetooth-trial.md).
-- [Zigbee2MQTT converter](integrations/zigbee2mqtt/README.md),
-  [controls](docs/zigbee-controls.md) and [OTA](docs/zigbee-ota.md).
-- [Known facts](docs/known-facts.md), [unresolved hypotheses](docs/hypotheses.md)
-  and [research rules](docs/research-rules.md).
+- [Install, configure, update or remove a client](docs/installation.md).
+- [Android behavior and compatibility](docs/android-updater.md),
+  [first installation](docs/android-first-install.md) and
+  [Bluetooth qualification trials](docs/android-bluetooth-trial.md).
+- [Desktop GUI and CLI](docs/desktop.md), sharing one engine. Native package
+  targets are Linux x64, Windows x64 and macOS Intel/arm64; platform-specific
+  BLE/USB behavior still needs its own acceptance evidence.
+- [Troubleshooting and interrupted work](docs/troubleshooting.md).
+- [Documentation home](docs/index.md) and
+  [architecture](docs/architecture.md).
 
-## Source and release artifacts
+AI assistants can use the self-contained
+[Vomar user guide skill](.agents/skills/vomar-guide/SKILL.md) to explain setup,
+verification, recovery and removal without a checkout. Codex and OpenCode use
+its canonical `.agents/skills/` source; Claude's tracked alias points to the
+same guide. You can also provide that Markdown as conversational instructions;
+it grants neither device access nor consent to program hardware.
 
-Git contains source, public documentation, public verification keys and synthetic
-test fixtures. APKs, signed firmware ZIPs, OTA files and build outputs belong in
-reviewed GitHub Release assets, with checksums and qualification scope. Their
-presence or a valid signature alone does not establish hardware qualification.
-This source checkout does not imply that a release has been published.
+## Source, artifacts and private data
 
-Original vendor APK/firmware, full device backups, network data, credentials and
-private signing keys are excluded. Keep each device's original backup privately;
-it is separate from a shared firmware release. Local `inputs/`, `analysis/`,
-`experiments/` and `work/` retain evidence and generated output outside Git.
+Git contains authored source, public docs, public verification keys and reviewed
+synthetic fixtures. APKs, signed firmware ZIPs, OTA carriers and native packages
+belong in verified GitHub Release assets with checksums and qualification scope.
+A valid signature proves package integrity and signer identity, not working
+hardware. Ordinary client routes reject qualification candidates.
 
-## Check the source
+Keep original vendor APK/firmware, per-device backups, network data, diagnostics,
+credentials and private signing keys outside public Git and archives. Each
+device's original is private recovery material, separate from a shared release.
+The [research summary](docs/research-summary.md), [known facts](docs/known-facts.md)
+and [hypotheses](docs/hypotheses.md) distinguish observations and uncertainty.
 
-Use a Python 3 environment with `pytest`, `cbor2`, `cryptography` and `intelhex`,
-plus Node.js and npm. From the repository root, run the self-contained host suites:
+## Develop and contribute
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md). Open the
+tracked [Dev Container](docs/development.md): the default profile includes
+Docker/Buildx, gh, Codex, OpenCode and Claude. Credentials remain private and
+login is separate from installation. Follow the rebuild and smoke checks in the
+guide; configuration presence does not prove the container boots.
+
+Inside the pinned development environment, start with:
 
 ```sh
-PYTHONPATH=. python3 -m pytest tools/firmware/tests tools/hardware/tests tools/android/tests
-npm test --prefix integrations/zigbee2mqtt
+python tools/dev/bootstrap.py workspace
+/home/vscode/.cache/vomar/dev-venv/bin/python -m pytest tools/release/tests tools/dev/tests
 ```
 
-Tests that require private original artifacts, archived native builds or an SDK
-skip when those inputs are absent. A skipped hardware/artifact check is not a
-qualification result. Firmware builds additionally require the pinned Nordic
-SDK and a local signing setup; Android builds require Java 17 and the Android
-SDK. See the component guides for these separate checks.
+Desktop/GUI, firmware, Android, converter, coverage and security checks have
+additional dependencies and commands in [CONTRIBUTING.md](CONTRIBUTING.md).
+Use disposable services and synthetic inputs. Artifact-dependent skips are
+reported as skips and do not establish physical qualification.
 
-For static reverse engineering on Linux, install Git, Bash, Python 3, Ghidra
-and the JDK required by your Ghidra version; put `analyzeHeadless` on `PATH`.
-The [research summary](docs/research-summary.md#reproduce-the-static-analysis)
-describes input validation and headless analysis. The optional
-`./tools/helpers/check-env.sh` reports available research tools, including tools
-unneeded for static analysis. With originals supplied and a local `analysis/`
-directory created, `./tools/helpers/inventory-inputs.sh` records their hashes.
-These helpers are separate from the public host suites. Local editor/container
-configuration is not included in this source distribution.
+[Releasing](docs/releasing.md) explains exact-candidate drafts and immutable
+assets; [GitHub setup](docs/github-setup.md) describes remote configuration and
+verification. Release Please owns distribution proposals. Physical programming,
+erasure and UICR/bootloader changes require separate explicit operator approval.
 
-Physical programming, erasure, bootloader changes and UICR writes require explicit
-operator approval. Use an isolated bench arrangement for SWD work. See
-[repository safety and evidence rules](AGENTS.md) before hardware work.
+[MIT license](LICENSE), copyright 2026 Ryther. Dependencies retain their own
+licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).

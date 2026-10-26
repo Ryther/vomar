@@ -10,15 +10,26 @@ theme:
     primary: deep orange
     accent: teal
 nav:
-  - Start: index.md
-  - Install and recover: offline-guide.md
-  - Desktop: desktop.md
-  - Development: development.md
-  - Release a distribution: releasing.md
-  - GitHub setup: github-setup.md
-  - Client parity: desktop-parity.md
-  - UX evidence: ux-evidence.md
+  - Home: index.md
+  - Get started:
+      - Install and update: installation.md
+      - Android: android-updater.md
+      - Desktop: desktop.md
+      - Troubleshooting: troubleshooting.md
+  - Device operations:
+      - Package and recovery rules: offline-guide.md
+      - Android first installation: android-first-install.md
+      - Bluetooth qualification trial: android-bluetooth-trial.md
+  - Development:
+      - Architecture: architecture.md
+      - Dev Container: development.md
+      - Releasing: releasing.md
+      - GitHub setup: github-setup.md
+      - Client parity: desktop-parity.md
+      - UX evidence: ux-evidence.md
+      - Research evidence: research-summary.md
 validation:
   links:
     not_found: warn
     unrecognized_links: warn
+    anchors: warn

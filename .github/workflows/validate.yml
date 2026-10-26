@@ -186,3 +186,13 @@ jobs:
         with: {name: 'javascript-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: {name: 'converter-${{ inputs.sha || github.sha }}', path: integrations/zigbee2mqtt/dist/vimar_30805.js, if-no-files-found: error}
+
+  sonar-pr:
+    needs: [source, android, converter]
+    if: always() && github.event_name == 'pull_request'
+    uses: ./.github/workflows/sonar-pr.yml
+    with:
+      sha: ${{ inputs.sha || github.sha }}
+      coverage-result: ${{ needs.source.result == 'success' && needs.android.result == 'success' && needs.converter.result == 'success' && 'success' || 'failure' }}
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

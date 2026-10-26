@@ -12,7 +12,8 @@
     "Dependencies required",
     "CodeQL required",
     "Converter required",
-    "Devcontainer required"
+    "Devcontainer required",
+    "Sonar required"
   ],
   "release": [
     "Conventional Commits",
