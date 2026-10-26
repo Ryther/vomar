@@ -12,6 +12,8 @@ import java.security.spec.X509EncodedKeySpec
 
 fun main(args:Array<String>) {
     when(args[0]) {
+        "prepare-acl-lower","prepare-acl-upper","prepare-no-acl","prepare-acl-empty","prepare-acl-capture","prepare-acl-watchdog","prepare-acl-persistent","prepare-acl-uncaught","prepare-acl-cancel","prepare-acl-empty-vectors","prepare-acl-read-denied","prepare-acl-wrong-pc","prepare-acl-wrong-msp","prepare-acl-even-vector","prepare-acl-fault" -> programmingPreparationProbe(args[0])
+        "restore-mode1","restore-paused-watchdog","restore-running-watchdog","restore-bad-uicr","restore-wrong-uid","restore-acl","restore-acl-watchdog" -> originalRestoreLeaseProbe(args[0])
         "resume-mode1","resume-mode2","resume-cancel","resume-bad-uicr","resume-mode-ack-loss","resume-unconfirmed" -> resumeLeaseProbe(args)
         "wire-cache" -> {
             val target=ProgrammingWireTarget();val wire=JlinkInstallWire(target);wire.initialize()
@@ -112,6 +114,7 @@ fun main(args:Array<String>) {
                     if(!persistenceFailed&&(args[0]=="controller-persist-fail"&&snapshot.phase==InitialInstallPhase.INSTALLING||args[0]=="controller-begin-persist-fail"&&snapshot.phase==InitialInstallPhase.CONNECTING)){
                         persistenceFailed=true;error("Injected durable status acknowledgement failure")}}
             }
+            val observed=mutableListOf<InitialInstallSnapshot>()
             val controller=InitialInstallController({r,cancelled,proof->
                 val token=checkNotNull(DkUsbOperationGate.acquire("synthetic installer"))
                 val lease=NrfInitialInstallLease(JlinkInstallWire(target,{token.checkCurrent()}),token,cancelled)
@@ -123,7 +126,7 @@ fun main(args:Array<String>) {
                     override val provenance=QuiescentProvenance("synthetic test","synthetic probe",3300,0x1366,0x1060,4,0x85,3)
                     override fun close(){token.close();if(args[0]=="controller-close-fail")error("Injected USB close failure")}
                 }
-            },persistence,FileInstallJournal(Path.of(args[3],"transactions")))
+            },persistence,FileInstallJournal(Path.of(args[3],"transactions")),observed={observed+=it})
             if(args[0] in setOf("controller-partial-cancel","controller-resume","controller-resume-cancel"))target.onMemoryWrite={address,_->if(address==0x4001e508L)controller.cancel()}
             controller.beginCandidate(request,candidate)
             if(args[0] in setOf("controller-already-custom","controller-anchor-present")){
@@ -138,6 +141,9 @@ fun main(args:Array<String>) {
                 check(target.memoryWrites.isEmpty());return
             }
             check(controller.snapshot.phase==InitialInstallPhase.AWAITING_EXPORT&&target.halted&&stored!=null)
+            val captureProgress=observed.filter{it.phase==InitialInstallPhase.CAPTURING&&it.progressTotal>0}
+            check(captureProgress.last().progressDone==2*(0x100000+8192))
+            check(captureProgress.zipWithNext().all{(a,b)->a.progressDone<b.progressDone})
             var exported=byteArrayOf()
             controller.export(object:ArchiveExport {
                 override fun create(bytes:ByteArray):String {check(target.halted&&DkUsbOperationGate.acquire("watch")==null);exported=bytes.copyOf();return "same-explicit-document"}
@@ -164,6 +170,8 @@ fun main(args:Array<String>) {
                         controller.startVerified(InstallOwnerReview(request.requestId,binding.id,candidate.releaseSha256))
                         check(controller.snapshot.phase==InitialInstallPhase.STARTED&&!target.halted&&target.resetCount==1)
                         check(target.requestedPowerBits==0L)
+                        val startProgress=observed.filter{it.phase==InitialInstallPhase.STARTING&&it.progressTotal==0x100000}
+                        check(startProgress.last().progressDone==0x100000&&startProgress.zipWithNext().all{(a,b)->a.progressDone<b.progressDone})
                         if(args[0]=="controller-paused-watchdog"){
                             check(target.wdtRunning) // SYSRESETREQ does not clear inherited WDT.
                             check(controller.snapshot.message.contains("watchdog"))
@@ -219,6 +227,8 @@ fun main(args:Array<String>) {
                 }
                 val after=InitialInstallController({r,c,_->link(r,c,null)},persistence,FileInstallJournal(Path.of(args[3],"transactions")),resumeConnect={r,c,a->link(r,c,a)})
                 val before=target.memoryWrites.count{it.first in 0L..0xfffffL}
+                val priorResets=target.resetCount
+                if(args[0]=="controller-resume-verified"){target.flashAcl[7][0]=0xf8000;target.flashAcl[7][1]=4096;target.flashAcl[7][2]=2}
                 after.prepareResumeCandidate(resumedRequest,candidate,reopened,evidence.journal,option.journalHeadSha256)
                 check(after.snapshot.phase==InitialInstallPhase.AWAITING_RESUME_REVIEW&&after.snapshot.resume&&after.snapshot.binding==binding)
                 if(args[0]=="controller-resume-cancel"){
@@ -228,7 +238,7 @@ fun main(args:Array<String>) {
                     val review=ResumeOwnerReview(resumedRequest.requestId,binding.id,candidate.releaseSha256,checkNotNull(after.snapshot.resumeHeadSha256))
                     check(runCatching{after.resume(review.copy(journalHeadSha256="00".repeat(32)))}.isFailure)
                     after.resume(review);check(after.snapshot.phase==InitialInstallPhase.VERIFIED_HALTED&&after.receipt!=null&&target.halted)
-                    if(args[0]=="controller-resume-verified")check(target.memoryWrites.count{it.first in 0L..0xfffffL}==before)
+                    if(args[0]=="controller-resume-verified"){check(target.memoryWrites.count{it.first in 0L..0xfffffL}==before);check(target.resetCount==priorResets&&target.flashAcl[7][2]==2L){"Verify-only repair must not clear ACL or request a preparation reset"}}
                 }
                 checkNotNull(DkUsbOperationGate.acquire("post resume diagnostic")).close()
             }
@@ -268,6 +278,7 @@ fun main(args:Array<String>) {
             val hash="00".repeat(32);val binding=InstallBinding(identity,hash,hash,hash,hash,hash,hash,hash)
             val session=lease.authorizer(binding).acquire(binding)
             when(args[0]) {
+        "restore-mode1","restore-paused-watchdog","restore-running-watchdog","restore-bad-uicr","restore-wrong-uid","restore-acl","restore-acl-watchdog" -> originalRestoreLeaseProbe(args[0])
         "resume-mode1","resume-mode2","resume-cancel","resume-bad-uicr","resume-mode-ack-loss","resume-unconfirmed" -> resumeLeaseProbe(args)
                 "lease-cross-boundary"->{val before=target.events.size;check(runCatching{session.program(0x3f0,ByteArray(256),token.generation)}.isFailure);check(target.events.size==before)}
                 "lease-ff-words"->{session.program(0x1000,ByteArray(8){0xff.toByte()},token.generation);check(target.memoryWrites.none{it.first in 0..0xfffffL})}

@@ -25,9 +25,12 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
     private var resetCatchSetupAttempted=false
     val debugStateUncertain get()=resetCatchSetupAttempted&&!resetCatchComplete
     private var handoffAuthority:WatchdogHandoffAuthority?=null
+    private var restoreAuthority:OriginalRestorePlan?=null
     private var resumeAuthority:ResumeHardwareAuthority?=null
     var watchdogProfile:ObservedWatchdogProfile?=null;private set
     val watchdogHandoff get()=handoffAuthority?.policy
+    var programmingPreparation:String?=null;private set
+    private var programmingPrepared=false
     val generation get()=token.generation
     val originalCpuControl get()=originalControl.toInt()
     val haltRetentionRequired get()=(mutationMayHaveStarted||retainHalt)&&!startMayHaveOccurred
@@ -43,6 +46,11 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
     }
     @Synchronized fun openForVerifiedStart(target:TargetIdentity,receipt:InitialInstallReceipt,watchdogHandoff:WatchdogHandoffAuthority?=null){
         openInternal(target,false,watchdogHandoff,null,receipt)
+    }
+    @Synchronized fun openForOriginalRestore(target:TargetIdentity,plan:OriginalRestorePlan){
+        plan.requireBinding(plan.binding,token.generation);require(plan.binding.target==target)
+        restoreAuthority=plan;retainHalt=true
+        openInternal(target,false,null,null)
     }
     private fun openInternal(target:TargetIdentity,allowResetCatch:Boolean,watchdogHandoff:WatchdogHandoffAuthority?,resume:ResumeHardwareAuthority?,verifiedStart:InitialInstallReceipt?=null){
         check(!opened&&!finished)
@@ -63,9 +71,9 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
         originalControl=if(cpu and 1==0L)0 else if(cpu and 0x20000!=0L)3 else 1
         require(word(READY)==1L){"Target NVMC is not ready"}
         val initialMode=word(CONFIG)
-        require(if(resume==null)initialMode==0L else initialMode in 0..2){"Target NVMC is not an admitted read/program/erase mode"}
+        require(if(resume==null&&restoreAuthority==null)initialMode==0L else initialMode in 0..2){"Target NVMC is not an admitted read/program/erase mode"}
         watchdogHandoff?.requireTarget(target,token.generation)
-        val observed=readWatchdogProfile();watchdogProfile=observed;observed.requireSupported(watchdogHandoff)
+        val observed=readWatchdogProfile();watchdogProfile=observed;if(restoreAuthority!=null)observed.requireAcquisitionShape() else observed.requireSupported(watchdogHandoff)
         handoffAuthority=watchdogHandoff
         stopped();expected=target;opened=true
         wire.writeDebugControl(KEY or 3)
@@ -79,11 +87,11 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
         // check. Capture/start inspection requires a second quiescence proof
         // after HALT/reset catch, not a global guard used during our writes.
         require(word(READY)==1L){"Post-HALT NVMC is not ready"}
-        if(resume==null)require(word(CONFIG)==0L){"Post-HALT NVMC is not idle/read-only; no original capture is admitted"}
+        if(resume==null&&restoreAuthority==null)require(word(CONFIG)==0L){"Post-HALT NVMC is not idle/read-only; no original capture is admitted"}
         else {
             require(word(CONFIG) in 0..2){"Unknown prior NVMC mode; explicit repair is blocked"}
             fun hash(data:ByteArray)=java.security.MessageDigest.getInstance("SHA-256").digest(data).joinToString(""){"%02x".format(it.toInt() and 255)}
-            require(hash(readRegion(0x10000000,4096))==resume.ficrSha256&&hash(readRegion(0x10001000,4096))==resume.uicrSha256){"Protected original FICR/UICR differs before resume quiescence"}
+            require(hash(readRegion(0x10000000,4096))==(resume?.ficrSha256?:restoreAuthority!!.ficrSha256)&&hash(readRegion(0x10001000,4096))==(resume?.uicrSha256?:restoreAuthority!!.uicrSha256)){"Protected original FICR/UICR differs before resume quiescence"}
             guard();ready()
             if(word(CONFIG)!=0L){wire.setNvmcMode(0);ready()}
             require(word(CONFIG)==0L){"Resume could not confirm NVMC read-only mode"}
@@ -108,30 +116,30 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
     private fun guard(){
         check(opened&&!finished);stopped();transportAndUid();val cpu=word(DHCSR)
         require(cpu and 0x20003L==0x20003L&&cpu and 0x02000000L==0L){"CPU halt lost or target reset; installation stopped"};stopped()
-        val observed=readWatchdogProfile();observed.requireSupported(handoffAuthority)
+        val observed=readWatchdogProfile();if(restoreAuthority!=null)observed.requireAcquisitionShape() else observed.requireSupported(handoffAuthority)
         require(observed==watchdogProfile){"Observed watchdog profile changed; no further installation mutation is allowed"};stopped()
     }
     /** The exclusive, non-reconnectable lease forbids cable/target replacement.
      * Full fresh UID/HALT checks surround each bounded batch/page; each word
      * and READY poll still checks cancellation and the live owner generation. */
     private fun transportGuard(){check(opened&&!finished);stopped()}
-    private fun readRegion(at:Long,size:Int):ByteArray {
+    private fun readRegion(at:Long,size:Int,onBytes:(Int)->Unit={}):ByteArray {
         require(size>0&&size%4==0);val out=ByteArray(size);var offset=0
         while(offset<size){guard();val n=minOf(512,size-offset,(1024-(at+offset)%1024).toInt());val bytes=wire.readWords(at+offset,n)
             val first=wire.readWords(at+offset,4);val last=if(n==4)first else wire.readWords(at+offset+n-4,4)
             require(first.contentEquals(bytes.copyOfRange(0,4))&&last.contentEquals(bytes.copyOfRange(n-4,n))){"Independent acquisition sentinel mismatch"}
-            guard();bytes.copyInto(out,offset);offset+=n}
+            guard();bytes.copyInto(out,offset);offset+=n;onBytes(offset)}
         return out
     }
     @Synchronized fun currentIdentity():TargetIdentity {guard();return identity().also{require(it==expected)}}
-    @Synchronized fun readOriginalRegion(file:String):ByteArray=when(file){
-        "flash.bin"->readRegion(0,0x100000)
-        "ficr.bin"->readRegion(0x10000000,4096)
-        "uicr.bin"->readRegion(0x10001000,4096)
+    @Synchronized fun readOriginalRegion(file:String,onBytes:(Int)->Unit={}):ByteArray=when(file){
+        "flash.bin"->readRegion(0,0x100000,onBytes)
+        "ficr.bin"->readRegion(0x10000000,4096,onBytes)
+        "uicr.bin"->readRegion(0x10001000,4096,onBytes)
         else->throw IllegalArgumentException("Unknown original region")
     }
     @Synchronized fun authorizer(binding:InstallBinding):SwdAuthorizer {
-        guard();require(binding.target==expected);handoffAuthority?.requireBinding(binding,token.generation);resumeAuthority?.requireBinding(binding,token.generation)
+        guard();require(binding.target==expected);handoffAuthority?.requireBinding(binding,token.generation);resumeAuthority?.requireBinding(binding,token.generation);restoreAuthority?.requireBinding(binding,token.generation)
         return object:SwdAuthorizer {
             override fun acquire(request:InstallBinding):AuthorizedSwdSession=synchronized(this@NrfInitialInstallLease){
                 guard();require(request==binding);check(!acquired);acquired=true
@@ -148,12 +156,12 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
                     override fun readFlash(address:Int,size:Int):ByteArray=synchronized(this@NrfInitialInstallLease){require(address>=0&&address%4==0&&size in 4..4096&&size%4==0&&address<=0x100000-size);active();readRegion(address.toLong(),size)}
                     override fun erasePage(address:Int,expectedGeneration:Long)=synchronized(this@NrfInitialInstallLease){
                         require(address in 0..0xff000&&address%4096==0);active(expectedGeneration)
-                        mutationMayHaveStarted=true;ready();active();wire.setNvmcMode(2);ready();active();wire.eraseFlashPage(address);ready();active();wire.setNvmcMode(0);ready()
+                        mutationMayHaveStarted=true;prepareProgramming();ready();active();wire.setNvmcMode(2);ready();active();wire.eraseFlashPage(address);ready();active();wire.setNvmcMode(0);ready()
                         require(readRegion(address.toLong(),4096).all{it==0xff.toByte()}){"Page erase readback failed"}
                     }
                     override fun program(address:Int,data:ByteArray,expectedGeneration:Long)=synchronized(this@NrfInitialInstallLease){
                         val frozen=data.copyOf();require(address>=0&&address%4==0&&frozen.size in 4..256&&frozen.size%4==0&&address<=0x100000-frozen.size&&address/4096==(address+frozen.size-1)/4096&&address%1024+frozen.size<=1024)
-                        active(expectedGeneration);mutationMayHaveStarted=true;ready();wordActive();wire.setNvmcMode(1);ready()
+                        active(expectedGeneration);mutationMayHaveStarted=true;prepareProgramming();ready();wordActive();wire.setNvmcMode(1);ready()
                         for(i in frozen.indices step 4){
                             wordActive();val word=frozen.copyOfRange(i,i+4)
                             // All-FF is already erased, not an NVMC program
@@ -170,17 +178,59 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
         }
     }
     private fun ready(){val start=now();repeat(128){transportGuard();if(word(READY)==1L)return;if(now()-start>=500_000_000)throw IOException("NVMC READY timed out; CPU remains halted")};throw IOException("NVMC READY polling limit")}
-    private fun verifyResetRegisters(){
+    private fun flashWriteProtections():List<Int> = (0 until 8).filter{index->
+        val fields=wire.readWords(0x4001e800L+index*16,12)
+        val address=number(fields);val size=number(fields,4);val permission=number(fields,8)
+        // Nordic ACL enforces only valid page ranges with nonzero SIZE/PERM.
+        val valid=address<0x100000L&&address%4096==0L&&size>0&&size%4096==0L
+        require(!valid||permission and 1L==0L){"FLASH ACL region $index blocks original readback; no preparation reset or FLASH mutation is allowed"}
+        valid&&permission and 2L!=0L
+    }
+    /** Called only by an owner-reviewed FLASH mutation, never by acquisition,
+     * inspection or verify-only repair. Stock boot leaves volatile ACLs active
+     * while HALT alone does not clear them. A caught reset clears volatile
+     * state without issuing instructions or changing UICR/ACL registers. */
+    private fun prepareProgramming(){
+        if(programmingPrepared)return
+        guard();ready()
+        programmingPreparation="Inspecting FLASH ACL registers before reviewed programming"
+        val protections=flashWriteProtections()
+        if(protections.isEmpty()){
+            programmingPreparation="FLASH ACL clear; no preparation reset required"
+            programmingPrepared=true;return
+        }
+        programmingPreparation="FLASH write protection in ACL regions ${protections.joinToString()}; preparing caught reset"
+        val ficr=readRegion(0x10000000L,4096);val uicr=readRegion(0x10001000L,4096)
+        retainHalt=true;guard();resetCatchSetupAttempted=true;resetCatchComplete=false
+        wire.enableResetVectorCatch();resetCatchUsed=true
+        wire.requestCaughtSystemReset()
+        val start=now();var seenReset=false;var caught=false
+        repeat(128){if(!caught){stopped();val cpu=word(DHCSR);seenReset=seenReset||cpu and 0x02000000L!=0L
+            caught=seenReset&&cpu and 0x20003L==0x20003L
+            if(!caught&&now()-start>=500_000_000)throw IOException("Programming preparation reset catch timed out; CPU state requires review")}}
+        require(caught){"Programming preparation reset did not confirm halted CPU"}
+        guard();ready();require(word(CONFIG)==0L){"NVMC did not return to read-only after preparation reset"}
+        require(readRegion(0x10000000L,4096).contentEquals(ficr)&&readRegion(0x10001000L,4096).contentEquals(uicr)){"FICR/UICR changed during programming preparation"}
+        require(flashWriteProtections().isEmpty()){"FLASH ACL remains write-protected after preparation reset; no FLASH mutation attempted"}
+        verifyResetRegisters(requirePlausibleVectors=false)
+        wire.restoreResetVectorCatch();guard();resetCatchComplete=true
+        programmingPreparation="FLASH ACL regions ${protections.joinToString()} cleared by confirmed reset catch; UID/FICR/UICR/watchdog unchanged; CPU halted"
+        programmingPrepared=true
+    }
+    private fun verifyResetRegisters(requirePlausibleVectors:Boolean=true){
         guard();val vectors=wire.readWords(0,8);val stack=number(vectors);val reset=number(vectors,4)
-        require(stack>0x20000000L&&stack<=0x20040000L&&stack%8==0L&&reset and 1L==1L&&(reset and 0xfffffffeL) in 8L until 0x100000L){"Reset vectors are not plausible"}
+        if(requirePlausibleVectors)require(stack>0x20000000L&&stack<=0x20040000L&&stack%8==0L&&reset and 1L==1L&&(reset and 0xfffffffeL) in 8L until 0x100000L){"Reset vectors are not plausible"}
         val pc=wire.readCoreRegister(0x0f);stopped();val msp=wire.readCoreRegister(0x11);stopped();val xpsr=wire.readCoreRegister(0x10)
-        require(pc==(reset and 0xfffffffeL)&&msp==stack&&xpsr and 0x01000000L!=0L&&xpsr and 0x1ffL==0L){"Caught reset PC/MSP/Thumb state differs from live vectors; CPU stays halted"}
+        // Armv7-M TakeReset masks SP[1:0] and loads EPSR.T from vector bit0.
+        // A repair can start with an erased vector page, unlike normal start.
+        val expectedMsp=stack and 0xfffffffcL;val expectedThumb=(reset and 1L) shl 24
+        require(pc==(reset and 0xfffffffeL)&&msp==expectedMsp&&xpsr and 0x01000000L==expectedThumb&&xpsr and 0x1ffL==0L){"Caught reset PC/MSP/Thumb state differs from live vectors; CPU stays halted"}
         guard()
     }
     /** Only the controller's fresh verified receipt path calls this. Never
      * clears C_HALT over the old PC: a caught reset and HALT are mandatory. */
     @Synchronized fun startVerifiedReset(){
-        retainHaltForPriorUncertainty();guard();resetCatchSetupAttempted=true;wire.enableResetVectorCatch();resetCatchUsed=true
+        retainHaltForPriorUncertainty();guard();resetCatchSetupAttempted=true;resetCatchComplete=false;wire.enableResetVectorCatch();resetCatchUsed=true
         wire.requestCaughtSystemReset();val start=now();var seenReset=false;var caught=false
         repeat(128){if(!caught){stopped();val cpu=word(DHCSR);seenReset=seenReset||cpu and 0x02000000!=0L
             caught=seenReset&&cpu and 0x20003L==0x20003L

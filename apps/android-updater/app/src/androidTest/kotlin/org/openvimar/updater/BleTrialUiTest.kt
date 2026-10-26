@@ -85,7 +85,7 @@ class BleTrialUiTest:ActivityInstrumentationTestCase2<BleTrialActivity>(BleTrial
   val rendered=summary.text.toString();val model=runtime.controller.state.value
   assertTrue("Pinned feedback names the current phase: expected=${phase.label}; rendered=$rendered; controller=${model.phase}; progress=${model.progressPercent}; busy=${model.busy}",rendered.contains(phase.label))
  }
- private fun waitUntil(condition:()->Boolean){val end=System.currentTimeMillis()+15000;while(System.currentTimeMillis()<end){instrumentation.waitForIdleSync();if(condition())return;Thread.sleep(50)};assertTrue("Timed out waiting for native state",condition())}
+ private fun waitUntil(condition:()->Boolean){val end=System.currentTimeMillis()+15000;while(System.currentTimeMillis()<end){instrumentation.waitForIdleSync();if(condition())return;Thread.sleep(50)};assertTrue("Timed out waiting for native state: ${runtime.controller.state.value.status}; ${runtime.message.value}",condition())}
  private fun capture(name:String){
   instrumentation.waitForIdleSync();Thread.sleep(900)
   val bitmap=instrumentation.uiAutomation.takeScreenshot()
@@ -116,7 +116,7 @@ class BleTrialUiTest:ActivityInstrumentationTestCase2<BleTrialActivity>(BleTrial
  fun testIdleScreenExplainsMountedBluetoothTrialAndCannotStartWithoutReview(){
   val screen=activity;instrumentation.waitForIdleSync()
   val views=nodes(screen.window.decorView);val texts=views.filterIsInstance<TextView>().map{it.text.toString()}
-  assertTrue(texts.contains("Bluetooth trial"));assertTrue(texts.any{it.contains("older firmware")&&it.contains("lamp off")})
+  assertTrue(texts.contains("Update firmware"));assertTrue(texts.any{it.contains("older firmware")&&it.contains("lamp off")})
   assertTrue(button("ble.trial.choose").isEnabled);assertFalse(button("ble.trial.find").isEnabled);assertFalse(button("ble.trial.run").isEnabled)
   assertFalse(runtime.controller.state.value.busy);capture("idle")
  }

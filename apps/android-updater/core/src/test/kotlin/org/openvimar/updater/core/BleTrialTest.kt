@@ -60,4 +60,23 @@ class BleTrialTest {
 
  @Test fun observedNewRecoveryResolvesOldBootstrapRestartWithoutRetryPermission()=runBlocking {val c=candidate();val r=Radio();r.remote=r.remote.copy(primary=RemoteImage(h("migration"),false,true));val s=States();s.boot=BootstrapCheckpoint(c.digest,address,BootstrapPhase.RESET_INTENT,resetAcknowledged=false);val v=c.review(address,r,s.bootstrap,s.sessions);assertFalse(v.legacy);assertFalse(v.resetRetryRequired);c.run(v,{r},s.bootstrap,s.sessions,false){};assertEquals(1,r.writes);assertEquals(1,r.resets)}
 
+ @Test fun selectedUidReviewCannotBeReboundByMutatingCallerOrDisplayedMetadata()=runBlocking {
+  val c=candidate();val r=Radio();val s=States();val expected=r.id.uid.toMutableList()
+  val review=c.review(address,r,s.bootstrap,s.sessions,expected);expected[0]="deadbeef"
+  assertEquals(r.id.uid,review.expectedUid)
+  assertThrows(UnsupportedOperationException::class.java){(review.expectedUid as MutableList<String>)[0]="deadbeef"}
+  Unit
+ }
+ @Test fun selectedDeviceUidMismatchCannotReachAnUpload()=runBlocking {
+  val c=candidate();val r=Radio();val s=States();var failed=false
+  try{c.review(address,r,s.bootstrap,s.sessions,listOf("deadbeef","01020304"))}catch(_:IllegalArgumentException){failed=true}
+  assertTrue(failed);assertEquals(0,r.writes);assertEquals(0,r.resets);assertEquals(0,s.saves)
+ }
+ @Test fun selectedLegacyDeviceMustMatchAfterPreparationBeforeMainUpload()=runBlocking {
+  val c=candidate();val r=Radio(true);val s=States()
+  val review=c.review(address,r,s.bootstrap,s.sessions,listOf("deadbeef","01020304"));val events=mutableListOf<UpdateEvent>()
+  c.run(review,{r},s.bootstrap,s.sessions,false){events+=it}
+  assertTrue(events.last() is UpdateEvent.Paused);assertNull(s.boot?.observedUid);assertEquals("Only recovery preparation can precede live UID availability",1,r.writes);assertEquals(1,r.resets);assertNull(s.normal)
+ }
+
 }

@@ -15,7 +15,7 @@ internal suspend fun finishFailedMqttConnection(error:Exception,disconnect:suspe
             val failure=presentMqttFailure(error)
             "${failure.message} ${failure.nextAction}"
         }
-        publishState(NetworkBackendState(status=status))
+        publishState(NetworkBackendState(status=status,connectionError=error !is CancellationException))
     }
     throw error
 }

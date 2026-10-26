@@ -44,6 +44,11 @@ class SingleBenchPermit private constructor(private val candidate:String,private
 }
 
 object CandidateRelease {
+    /** Manual single-device admission; never returns qualified fleet authority. */
+    fun inspectLocal(raw:ByteArray,publicKey:PublicKey,appVersion:String):InspectedCommonCandidate {
+        val result=CommonRelease.inspectLocal(raw,publicKey,appVersion)
+        return InspectedCommonCandidate(result.first,result.second)
+    }
     fun inspect(raw:ByteArray,publicKey:PublicKey,appVersion:String):InspectedCommonCandidate {
         val verified=CommonRelease.inspectCandidate(raw,publicKey,appVersion)
         return InspectedCommonCandidate(verified.first,verified.second)

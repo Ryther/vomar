@@ -46,7 +46,7 @@ class CommonBootstrapCoordinator(private val wait:suspend(Long)->Unit={delay(it)
         }
     }
     suspend fun run(pkg:ValidatedCommonPackage,address:String,transport:BleTransport,store:BootstrapStore,
-        onBound:suspend(RuntimeIdentity)->Unit,allowResetRetry:Boolean=false,onEvent:suspend(UpdateEvent)->Unit) {
+        onBound:suspend(RuntimeIdentity)->Unit,allowResetRetry:Boolean=false,validateIdentity:(RuntimeIdentity)->Unit={},onEvent:suspend(UpdateEvent)->Unit) {
         check(mutex.tryLock()) {"A recovery preparation is already running"};stopped=false
         var checkpoint:BootstrapCheckpoint?=null
         var retries=0;var resetRetryUsed=false;var resetRetryAuthorized=false
@@ -68,6 +68,7 @@ class CommonBootstrapCoordinator(private val wait:suspend(Long)->Unit={delay(it)
                         val identity=RuntimeIdentityLookup.forRelease(transport,pkg.manifest);running()
                         require(checkpoint?.observedUid==null || checkpoint?.observedUid==identity.uid) {"Previously verified bootstrap UID changed"}
                         require(checkpoint?.observedIdentity==null || checkpoint?.observedIdentity==identity) {"Previously verified bootstrap loader/anchor identity changed"}
+                        validateIdentity(identity)
                         val bound=pkg.bind(identity,address)
                         require(UpdatePlanner.next(bound,remote,null)!=Decision.Reject) {"Unexpected images after recovery preparation"}
                         save(BootstrapCheckpoint(pkg.bundleDigest,address,BootstrapPhase.BOUND,observedUid=identity.uid,observedIdentity=identity.takeIf{pkg.manifest.schemaVersion==3}))

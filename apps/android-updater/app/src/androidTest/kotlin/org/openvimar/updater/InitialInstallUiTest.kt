@@ -20,12 +20,13 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
     private fun nodes(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap{nodes(v.getChildAt(it))}else emptyList()
     private fun field(name:String)=InitialInstallActivity::class.java.getDeclaredField(name).apply{isAccessible=true}
     fun testKeyboardScrollFocusDoesNotWashOutTheWholeScreen(){
+        setActivityInitialTouchMode(false);instrumentation.setInTouchMode(false)
         val screen=activity;instrumentation.waitForIdleSync()
         val scroll=nodes(screen.window.decorView).filterIsInstance<android.widget.ScrollView>().single()
         val priorTouchMode=screen.window.decorView.isInTouchMode
         val priorDescendants=scroll.descendantFocusability
         try{
-            instrumentation.setInTouchMode(false)
+            instrumentation.setInTouchMode(false);instrumentation.waitForIdleSync()
             instrumentation.runOnMainSync{scroll.descendantFocusability=ViewGroup.FOCUS_BLOCK_DESCENDANTS;assertTrue("The viewport must retain keyboard focus and scrolling",scroll.requestFocus())}
             instrumentation.waitForIdleSync();Thread.sleep(500)
             assertTrue(scroll.isFocused)
@@ -41,7 +42,7 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
                 val path=File(instrumentation.targetContext.getExternalFilesDir("ui-review-v060"),"initial-install-keyboard-${config.screenWidthDp}x${config.screenHeightDp}-font${(config.fontScale*100).toInt()}.png")
                 path.parentFile!!.mkdirs();path.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}
             }finally{bitmap.recycle()}
-            val action=nodes(screen.window.decorView).filterIsInstance<Button>().first{it.text.toString()=="Choose common release"}
+            val action=nodes(screen.window.decorView).filterIsInstance<Button>().first{it.text.toString()=="Choose firmware"}
             instrumentation.runOnMainSync{scroll.descendantFocusability=priorDescendants;assertTrue("Child actions must retain keyboard focus",action.requestFocus())}
             assertTrue("Child action focus highlighting must remain available",action.defaultFocusHighlightEnabled)
             assertTrue(action.hasFocus())
@@ -68,12 +69,12 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
         instrumentation.waitForIdleSync()
         val views=nodes(screen.window.decorView)
         val texts=views.filterIsInstance<TextView>().map{it.text.toString()}
-        listOf("Choose common release","Bench qualification","Choose DK and read target").forEach{label->
+        listOf("Choose firmware","Read connected device").forEach{label->
             val control=views.filterIsInstance<Button>().single{it.text.toString()==label}
             assertFalse("Held transaction must lock $label",control.isEnabled)
         }
-        assertTrue(texts.any{it.contains("UID 11223344-55667788")&&it.contains("synthetic-held-probe")})
-        assertTrue(texts.any{it.startsWith("Qualification candidate")&&it.contains(digest.take(12))})
+        assertTrue(texts.any{it.contains("Device 11223344-55667788")})
+        assertTrue(texts.any{it.startsWith("Firmware")&&it.contains(digest.take(12))})
         assertFalse(texts.any{it.contains("unrelated-preview")||it.contains("SHA-256 ${"a".repeat(12)}")})
         assertFalse(views.any{it.tag=="initial.install.confirm"||it.tag=="initial.capture"})
         assertTrue(views.filterIsInstance<Button>().single{it.text.toString()=="Start verified firmware"}.isEnabled)
@@ -102,7 +103,7 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
         assertTrue(texts.any{it.contains("A rebuild resets custom settings")})
         assertTrue(views.filterIsInstance<Button>().single{it.tag=="initial.resume.confirm"}.isEnabled)
         assertFalse(views.any{it.tag=="initial.capture"||it.tag=="initial.install.confirm"})
-        listOf("Choose common release","Bench qualification","Choose DK and read target").forEach{label->
+        listOf("Choose firmware","Read connected device").forEach{label->
             assertFalse(views.filterIsInstance<Button>().single{it.text.toString()==label}.isEnabled)
         }
         // Only presentation is injected: the real service remains idle, with
@@ -125,11 +126,11 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
         }
         opened.application.registerActivityLifecycleCallbacks(callbacks)
         try{
-            instrumentation.runOnMainSync{field("pickCandidate").setBoolean(opened,true);opened.recreate()}
+            instrumentation.runOnMainSync{opened.recreate()}
             assertTrue("Replacement first-install Activity must be created",created.await(20,java.util.concurrent.TimeUnit.SECONDS))
             instrumentation.waitForIdleSync()
             val restored=checkNotNull(replacement.get())
-            assertTrue("Pending candidate picker must not return as a qualified-release import",field("pickCandidate").getBoolean(restored))
+            assertFalse(nodes(restored.window.decorView).filterIsInstance<TextView>().any{it.text.toString()=="Bench qualification"})
             assertFalse("A pending picker is not a selected or reviewed candidate",field("candidate").getBoolean(restored))
             assertNull(field("rawPackage").get(restored))
             assertFalse(nodes(restored.window.decorView).any{it.tag=="initial.install.confirm"})
@@ -144,12 +145,43 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
         instrumentation.waitForIdleSync()
         val views=nodes(screen.window.decorView)
         assertTrue(views.filterIsInstance<TextView>().any{it.text.toString()=="First installation"})
-        assertTrue(views.filterIsInstance<TextView>().any{it.text.toString()=="Choose common release"})
+        assertTrue(views.filterIsInstance<TextView>().any{it.text.toString()=="Choose firmware"})
         assertFalse(views.any{it.tag=="initial.install.confirm"})
         assertTrue(views.filterIsInstance<Button>().filter{it.tag=="initial.capture"}.all{!it.isEnabled})
         assertNull(screen.intent.data)
     }
+    fun testOwnerBackupProgressStaysVisibleAndUsesMeasuredSnapshot(){
+        setActivityInitialTouchMode(true);instrumentation.setInTouchMode(true)
+        val screen=activity;instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync{
+            (field("observing").get(screen) as? kotlinx.coroutines.Job)?.cancel()
+            val target=TargetIdentity(0x11223344,0x55667788,0x41414430)
+            val request=InstallCaptureRequest("b8a22943-5f57-4ae0-a4f8-5f7f2d2e2271","synthetic-only",target,"b".repeat(64))
+            field("snapshot").set(screen,InitialInstallSnapshot(InitialInstallPhase.CAPTURING,request,progressDone=1048576,progressTotal=2113536,progressLabel="Reading backup 1/2"))
+            InitialInstallActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(screen)
+        }
+        instrumentation.waitForIdleSync()
+        val views=nodes(screen.window.decorView);val bar=views.filterIsInstance<android.widget.ProgressBar>().single()
+        assertFalse(bar.isIndeterminate);assertEquals(490,bar.progress)
+        val scroll=views.filterIsInstance<android.widget.ScrollView>().single()
+        instrumentation.runOnMainSync{scroll.scrollTo(0,10000)};instrumentation.waitForIdleSync()
+        assertTrue(bar.isShown);assertFalse(nodes(scroll).contains(bar))
+        assertTrue(views.filterIsInstance<TextView>().any{it.text.toString()=="Reading backup 1/2 · 49%"})
+        fun captureProgress(name:String){
+            val path=File(instrumentation.targetContext.getExternalFilesDir("ui-review-v060"),"$name.png");path.parentFile!!.mkdirs()
+            instrumentation.uiAutomation.takeScreenshot().let{bitmap->try{path.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}}finally{bitmap.recycle()}}
+        }
+        captureProgress("owner-backup-progress")
+        instrumentation.runOnMainSync{
+            val previous=field("snapshot").get(screen) as InitialInstallSnapshot
+            field("snapshot").set(screen,previous.copy(phase=InitialInstallPhase.STARTING,progressDone=0x80000,progressTotal=0x100000,progressLabel="Checking firmware"))
+            InitialInstallActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(screen)
+        }
+        instrumentation.waitForIdleSync();assertTrue(bar.isShown);assertEquals(500,bar.progress)
+        captureProgress("owner-prestart-progress")
+    }
     fun testIdleScreenRemainsScrollableWithVisibleSystemInsets(){
+        setActivityInitialTouchMode(true);instrumentation.setInTouchMode(true)
         val screen=activity
         instrumentation.waitForIdleSync()
         val deadline=android.os.SystemClock.elapsedRealtime()+10_000
@@ -162,8 +194,9 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
         // Android may place navigation at the side or hide a tablet taskbar.
         // Preserve the actual insets on all four edges rather than assuming
         // every configuration has a positive bottom navigation bar.
-        assertEquals(safe.left,scroll.paddingLeft);assertEquals(safe.top,scroll.paddingTop)
-        assertEquals(safe.right,scroll.paddingRight);assertEquals(safe.bottom,scroll.paddingBottom)
+        val root=scroll.parent as View
+        assertEquals(safe.left,root.paddingLeft);assertEquals(safe.top,root.paddingTop)
+        assertEquals(safe.right,root.paddingRight);assertEquals(safe.bottom,root.paddingBottom)
         val location=IntArray(2);instrumentation.runOnMainSync{scroll.getLocationOnScreen(location)}
         assertTrue(location[0]+scroll.paddingLeft>=safe.left)
         assertTrue(location[0]+scroll.width-scroll.paddingRight<=screen.resources.displayMetrics.widthPixels-safe.right)

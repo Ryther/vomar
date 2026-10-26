@@ -11,7 +11,7 @@ import java.time.Instant
 
 /** App-private immutable originals and diagnostic metadata. Journals remain the
  * separate strict engine evidence; this JSON never grants resume authority. */
-internal class AndroidInitialInstallPersistence(context:Context):InitialInstallPersistence {
+internal class AndroidInitialInstallPersistence(private val context:Context):InitialInstallPersistence {
     private val files=context.filesDir.apply{DurableInstallFiles.ensureDirectory(toPath())}
     private val directory=File(files,"dk-first-install").apply{DurableInstallFiles.ensureDirectory(toPath())}
     private val originals=File(directory,"originals").apply{DurableInstallFiles.ensureDirectory(toPath())}
@@ -51,6 +51,41 @@ internal class AndroidInitialInstallPersistence(context:Context):InitialInstallP
         val checked=OriginalArchive.verify(read(original(hash).openRead(),SelectedDocumentExport.MAX))
         require(checked.archiveSha256==hash){"Private original filename/content mismatch"};return checked
     }
+    /** Reopen the immutable private file through the same byte-exact handoff
+     * used by external exports. This receipt is evidence, never approval. */
+    fun privateExport(hash:String)=object:ArchiveExport {
+        override fun create(bytes:ByteArray):String {
+            val retained=read(original(hash).openRead(),SelectedDocumentExport.MAX)
+            require(retained.contentEquals(bytes)){"Private backup changed"}
+            return original(hash).baseFile.toURI().toString()
+        }
+        override fun reopen(document:String):ByteArray {
+            require(document==original(hash).baseFile.toURI().toString())
+            return read(original(hash).openRead(),SelectedDocumentExport.MAX)
+        }
+    }
+    @Synchronized fun originalBytes(hash:String):ByteArray {
+        reopenOriginal(hash);return read(original(hash).openRead(),SelectedDocumentExport.MAX)
+    }
+    /** Organisational version evidence is invalid after an exact original
+     * restore. Preserve names, rooms and transport mappings for the same UID. */
+    @Synchronized fun recordOriginalRestored(hash:String){
+        val target=reopenOriginal(hash).identity;val expected=listOf("%08x".format(target.uid0),"%08x".format(target.uid1))
+        val prefs=context.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE)
+        val rows=org.json.JSONArray(prefs.getString("devices","[]"))
+        for(i in 0 until rows.length()){
+            val row=rows.getJSONObject(i);val uid=row.optJSONArray("uid")?:continue
+            if(List(uid.length()){uid.getString(it).lowercase().removePrefix("0x").padStart(8,'0')}==expected)
+                row.put("installedVersion","").put("firmwareKind","UNKNOWN").put("observedAt",JSONObject.NULL).put("observationSource","")
+        }
+        check(prefs.edit().putString("devices",rows.toString()).commit()){"Original restored, but saved version could not be cleared"}
+    }
+    @Synchronized fun allBackups():List<VerifiedOriginal> = originals.listFiles().orEmpty()
+        .filter{it.name.matches(Regex("[0-9a-f]{64}\\.zip"))}.mapNotNull{file->
+            runCatching{reopenOriginal(file.name.removeSuffix(".zip"))}.getOrNull()
+        }
+    fun backupsFor(uid:List<String>)=allBackups().filter{it.identity.let{target->listOf("%08x".format(target.uid0),"%08x".format(target.uid1))}==uid.map{it.lowercase().removePrefix("0x").padStart(8,'0')}}
+
     @Synchronized override fun saveState(snapshot:InitialInstallSnapshot){
         val r=snapshot.request;val b=snapshot.binding
         val report=JSONObject().put("type","dk-first-install").put("schemaVersion",1).put("recordedAt",Instant.now().toString())
@@ -64,6 +99,8 @@ internal class AndroidInitialInstallPersistence(context:Context):InitialInstallP
             .put("mutationMayHaveStarted",snapshot.mutationMayHaveStarted).put("commitMayHaveBeenWritten",snapshot.commitMayHaveBeenWritten)
             .put("journalFailure",snapshot.journalFailure).put("cpuDisposition",snapshot.cpuDisposition).put("message",snapshot.message.take(1024))
             .put("debugStateUncertain",snapshot.debugStateUncertain)
+            .put("programmingPreparation",snapshot.programmingPreparation?:JSONObject.NULL)
+            .put("installStep",snapshot.installStep?:JSONObject.NULL).put("installAddress",snapshot.installAddress?:JSONObject.NULL)
             .put("watchdogHandoff",snapshot.watchdogHandoff?:JSONObject.NULL)
             .put("watchdog",snapshot.watchdog?.let{JSONObject(it.asContract())}?:JSONObject.NULL)
             .put("autoResume",false).put("hardwareQualified",false)

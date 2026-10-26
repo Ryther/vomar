@@ -8,15 +8,16 @@ import org.openvimar.installer.resume.ResumeHardwareAuthority
  * writer capability; neither service creation nor UI binding calls it. */
 internal object AndroidInitialInstallConnection {
     fun open(context:Context,request:InstallCaptureRequest,cancelled:()->Boolean,
-        handoff:(Long)->WatchdogHandoffAuthority?={null},resume:((Long)->ResumeHardwareAuthority)?=null,verifiedStart:InitialInstallReceipt?=null):InitialInstallConnection {
+        handoff:(Long)->WatchdogHandoffAuthority?={null},resume:((Long)->ResumeHardwareAuthority)?=null,verifiedStart:InitialInstallReceipt?=null,restore:((Long)->org.openvimar.installer.OriginalRestorePlan)?=null):InitialInstallConnection {
         val usb=AndroidDkInstallUsbOwner.open(context,request.deviceName,"First installation ${request.requestId}",cancelled)
         val channel=object:InstallBulkChannel{override fun write(bytes:ByteArray)=usb.channel.write(bytes);override fun read(maxBytes:Int)=usb.channel.read(maxBytes)}
         val lease=NrfInitialInstallLease(JlinkInstallWire(channel,usb::check),usb.token,cancelled)
         try {
             require(!request.allowResetCatch){"Pre-backup reset is unsupported; hardware watchdog must be inactive"}
             val capability=handoff(usb.token.generation)
-            require(resume==null||verifiedStart==null)
-            if(resume!=null)lease.openForResume(request.target,resume(usb.token.generation),capability)
+            require(listOfNotNull(resume,verifiedStart,restore).size<=1)
+            if(restore!=null)lease.openForOriginalRestore(request.target,restore(usb.token.generation))
+            else if(resume!=null)lease.openForResume(request.target,resume(usb.token.generation),capability)
             else if(verifiedStart!=null)lease.openForVerifiedStart(request.target,verifiedStart,capability)
             else lease.open(request.target,watchdogHandoff=capability)
             return object:InitialInstallConnection{override val lease=lease;override val provenance=usb.provenance;override fun close()=usb.close()}

@@ -91,3 +91,13 @@ def test_actual_controller_repairs_only_retained_same_original_after_fresh_revie
 
 def test_fresh_original_capture_also_checks_immutable_base_plus_progressed_resume_log(programming,tmp_path):
     subprocess.run([*programming,'resume-capture-fence',str(tmp_path)],check=True)
+
+
+@pytest.mark.parametrize('scenario',['restore-mode1','restore-paused-watchdog','restore-running-watchdog','restore-bad-uicr','restore-wrong-uid','restore-acl','restore-acl-watchdog'])
+def test_original_restore_quiescence_is_bound_to_protected_backup_and_never_resets_or_releases_cpu(programming,scenario):
+    subprocess.run([*programming,scenario],check=True)
+
+
+@pytest.mark.parametrize('scenario',['prepare-acl-lower','prepare-acl-upper','prepare-no-acl','prepare-acl-empty','prepare-acl-capture','prepare-acl-watchdog','prepare-acl-persistent','prepare-acl-uncaught','prepare-acl-cancel','prepare-acl-empty-vectors','prepare-acl-read-denied','prepare-acl-wrong-pc','prepare-acl-wrong-msp','prepare-acl-even-vector','prepare-acl-fault'])
+def test_programming_prepares_volatile_flash_state_only_after_mutation_request(programming,scenario):
+    subprocess.run([*programming,scenario],check=True)

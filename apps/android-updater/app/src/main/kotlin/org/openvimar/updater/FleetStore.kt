@@ -41,5 +41,11 @@ internal class FleetStore(context: Context) {
         val groups=JSONArray();batches.forEach{b->groups.put(JSONObject().put("id",b.id).put("digest",b.digest).put("name",b.deviceName).put("version",b.version).put("at",b.startedAt).put("status",b.status).put("expanded",b.expanded))}
         preferences.edit().putString("devices",rows.toString()).putString("batches",groups.toString()).apply()
     }
+    fun archivedActivities():Set<String> = preferences.getStringSet("archivedActivities",emptySet()).orEmpty().toSet()
+    fun setActivityArchived(id:String,value:Boolean){
+        require(id.isNotBlank()&&id.length<=256)
+        val ids=archivedActivities().toMutableSet();if(value)ids.add(id)else ids.remove(id)
+        check(preferences.edit().putStringSet("archivedActivities",ids).commit()){"Could not save activity archive"}
+    }
     fun upsert(record: DeviceRecord) { val i=devices.indexOfFirst{it.id==record.id};if(i<0)devices.add(record) else devices[i]=record;save() }
 }

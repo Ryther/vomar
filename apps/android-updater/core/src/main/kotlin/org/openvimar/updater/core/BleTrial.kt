@@ -11,7 +11,7 @@ import org.openvimar.installer.CandidateRelease
 class BleTrialReview internal constructor(internal val owner:BleTrialCandidate,
     internal val snapshot:TrialSnapshot,val address:String,val digest:String,
     val version:String,val currentVersion:String?,val legacy:Boolean,val resumable:Boolean,
-    val resetRetryRequired:Boolean,val identitySummary:String):AutoCloseable {
+    val resetRetryRequired:Boolean,val identitySummary:String,val expectedUid:List<String>?=null):AutoCloseable {
     private val available=AtomicBoolean(true)
     internal fun consume(candidate:BleTrialCandidate){
         require(candidate===owner){"Review belongs to another candidate"}
@@ -29,22 +29,24 @@ class BleTrialCandidate private constructor(private val common:ValidatedCommonPa
     val recoveryVersion get()=requireNotNull(common.manifest.recovery).version
     val familySha256 get()=common.manifest.loaderContracts.single{it.kind==LoaderContract.COMMON}.sha256
     companion object {
-        fun inspect(bytes:ByteArray,key:PublicKey,appVersion:String):BleTrialCandidate {
+        fun inspect(bytes:ByteArray,key:PublicKey,appVersion:String):BleTrialCandidate=inspectMode(bytes,key,appVersion,false)
+        fun inspectLocal(bytes:ByteArray,key:PublicKey,appVersion:String):BleTrialCandidate=inspectMode(bytes,key,appVersion,true)
+        private fun inspectMode(bytes:ByteArray,key:PublicKey,appVersion:String,local:Boolean):BleTrialCandidate {
             require(bytes.size in 1..PackageReader.MAX_ZIP){"Candidate exceeds supported ZIP size"}
             val frozen=bytes.copyOf()
-            val inspected=CandidateRelease.inspect(frozen,key,appVersion)
+            val inspected=if(local)CandidateRelease.inspectLocal(frozen,key,appVersion) else CandidateRelease.inspect(frozen,key,appVersion)
             val limits=mapOf("manifest.json" to 65536,"manifest.sig" to 80,"first-install.json" to 16384,"first-install.sig" to 80,
                 "loader.bin" to 0xc000,"main.signed.bin" to 0xa2000,"recovery.signed.bin" to 0x34000,
                 "migration.signed.bin" to 0xa2000,"stock-restore.signed.bin" to 0x3f000,"stock-bootstrap.signed.bin" to 0xa2000,
                 "main.ota" to ZigbeeCarrierValidator.MAX_CARRIER,"qualification.json" to 65536)
             val entries=org.openvimar.installer.StrictZip.read(frozen,limits,PackageReader.MAX_ZIP,
-                setOf("manifest.json","manifest.sig","main.signed.bin","recovery.signed.bin","qualification.json"),PackageReader.MAX_ZIP)
+                if(local)setOf("manifest.json","main.signed.bin","recovery.signed.bin") else setOf("manifest.json","manifest.sig","main.signed.bin","recovery.signed.bin","qualification.json"),PackageReader.MAX_ZIP)
             require(sha256(frozen)==inspected.releaseSha256){"Inspected candidate bytes changed"}
             // CandidateRelease authenticates the ORIGINAL manifest, components and
             // all pending flags first. Omit only its purpose field when mapping
             // the already authenticated metadata into the shared engine model.
             val tree=Json.parseToJsonElement(entries.getValue("manifest.json").toString(Charsets.UTF_8)).jsonObject
-            require(tree["purpose"]==JsonPrimitive("qualification-candidate"))
+            require(tree["purpose"]==null&&local||tree["purpose"]==JsonPrimitive("qualification-candidate"))
             val metadata=Json.decodeFromJsonElement<CommonManifest>(JsonObject(tree.filterKeys{it!="purpose"}))
             return BleTrialCandidate(ValidatedCommonPackage(metadata,entries.getValue("main.signed.bin").copyOf(),inspected.releaseSha256,
                 entries["recovery.signed.bin"]?.copyOf(),entries["migration.signed.bin"]?.copyOf(),entries["main.ota"]?.copyOf()))
@@ -77,14 +79,15 @@ class BleTrialCandidate private constructor(private val common:ValidatedCommonPa
             return TrialSnapshot(identity,images,bridge,checkpoint)
         }finally{withContext(NonCancellable){transport.close()}}
     }
-    suspend fun review(address:String,transport:BleTransport,bootstrap:BootstrapStore,store:SessionStore):BleTrialReview {
+    suspend fun review(address:String,transport:BleTransport,bootstrap:BootstrapStore,store:SessionStore,expectedUid:List<String>?=null):BleTrialReview {
         val state=observe(address,transport,bootstrap,store)
+        if(expectedUid!=null){require(expectedUid.size==2);state.identity?.let{require(it.uid==expectedUid){"The Bluetooth UID does not match the selected device"}}}
         val retry=(state.identity==null&&state.bootstrap?.phase==BootstrapPhase.RESET_INTENT)||
             state.checkpoint?.let{it.phase==Phase.MIGRATION_RESET_INTENT||it.phase in setOf(Phase.FINAL_RESET_INTENT,Phase.AWAIT_OPERATOR)&&!it.resetAcknowledged}==true
         return BleTrialReview(this,state,address,digest,version,state.images.primary?.version,state.identity==null,
             state.bootstrap!=null||state.checkpoint!=null,retry,
             state.identity?.let{"UID ${it.uid.joinToString(":")} · authenticated ${it.typedLoader?.kind ?: LoaderContract.LEGACY}"}
-                ?: "Legacy recovery: exact signed images checked; UID will be verified after preparation")
+                ?: "Legacy recovery: exact images checked; UID will be verified after preparation",expectedUid?.let{java.util.Collections.unmodifiableList(it.toList())})
     }
     suspend fun run(review:BleTrialReview,factory:(String)->BleTransport,bootstrap:BootstrapStore,
         store:SessionStore,allowResetRetry:Boolean=false,onEvent:suspend(UpdateEvent)->Unit) {
@@ -92,10 +95,11 @@ class BleTrialCandidate private constructor(private val common:ValidatedCommonPa
         require(!allowResetRetry||review.resetRetryRequired){"Reset retry requires the reviewed uncertain stage"}
         val actual=observe(review.address,factory(review.address),bootstrap,store)
         require(actual==review.snapshot){"Dimmer identity, images or saved progress changed; inspect and review again"}
+        actual.identity?.let{if(review.expectedUid!=null)require(it.uid==review.expectedUid){"Selected device UID changed"}}
         var identity=actual.identity
         if(identity==null){
             CommonBootstrapCoordinator().run(common,review.address,factory(review.address),bootstrap,
-                onBound={identity=frozen(it)},allowResetRetry=allowResetRetry,onEvent=onEvent)
+                onBound={identity=frozen(it)},allowResetRetry=allowResetRetry,validateIdentity={if(review.expectedUid!=null)require(it.uid==review.expectedUid){"Prepared device UID does not match the selected device"}},onEvent=onEvent)
             if(identity==null)return
         }
         val bound=common.bind(requireNotNull(identity),review.address)

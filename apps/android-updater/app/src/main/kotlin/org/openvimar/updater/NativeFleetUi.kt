@@ -49,8 +49,17 @@ internal class NativeFleetUi(
     private data class Route(val page:String,val detail:String?,val offset:Int)
     private val history=mutableListOf<Route>()
     private val connectionsUi:SavedConnectionsUi by lazy { SavedConnectionsUi(activity,network,scope,
-        {name,description,plus,edit->title.text=name;subtitle.text=description;subtitle.visibility=if(description.isBlank())View.GONE else View.VISIBLE;addButton.visibility=if(plus)View.VISIBLE else View.GONE;addButton.isEnabled=connectionsUi.canAdd;addButton.contentDescription=if(name=="Zigbee topics")"Add topic" else "Add connection";networkEditButton.visibility=if(edit)View.VISIBLE else View.GONE},
-        {if(returnToZigbeeImport){returnToZigbeeImport=false;navigate("zigbee-import")}},importZigbee) }
+        {name,description,plus,edit->
+            title.text=name;subtitle.text=description;subtitle.visibility=if(description.isBlank())View.GONE else View.VISIBLE
+            addButton.visibility=if(plus)View.VISIBLE else View.GONE;addButton.isEnabled=connectionsUi.canAdd
+            addButton.contentDescription=if(name=="Zigbee topics")"Add topic" else "Add connection"
+            floatingButton?.let(frame::removeView);floatingButton=null;body.setPadding(dp(20),dp(8),dp(20),dp(24))
+            if(edit)showFloating("edit","Edit connection"){connectionsUi.editCurrent()}
+        },
+        {if(returnToZigbeeImport){returnToZigbeeImport=false;navigate("zigbee-import")}},importZigbee,
+        dock={view->footer.removeAllViews();footer.visibility=if(view==null)View.GONE else View.VISIBLE;if(view!=null)add(view,footer,0)},
+        headerState={label,tone->title.setCompoundDrawablesWithIntrinsicBounds(if(tone==null)null else NativeUi.Dot(activity,tone),null,null,null);title.compoundDrawablePadding=dp(8);title.contentDescription=label?.let{"${title.text}. $it"}}
+    ) }
     private var returnToZigbeeImport=false
     private val zigbeeSelection=linkedSetOf<String>()
     private var zigbeeTopicFilter:String?=null
@@ -66,6 +75,8 @@ internal class NativeFleetUi(
     private val backButton=NativeUi.iconButton(activity,"back","Back"){back()}
     private val addButton=NativeUi.iconButton(activity,"plus","Add device"){navigate("add")}
     private val networkEditButton=button("Edit"){connectionsUi.editCurrent()}.apply{visibility=View.GONE}
+    private val headerNote=button(""){selectAvailableUpdates()}.apply{visibility=View.GONE;tag="fleet.release.action"}
+    private val archiveAccess=NativeUi.actionIcon(activity,"archive","Archived activities"){showArchived=!showArchived;renderPage()}.apply{visibility=View.GONE}
     private val frame = FrameLayout(activity)
     private val scroll = ScrollView(activity).apply{isFillViewport=true}
     private val body = column()
@@ -78,6 +89,15 @@ internal class NativeFleetUi(
     private var detailId:String?=null
     private var filter="All"
     private var query=""
+    private var searchVisible=false
+    private var showArchived=false
+    private var jobDialog:AlertDialog?=null
+    private var jobDialogBody:LinearLayout?=null
+    private var jobDialogKey:Pair<String,String>?=null
+    private var floatingButton:Button?=null
+    private var sourceBytes=0L
+    private var sourceTotal:Long?=null
+    private var downloadProgress:ProgressBar?=null
     private val selected=linkedSetOf<String>()
     private var activeBatch:String?=store.preferences.getString("activeBatch",null)
     private var sourceBusy=false
@@ -106,6 +126,8 @@ internal class NativeFleetUi(
         val heading=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL}
         heading.addView(backButton,LinearLayout.LayoutParams(dp(48),dp(48)))
         heading.addView(title,LinearLayout.LayoutParams(0,-2,1f))
+        heading.addView(headerNote,LinearLayout.LayoutParams(-2,dp(48)))
+        heading.addView(archiveAccess,LinearLayout.LayoutParams(dp(48),dp(48)))
         heading.addView(addButton,LinearLayout.LayoutParams(dp(48),dp(48)))
         heading.addView(networkEditButton,LinearLayout.LayoutParams(-2,dp(48)))
         toolbar.addView(heading);toolbar.addView(subtitle)
@@ -152,7 +174,7 @@ internal class NativeFleetUi(
             if((changed||connectionChanged)&&pageId in listOf("devices","device"))refreshPage()
         } }
     }
-    private fun refreshPage(){val offset=scroll.scrollY;renderPage();scroll.post{scroll.scrollTo(0,offset)}}
+    private fun refreshPage(){val offset=scroll.scrollY;renderPage();refreshJobDialog();scroll.post{scroll.scrollTo(0,offset)}}
     private fun perform(label:String,work:suspend()->Unit){
         if(jobBusy)return
         jobBusy=true
@@ -177,7 +199,7 @@ internal class NativeFleetUi(
         add(row,gap=0);divider(gap=0)
     }
     fun saveState(out:Bundle){
-        out.putString("fleetPage",pageId);out.putString("fleetDetail",detailId);out.putString("fleetFilter",filter);out.putString("fleetQuery",query)
+        out.putBoolean("devicesSearchVisible",searchVisible);out.putBoolean("activityArchived",showArchived);out.putString("fleetPage",pageId);out.putString("fleetDetail",detailId);out.putString("fleetFilter",filter);out.putString("fleetQuery",query)
         out.putStringArrayList("fleetSelected",ArrayList(selected));out.putStringArrayList("fleetOpenGroups",ArrayList(openGroups));out.putStringArrayList("fleetOpenJobs",ArrayList(openJobs));out.putStringArrayList("fleetClosedJobs",ArrayList(closedJobs));out.putStringArrayList("fleetGroupOptions",ArrayList(openGroupOptions));out.putString("fleetActiveBatch",activeBatch)
         out.putParcelableArrayList("fleetHistory",ArrayList(history.map{r->Bundle().apply{putString("page",r.page);putString("detail",r.detail);putInt("offset",r.offset)}}))
         out.putInt("fleetScroll",scroll.scrollY);out.putBoolean("sourceSettingsExpanded",sourceSettingsExpanded);out.putBoolean("packageDetailsExpanded",packageDetailsExpanded)
@@ -186,14 +208,14 @@ internal class NativeFleetUi(
     @Suppress("DEPRECATION")
     fun restoreState(saved:Bundle?){
         if(saved==null)return
-        pageId=saved.getString("fleetPage","devices");detailId=saved.getString("fleetDetail");filter=saved.getString("fleetFilter","All");query=saved.getString("fleetQuery","")
+        searchVisible=saved.getBoolean("devicesSearchVisible");showArchived=saved.getBoolean("activityArchived");pageId=saved.getString("fleetPage","devices");detailId=saved.getString("fleetDetail");filter=saved.getString("fleetFilter","All");query=saved.getString("fleetQuery","")
         selected.addAll(saved.getStringArrayList("fleetSelected")?:emptyList());openGroups.clear();openGroups.addAll(saved.getStringArrayList("fleetOpenGroups")?:emptyList());openJobs.addAll(saved.getStringArrayList("fleetOpenJobs")?:emptyList());closedJobs.addAll(saved.getStringArrayList("fleetClosedJobs")?:emptyList());openGroupOptions.addAll(saved.getStringArrayList("fleetGroupOptions")?:emptyList());activeBatch=saved.getString("fleetActiveBatch")
         history.clear();saved.getParcelableArrayList<Bundle>("fleetHistory")?.takeLast(32)?.forEach{b->history.add(Route(b.getString("page")?:"devices",b.getString("detail"),b.getInt("offset").coerceAtLeast(0)))}
         sourceSettingsExpanded=saved.getBoolean("sourceSettingsExpanded");packageDetailsExpanded=saved.getBoolean("packageDetailsExpanded")
         saved.getBundle("savedConnections")?.let(connectionsUi::restoreState)
         renderPage();scroll.post{scroll.scrollTo(0,saved.getInt("fleetScroll").coerceAtLeast(0))}
     }
-    fun close(){connectionsUi.close();scope.cancel()}
+    fun close(){jobDialog?.dismiss();connectionsUi.close();scope.cancel()}
     fun setHistoryReader(reader:(DeviceRecord)->Unit){historyReader=reader}
     fun historyStarted(record:DeviceRecord){pendingHistoryId=record.id;historyResults.remove(record.id);historyMessages[record.id]="Reading saved recovery history…";if(pageId=="device"&&detailId==record.id)refreshPage()}
     fun historyStatus(address:String?,message:String?,busy:Boolean){
@@ -232,6 +254,8 @@ internal class NativeFleetUi(
         }
     }
     fun back():Boolean {
+        if(pageId=="activity"&&showArchived){showArchived=false;renderPage();return true}
+        if(pageId=="devices"&&searchVisible){searchVisible=false;(activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(root.windowToken,0);renderPage();return true}
         if(pageId=="network"&&connectionsUi.back())return true
         if(pageId=="network"){returnToZigbeeImport=false;connectionsUi.detach()}
         if(history.isNotEmpty()){
@@ -253,7 +277,7 @@ internal class NativeFleetUi(
         if(pageId=="session"){if(bootstrapPending)renderPage();return}
         if(pageId in listOf("device","settings","tools")&&(previous.busy!=value.busy || pageId=="tools"&&previous.reportAvailable!=value.reportAvailable)){refreshPage();return}
         if(pageId=="devices" && detailId==null && previous.busy==value.busy && previous.operation==value.operation && previous.packageSummary==value.packageSummary && previous.bluetoothVerified==value.bluetoothVerified && previous.imagesVerified==value.imagesVerified && previous.loaded==value.loaded && previous.observedMainHash==value.observedMainHash)return
-        if(pageId=="activity" || pageId=="devices" || pageId=="updates"){val offset=scroll.scrollY;renderPage();scroll.post{scroll.scrollTo(0,offset)}}
+        if(pageId=="activity" || pageId=="devices" || pageId=="updates"){val offset=scroll.scrollY;renderPage();refreshJobDialog();scroll.post{scroll.scrollTo(0,offset)}}
     }
     fun beginBatch(pkg:PackageSummary,resume:Boolean){
         if(resume){
@@ -265,10 +289,11 @@ internal class NativeFleetUi(
         activeBatch=batch.id;store.preferences.edit().putString("activeBatch",batch.id).apply();store.batches.add(0,batch);store.save()
     }
     private fun renderPage(){
-        deviceRows=null;networkEditButton.visibility=View.GONE;body.removeAllViews();footer.removeAllViews();footer.visibility=View.GONE
+        body.setPadding(dp(20),dp(8),dp(20),dp(24))
+        deviceRows=null;downloadProgress=null;floatingButton?.let(frame::removeView);floatingButton=null;headerNote.visibility=View.GONE;archiveAccess.visibility=View.GONE;title.setCompoundDrawablesWithIntrinsicBounds(null,null,null,null);title.contentDescription=null;networkEditButton.visibility=View.GONE;body.removeAllViews();footer.removeAllViews();footer.visibility=View.GONE
         val session=pageId=="session"&&!bootstrapPending
         sessionView.visibility=if(session)View.VISIBLE else View.GONE;scroll.visibility=if(session)View.GONE else View.VISIBLE
-        title.maxLines=2
+        title.maxLines=2;subtitle.textSize=14f;subtitle.setTextColor(color(R.color.ui_text_secondary))
         title.text=when(pageId){"activity"->"Activity";"updates"->"Updates";"settings"->"Settings";"tools"->"Tools";"add"->"Add device";"device"->"Device";"session"->"Update session";"review"->"Review update";"network"->"Connections";"zigbee-import"->"Add device";else->"Devices"}
         subtitle.text=when(pageId){"devices"->"${store.devices.size} ${if(store.devices.size==1)"device" else "devices"} · saved on this phone";"activity"->"Update history";"updates"->"Firmware packages";"settings"->"Connections and preferences";"session"->"Bluetooth · selected dimmer";else->""}
         subtitle.visibility=if(subtitle.text.isBlank())View.GONE else View.VISIBLE
@@ -292,15 +317,31 @@ internal class NativeFleetUi(
             footer.visibility=View.VISIBLE;action("Back to Activity",footer){navigate("activity")}
         }}
     }
+    private var originalBackups=mapOf<List<String>,String>()
+    fun resume(){
+        scope.launch{
+            val backups=withContext(Dispatchers.IO){org.openvimar.updater.installer.AndroidInitialInstallPersistence(activity).allBackups()}
+            val persisted=FleetStore(activity).devices;store.devices.clear();store.devices.addAll(persisted)
+            originalBackups=backups.associate{it.identity.let{t->listOf("%08x".format(t.uid0),"%08x".format(t.uid1))} to it.archiveSha256}
+            val indexed=store.preferences.getStringSet("indexedOriginalUids",emptySet()).orEmpty().toMutableSet()
+            for(uid in originalBackups.keys){
+                val key=uid.joinToString(":")
+                if(key !in indexed&&store.devices.none{normalUid(it.uid)==uid})store.upsert(DeviceRecord("original:$key","Dimmer · ${uid.last().takeLast(4)}",uid=uid))
+                indexed.add(key)
+            }
+            // Removing an organisational record must stay removed on resume;
+            // its private original remains available when that UID is re-added.
+            store.preferences.edit().putStringSet("indexedOriginalUids",indexed).apply()
+            refreshPage()
+        }
+    }
+    private fun normalUid(uid:List<String>)=uid.map{it.lowercase().removePrefix("0x").padStart(8,'0')}
     private fun devices(){
-        val available=release?.let{target->store.devices.filter{FleetPolicy.status(it,target).eligibility==Eligibility.UPDATE}}.orEmpty()
-        if(available.isNotEmpty()){
-            val strip=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(16),dp(10),dp(8),dp(10));background=NativeUi.shape(activity,color(R.color.ui_panel),10)}
-            val info=column();info.addView(text("Firmware ${release!!.version}",15,true))
-            add(text(if(available.size==1)"1 device can be updated" else "${available.size} devices can be updated",13,secondary=true),info,3)
-            strip.addView(info,LinearLayout.LayoutParams(0,-2,1f))
-            strip.addView(button("Review update"){selected.clear();selected.addAll(available.map{it.id});navigate("review")}.apply{tag="fleet.release.action";isEnabled=!state.busy})
-            add(strip,gap=4)
+        val available=store.devices.count{deviceStatus(it).eligibility==Eligibility.UPDATE}
+        if(available>0){
+            headerNote.visibility=View.VISIBLE;headerNote.text=if(available==1)"1 update" else "$available updates"
+            headerNote.contentDescription="Firmware ${release?.version}. $available devices can be updated. Review updates"
+            headerNote.isEnabled=!state.busy&&!jobBusy
         }
         if(store.devices.isEmpty()){
             section("Add your first dimmer")
@@ -309,13 +350,18 @@ internal class NativeFleetUi(
             action("Import from Zigbee"){networkImport()}
             return
         }
-        val search=NativeUi.field(activity,"Search rooms or devices",query,input=NativeUi.Input.SEARCH)
-        add(search, gap=20)
+        val filtersRow=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL}
         val filterButton=NativeUi.button(activity,"Show  ·  $filter",outline=true){}.apply{setCompoundDrawablesWithIntrinsicBounds(null,null,NativeUi.Icon(activity,"down",color(R.color.ui_primary)),null);compoundDrawablePadding=dp(12)}
         DeviceFilterPopup(activity,filterButton,filters,{filters.indexOf(filter).coerceAtLeast(0)}){choice->filter=filters[choice];renderPage()}
-        add(filterButton)
+        filtersRow.addView(filterButton,LinearLayout.LayoutParams(0,-2,1f))
+        filtersRow.addView(NativeUi.actionIcon(activity,"search",if(query.isBlank())"Search devices" else "Search devices. Query: $query"){
+            searchVisible=!searchVisible;renderPage()
+            if(searchVisible)body.findViewWithTag<EditText>("devices.search")?.let{field->field.requestFocus();field.post{(activity.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(field,android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)}}
+        },LinearLayout.LayoutParams(dp(48),dp(48)).apply{marginStart=dp(8)})
+        add(filtersRow,gap=8)
+        val search=if(searchVisible)NativeUi.field(activity,"Search rooms or devices",query,input=NativeUi.Input.SEARCH).also{it.tag="devices.search";add(it,gap=8)}else null
         val rows=column();deviceRows=rows;add(rows)
-        search.addTextChangedListener(object:TextWatcher{override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){query=s.toString();renderDevices(rows)};override fun afterTextChanged(s:Editable?) {}})
+        search?.addTextChangedListener(object:TextWatcher{override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){query=s.toString();renderDevices(rows)};override fun afterTextChanged(s:Editable?) {}})
         renderDevices(rows)
     }
     private fun activeZigbeeTopics():Set<String> = if(network.state.value.connected)
@@ -330,7 +376,11 @@ internal class NativeFleetUi(
         if(visible.isNotEmpty()){
             val selection=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL}
             val count=text("",13,secondary=true)
-            selection.addView(count,LinearLayout.LayoutParams(0,-2,1f))
+            selection.addView(count,LinearLayout.LayoutParams(-2,-2))
+            val clear=NativeUi.actionIcon(activity,"close","Clear selection"){selected.clear();renderPage()}
+            clear.tag="devices.clear-selection"
+            selection.addView(clear,LinearLayout.LayoutParams(dp(48),dp(48)))
+            selection.addView(View(activity),LinearLayout.LayoutParams(0,1,1f))
             val selectVisible=button("Select visible"){
                 if(visible.all{it.id in selected})visible.forEach{selected.remove(it.id)} else selected.addAll(visible.map{it.id})
                 renderDevices(rows)
@@ -338,6 +388,7 @@ internal class NativeFleetUi(
             selection.addView(selectVisible)
             updateSelectionSummary={
                 count.text=if(selected.isEmpty())"${visible.size} ${if(visible.size==1)"device" else "devices"}" else "${selected.size} selected"
+                clear.visibility=if(selected.isEmpty())View.GONE else View.VISIBLE
                 selectVisible.text=if(visible.all{it.id in selected})"Deselect visible" else "Select visible"
             }
             updateSelectionSummary()
@@ -348,25 +399,44 @@ internal class NativeFleetUi(
             val row=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL}
             val check=CheckBox(activity).apply{minWidth=dp(48);minHeight=dp(48);buttonTintList=ColorStateList.valueOf(color(R.color.ui_primary));contentDescription="Select ${r.name}";isChecked=selected.contains(r.id);setOnCheckedChangeListener{_,checked->if(checked)selected.add(r.id)else selected.remove(r.id);updateSelectionSummary();selectionFooter()}}
             row.addView(check,LinearLayout.LayoutParams(dp(48),-2))
-            val info=column().apply{setPadding(dp(8),dp(16),dp(8),dp(16));isClickable=true;isFocusable=true;minimumHeight=dp(80);setBackgroundResource(android.R.drawable.list_selector_background);setOnClickListener{rememberRoute();detailId=r.id;pageId="device";renderPage();scroll.scrollTo(0,0)}}
-            info.addView(text(r.name,16,true));val version=r.installedVersion?.let{if(r.networkId!=null&&(ZigbeeDeviceMetadata.savedReading(r,r.networkId in activeTopics,currentReports[r.networkId to r.ieee])))"$it (saved)" else it};val metadata=listOfNotNull(r.room.takeIf{it.isNotBlank()},version).joinToString(" · ");if(metadata.isNotBlank())add(text(metadata,13,secondary=true),info,4)
+            val info=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(4),dp(8),dp(4),dp(8));isClickable=true;isFocusable=true;minimumHeight=dp(56);setBackgroundResource(android.R.drawable.list_selector_background);setOnClickListener{rememberRoute();detailId=r.id;pageId="device";renderPage();scroll.scrollTo(0,0)}}
+            val name=text(r.name,16,true).apply{maxLines=if(activity.resources.configuration.fontScale>1.2f)2 else 1;ellipsize=android.text.TextUtils.TruncateAt.END;tooltipText=r.name}
+            info.addView(name,LinearLayout.LayoutParams(0,-2,1f))
+            if(expanded&&r.room.isNotBlank())info.addView(text(r.room,13,secondary=true).apply{maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END},LinearLayout.LayoutParams(dp(120),-2).apply{marginStart=dp(8)})
+            val saved=r.networkId!=null&&ZigbeeDeviceMetadata.savedReading(r,r.networkId in activeTopics,currentReports[r.networkId to r.ieee])
+            val version=r.installedVersion?.let{if(saved)"$it (saved)" else it}?:"—"
+            info.addView(text(version,13,secondary=true).apply{maxLines=1;tooltipText=version},LinearLayout.LayoutParams(-2,-2).apply{marginStart=dp(8)})
             val status=deviceStatus(r)
-            add(text(status.label,13).apply{setTextColor(eligibilityColor(status.eligibility))},info,5)
-            if(status.eligibility==Eligibility.BLOCKED)add(text(status.reason,13,secondary=true),info,4)
             row.addView(info,LinearLayout.LayoutParams(0,-2,1f))
-            row.addView(ImageView(activity).apply{setImageDrawable(NativeUi.Icon(activity,"right",color(R.color.ui_text_secondary)));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(dp(22),dp(22)))
+            row.addView(NativeUi.stateDot(activity,"${status.label}. ${r.name}",eligibilityColor(status.eligibility)){
+                AlertDialog.Builder(activity).setTitle(status.label).setMessage(listOf(r.name,status.reason,"Firmware $version").joinToString("\n\n")).setPositiveButton("Close",null).show()
+            },LinearLayout.LayoutParams(dp(48),dp(48)))
             add(row,rows,0)
         }
         selectionFooter()
     }
     private fun selectionFooter(){
-        footer.removeAllViews();footer.visibility=if(selected.isEmpty())View.GONE else View.VISIBLE
-        if(selected.isEmpty())return
-        copy("${selected.size} selected",footer,false)
+        footer.removeAllViews();footer.visibility=View.GONE
+        if(selected.isEmpty()){floatingButton?.let(frame::removeView);floatingButton=null;body.setPadding(dp(20),dp(8),dp(20),dp(24));return}
         val compatible=store.devices.count{it.id in selected&&deviceStatus(it).eligibility==Eligibility.UPDATE}
-        action("Review update · $compatible compatible",footer,filled=true,enabled=release!=null&&!state.busy&&!jobBusy){navigate("review")}
-        if(release==null)copy("Choose firmware in Settings → Firmware updates.",footer)
-        action("Clear selection",footer){selected.clear();renderPage()}
+        showFloating("update","Review update · $compatible compatible",release!=null&&!state.busy&&!jobBusy){navigate("review")}
+    }
+    private fun selectAvailableUpdates(){
+        selected.clear();store.devices.filter{deviceStatus(it).eligibility==Eligibility.UPDATE}.forEach{selected.add(it.id)}
+        navigate("review")
+    }
+    private fun showFloating(icon:String,label:String,enabled:Boolean=true,run:()->Unit){
+        floatingButton?.let(frame::removeView)
+        body.setPadding(dp(20),dp(8),dp(20),dp(96))
+        val view=NativeUi.floatingAction(activity,icon,label,run).apply{isEnabled=enabled;tag="fleet.floating.$icon"}
+        floatingButton=view;frame.addView(view,FrameLayout.LayoutParams(dp(56),dp(56),Gravity.END or Gravity.BOTTOM).apply{setMargins(dp(16),dp(16),dp(16),dp(16))})
+    }
+    private fun updateDownloadProgress(){
+        downloadProgress?.let{bar->
+            val total=sourceTotal?.takeIf{it>0};bar.isIndeterminate=total==null
+            if(total!=null)bar.progress=((sourceBytes.coerceAtMost(total)*1000)/total).toInt()
+            bar.contentDescription=if(total==null)"Checking firmware download" else "Firmware downloaded: $sourceBytes of $total bytes"
+        }
     }
     private fun eligibilityColor(status:Eligibility)=color(when(status){Eligibility.CURRENT->R.color.ui_current;Eligibility.UPDATE->R.color.ui_available;Eligibility.BLOCKED->R.color.ui_error})
     private fun deviceDetail(){
@@ -398,9 +468,11 @@ internal class NativeFleetUi(
         if(diagnostics.childCount>0){
             add(NativeUi.disclosure(activity,"Diagnostics","Hide diagnostics",diagnostics,record.id in diagnosticsExpanded){if(it)diagnosticsExpanded.add(record.id)else diagnosticsExpanded.remove(record.id)});add(diagnostics,gap=0)
         }
+        action("Update firmware"){activity.startActivity(Intent(activity,BleTrialActivity::class.java).putExtra("deviceId",record.id))}
+        originalBackups[normalUid(record.uid)]?.let{hash->action("Original firmware"){activity.startActivity(Intent(activity,OriginalRestoreActivity::class.java).putExtra("backup",hash).putExtra("deviceName",record.name))}}
         action("Edit name and room"){editRecord(record)}
         action("Remove from Devices"){
-            AlertDialog.Builder(activity).setTitle("Remove ${record.name}?").setMessage("Only this phone’s organisational record is removed. Update checkpoints and reports are retained.").setNegativeButton("Cancel",null).setPositiveButton("Remove"){_,_->store.devices.removeAll{it.id==record.id};selected.remove(record.id);store.save();navigate("devices")}.show()
+            AlertDialog.Builder(activity).setTitle("Remove ${record.name}?").setMessage("Only this phone’s organisational record is removed. Update checkpoints and reports are retained.").setNegativeButton("Cancel",null).setPositiveButton("Remove"){_,_->store.devices.removeAll{it.id==record.id};selected.remove(record.id);store.save();navigate("devices")}.show().getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(color(R.color.ui_error))
         }
         val information=column()
         if(record.networkId!=null){
@@ -450,60 +522,56 @@ internal class NativeFleetUi(
         val checked=BooleanArray(candidates.size)
         AlertDialog.Builder(activity).setTitle("Import from Zigbee").setMultiChoiceItems(candidates.map{it.name}.toTypedArray(),checked){_,which,value->checked[which]=value}.setNegativeButton("Cancel",null).setPositiveButton("Import selected"){_,_->candidates.forEachIndexed{i,r->if(checked[i])store.upsert(r)};navigate("devices")}.show()
     }
+    private fun archiveActivity(id:String){
+        runCatching{store.setActivityArchived(id,!store.archivedActivities().contains(id));refreshPage()}
+            .onFailure{sourceNotice(it.message?:"Could not archive this activity.")}
+    }
     private fun activityPage(){
-        runtime.queue.groups.value.sortedByDescending{it.createdAt}.forEach{renderGroup(it)}
-        if(store.batches.isEmpty()&&runtime.queue.groups.value.isEmpty()){
-            section("No updates yet")
-            copy("Updates appear here with their progress and results.")
-            if(state.packageSummary!=null)action("Open update session",filled=true){showSession()} else action("Choose local ZIP…",filled=true,enabled=!state.busy&&!sourceBusy){choosePackage()}
-            if(state.hasCheckpoint)copy("An unfinished update is saved. Open the update session to resume it.")
+        val archived=store.archivedActivities()
+        val groups=runtime.queue.groups.value.sortedByDescending{it.createdAt}
+        val visible=groups.filter{(it.id in archived)==showArchived}
+        val legacy=store.batches.filter{("legacy:${it.id}" in archived)==showArchived}
+        archiveAccess.visibility=if(archived.isNotEmpty()||showArchived)View.VISIBLE else View.GONE
+        archiveAccess.contentDescription=if(showArchived)"Current activities" else "Archived activities (${archived.size})"
+        subtitle.text=if(showArchived)"Archived updates" else "Update history"
+        visible.forEach{renderGroup(it)}
+        if(visible.isEmpty()&&legacy.isEmpty()){
+            section(if(showArchived)"No archived activities" else if(groups.isNotEmpty()||store.batches.isNotEmpty())"No active activities" else "No updates yet")
+            if(!showArchived&&archived.isNotEmpty())action("Open archived activities"){showArchived=true;renderPage()}
             return
         }
-        store.batches.forEachIndexed{index,batch->
-            val live=batch.id==activeBatch && batch.digest==state.packageSummary?.digest
-            action("${if(batch.expanded)"Hide" else "Show"} group · ${DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(batch.startedAt))}") {batch.expanded=!batch.expanded;store.save();renderPage()}
-            copy("1 device · ${batch.status}",secondary=false)
-            if(batch.expanded){
-                section(batch.deviceName);copy("Target ${batch.version} · Bluetooth")
-                copy(batch.status)
-                if(live){
-                    if(state.busy && state.operation==SessionOperation.UPDATE){
-                        add(ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;isIndeterminate=state.progressPercent==null;progress=state.progressPercent?:0;progressTintList=ColorStateList.valueOf(color(R.color.ui_primary));contentDescription=state.progressPercent?.let{"Transfer $it percent"}?:"Preparing update"})
-                    }
-                    action(if(state.busy)"Open progress and Stop" else if(state.hasCheckpoint && !state.imagesVerified)"Open session to resume" else "Open session details",filled=true){showSession()}
-                    action("Export current report…",enabled=state.reportAvailable && !state.busy){exportReport()}
-                } else copy("Earlier update · only its summary is available here.")
-            }
-            divider()
+        legacy.forEach{batch->
+            val card=column().apply{setPadding(dp(12),dp(8),dp(12),dp(8));background=NativeUi.shape(activity,color(R.color.ui_panel),10)}
+            val row=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL}
+            val info=column();info.addView(text(batch.deviceName,16,true));info.addView(text(batch.status,13,secondary=true))
+            row.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+            row.addView(NativeUi.actionIcon(activity,"settings","Activity settings"){
+                val content=column().apply{setPadding(dp(20),dp(8),dp(20),dp(16))}
+                copy("Firmware ${batch.version}",content);copy(batch.status,content)
+                val live=batch.id==activeBatch&&batch.digest==state.packageSummary?.digest
+                if(live){action("Open update session",content){showSession()};action("Save report",content,enabled=state.reportAvailable&&!state.busy){exportReport()}}
+                AlertDialog.Builder(activity).setTitle(batch.deviceName).setView(content).setPositiveButton("Close",null).show()
+            },LinearLayout.LayoutParams(dp(48),dp(48)))
+            row.addView(NativeUi.actionIcon(activity,"archive",if(showArchived)"Restore activity" else "Archive activity"){archiveActivity("legacy:${batch.id}")},LinearLayout.LayoutParams(dp(48),dp(48)))
+            card.addView(row);copy(DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(batch.startedAt)),card)
+            add(card,gap=12)
         }
     }
     private fun updates(){
-        if(commonPending){
-            if(release==null)section("Firmware ready")
-            action("Choose Bluetooth dimmer",filled=true,enabled=!state.busy){searchBluetooth()}
+        subtitle.text=release?.let{"Firmware ${it.version}"}?:"No firmware selected";subtitle.textSize=16f;subtitle.setTextColor(color(R.color.ui_text))
+        if(commonPending)action("Choose Bluetooth dimmer",filled=true,enabled=!state.busy){searchBluetooth()}
+        action("Check for updates",filled=!commonPending,enabled=!sourceBusy){checkReleases()}
+        if(sourceBusy){
+            val bar=ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;progressTintList=ColorStateList.valueOf(color(R.color.ui_primary))}
+            downloadProgress=bar;add(bar,gap=12);updateDownloadProgress()
+        }else if(sourceMessage.isNotBlank())copy(sourceMessage).accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
+        release?.zigbeeOta?.let{ota->
+            if(ota.source.isBlank())action("Set Zigbee download URL"){val input=NativeUi.field(activity,"https://…/firmware.ota",input=NativeUi.Input.ADDRESS);AlertDialog.Builder(activity).setTitle("Zigbee download URL").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Verify URL"){_,_->perform("Verify download"){release=runtime.releases.setOtaSource(checkNotNull(release),input.text.toString().trim())}}.show()}
         }
-        release?.let{current->
-            section("Firmware ${current.version}")
-            copy("Package verified",secondary=false)
-            if(current.zigbeeOta!=null){
-                copy(if(current.zigbeeOta.source.isBlank())"Zigbee updates need a download URL. Bluetooth is available." else "Zigbee download verified.")
-                action("Zigbee download URL"){val input=NativeUi.field(activity,"https://…/firmware.ota",current.zigbeeOta.source,input=NativeUi.Input.ADDRESS);val dialog=AlertDialog.Builder(activity).setTitle("Zigbee download URL").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Verify URL"){_,_->perform("Verify carrier"){release=runtime.releases.setOtaSource(current,input.text.toString().trim())}}.create();dialog.show()}
-            }
-        }
-        action(if(sourceBusy)"Checking for updates…" else "Check for updates",filled=!commonPending,enabled=!sourceBusy){checkReleases()}
-        if(sourceMessage.isNotBlank())copy(sourceMessage).accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
         section("From this phone")
         action("Choose local ZIP…",enabled=!state.busy&&!sourceBusy){choosePackage()}
         state.packageSummary?.let{pkg->copy("Selected firmware: ${pkg.targetVersion}",secondary=false);action("Open update session"){showSession()}}
-        val source=column()
-        val repo=store.preferences.getString("source",ReleaseSource.DEFAULT)?:ReleaseSource.DEFAULT
-        copy(repo,source,false);action("Change source",source){editSource()}
-        add(NativeUi.disclosure(activity,"Download source","Hide download source",source,sourceSettingsExpanded){sourceSettingsExpanded=it},gap=16);add(source,gap=0)
-        val details=column()
-        copy("Only packages signed with this app’s trusted firmware key are accepted.",details)
-        copy("Device compatibility is checked again before an update starts.",details)
-        add(NativeUi.disclosure(activity,"Package details","Hide package details",details,packageDetailsExpanded){packageDetailsExpanded=it},gap=0);add(details,gap=0)
-        if(!releasesChecked && store.preferences.getBoolean("autoCheck",true)){releasesChecked=true;checkReleases()}
+        showFloating("settings","Update source settings",!sourceBusy){editSource()}
     }
     private fun editSource(){
         val input=NativeUi.field(activity,"https://github.com/owner/repository",store.preferences.getString("source",ReleaseSource.DEFAULT) ?: ReleaseSource.DEFAULT,input=NativeUi.Input.ADDRESS)
@@ -514,9 +582,9 @@ internal class NativeFleetUi(
     private fun checkReleases(){
         if(sourceBusy)return
         val source=store.preferences.getString("source",ReleaseSource.DEFAULT)?:ReleaseSource.DEFAULT
-        sourceBusy=true;releasesChecked=true;sourceMessage="Downloading and verifying the latest stable release…";if(pageId=="updates")renderPage()
+        sourceBusy=true;sourceBytes=0;sourceTotal=null;releasesChecked=true;sourceMessage="";if(pageId=="updates")renderPage()
         releaseFetch=scope.launch{
-            val result=try{Result.success(runtime.releases.fetchLatest(source))}catch(e:CancellationException){throw e}catch(e:Exception){Result.failure(e)}
+            val result=try{Result.success(runtime.releases.fetchLatest(source,onProgress={bytes->scope.launch{sourceBytes=bytes;updateDownloadProgress()}},onTotal={total->scope.launch{sourceTotal=total;updateDownloadProgress()}}))}catch(e:CancellationException){throw e}catch(e:Exception){Result.failure(e)}
             sourceBusy=false
             if(source==store.preferences.getString("source",ReleaseSource.DEFAULT)){
                 result.onSuccess{release=it}
@@ -551,7 +619,6 @@ internal class NativeFleetUi(
         settingRow("First installation","Back up a stock dimmer and review its first installation with the DK"){activity.startActivity(Intent(activity,InitialInstallActivity::class.java))}
         section("Check and recover")
         settingRow("DK tools","Check contacts, read identity or save an original backup"){activity.startActivity(Intent(activity,DkUsbDiagnosticsActivity::class.java))}
-        settingRow("Bluetooth trial","Inspect and review a signed test package for one nearby dimmer"){activity.startActivity(Intent(activity,BleTrialActivity::class.java))}
         if(state.reportAvailable){section("Reports");action("Save latest update report",enabled=!state.busy){exportReport()}}
     }
     private fun reviewUpdate(){
@@ -577,63 +644,82 @@ internal class NativeFleetUi(
             }.onFailure{sourceNotice(it.message?:"Could not save this group. No update was started.")}
         }
     }
+    private fun showGroupSettings(id:String){
+        val group=runtime.queue.groups.value.firstOrNull{it.id==id}?:return
+        val content=column().apply{setPadding(dp(20),dp(8),dp(20),dp(16))}
+        copy("Firmware ${group.release.version}",content)
+        if(!group.cancelled&&group.jobs.any{it.state!=FleetJobState.VERIFIED}){
+            action(if(group.paused)"Resume group" else "Pause group",content,enabled=!jobBusy){
+                if(group.paused)FleetUpdateService.command(activity,FleetUpdateService.RESUME,id)else runtime.queue.pause(id)
+            }
+            action("Cancel remaining updates",content){
+                AlertDialog.Builder(activity).setTitle("Cancel remaining updates?").setMessage("Already submitted updates may continue. Their outcome still needs checking.")
+                    .setNegativeButton("Keep group",null).setPositiveButton("Cancel remaining"){_,_->runtime.queue.cancel(id)}.show().getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(color(R.color.ui_error))
+            }
+        }
+        AlertDialog.Builder(activity).setTitle("Activity settings").setView(content).setPositiveButton("Close",null).show()
+    }
     private fun renderGroup(group:FleetGroup){
         val expanded=group.id in openGroups
         val count=group.jobs.count{it.state==FleetJobState.VERIFIED}
         val updating=group.jobs.count{it.state==FleetJobState.RUNNING}
-        val attention=group.jobs.count{it.state in setOf(FleetJobState.WAITING_NEARBY,FleetJobState.PAUSED,FleetJobState.UNCERTAIN_RESET,FleetJobState.AWAITING_RETURN,FleetJobState.BLOCKED,FleetJobState.FAILED)}
-        val label=when{count==group.jobs.size->"Complete";updating>0->"In progress";group.cancelled->"Cancelled · check unresolved devices";group.paused->"Paused";else->"Waiting"}
-        val stamp=DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(group.createdAt))
-        val row=column().apply{minimumHeight=dp(80);setPadding(0,dp(14),0,dp(14));isClickable=true;isFocusable=true;setBackgroundResource(android.R.drawable.list_selector_background);setOnClickListener{if(expanded)openGroups.remove(group.id)else openGroups.add(group.id);refreshPage()};contentDescription="${group.jobs.size} devices, release ${group.release.version}. $label. ${if(expanded)"Collapse" else "Expand"} group"}
-        row.addView(text(if(group.jobs.size==1)group.jobs.single().device.name else "${group.jobs.size} devices · Release ${group.release.version}",16,true))
-        add(text("$count of ${group.jobs.size} completed",13,secondary=true),row,4)
-        add(text("$updating updating · ${if(attention==1)"1 needs attention" else "$attention need attention"}",13,secondary=true),row,4)
-        val stateLine=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL}
-        stateLine.addView(text(label,13),LinearLayout.LayoutParams(0,-2,1f))
-        stateLine.addView(ImageView(activity).apply{setImageDrawable(NativeUi.Icon(activity,"down",color(R.color.ui_primary)));rotation=if(expanded)180f else 0f;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(dp(22),dp(22)))
-        add(stateLine,row,4);add(row,gap=0)
+        val label=when{count==group.jobs.size->"Complete";updating>0->"In progress";group.cancelled->"Cancelled";group.paused->"Paused";else->"Waiting"}
+        val card=column().apply{setPadding(dp(12),dp(8),dp(12),dp(8));background=NativeUi.shape(activity,color(R.color.ui_panel),10);tag="fleet.group.${group.id}"}
+        val row=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL}
+        val info=column().apply{minimumHeight=dp(64);gravity=Gravity.CENTER_VERTICAL;isClickable=true;isFocusable=true;contentDescription="${group.jobs.size} devices, release ${group.release.version}. $label. ${if(expanded)"Collapse" else "Expand"} group";setOnClickListener{if(expanded)openGroups.remove(group.id)else openGroups.add(group.id);refreshPage()}}
+        info.addView(text(if(group.jobs.size==1)group.jobs.single().device.name else "${group.jobs.size} devices · Firmware ${group.release.version}",16,true).apply{maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END})
+        info.addView(text("$count of ${group.jobs.size} completed · $label",13,secondary=true))
+        row.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+        row.addView(NativeUi.actionIcon(activity,"settings","Activity settings ${group.id}"){showGroupSettings(group.id)},LinearLayout.LayoutParams(dp(48),dp(48)))
+        row.addView(NativeUi.actionIcon(activity,"archive",if(showArchived)"Restore activity ${group.id}" else "Archive activity ${group.id}"){archiveActivity(group.id)},LinearLayout.LayoutParams(dp(48),dp(48)))
+        row.addView(NativeUi.actionIcon(activity,"down",if(expanded)"Collapse group" else "Expand group"){if(expanded)openGroups.remove(group.id)else openGroups.add(group.id);refreshPage()}.apply{rotation=if(expanded)180f else 0f},LinearLayout.LayoutParams(dp(48),dp(48)))
+        card.addView(row)
         if(expanded){
-            copy("$stamp · ${if(group.mode==FleetMode.SEQUENTIAL)"Sequential" else "One update per network · one Bluetooth connection"}")
-            if(!group.cancelled&&count!=group.jobs.size){
-                val options=column()
-                action(if(group.paused)"Resume group" else "Pause group",options,enabled=!jobBusy){if(group.paused)FleetUpdateService.command(activity,FleetUpdateService.RESUME,group.id)else runtime.queue.pause(group.id)}
-                action("Cancel remaining updates",options){AlertDialog.Builder(activity).setTitle("Cancel remaining updates?").setMessage("Already submitted Zigbee updates may continue. Their network remains reserved until their outcome is checked.").setNegativeButton("Keep group",null).setPositiveButton("Cancel remaining"){_,_->runtime.queue.cancel(group.id)}.show()}
-                add(NativeUi.disclosure(activity,"Group options","Hide group options",options,group.id in openGroupOptions){if(it)openGroupOptions.add(group.id)else openGroupOptions.remove(group.id)},gap=0);add(options,gap=0)
-            }
+            copy(DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(group.createdAt)),card)
             group.jobs.forEach{job->
-                val shown=(group.jobs.size==1&&job.id !in closedJobs)||job.id in openJobs
                 val item=column().apply{
-                    tag="fleet.job.${job.id}";minimumHeight=dp(64);setPadding(dp(8),dp(12),dp(8),dp(12));isClickable=true;isFocusable=true
-                    background=NativeUi.shape(activity,if(shown)color(R.color.ui_panel) else android.graphics.Color.TRANSPARENT)
-                    contentDescription="${job.device.name}. ${jobLabel(job.state)}. ${if(shown)"Hide" else "Show"} device details"
-                    setOnClickListener{if(shown){openJobs.remove(job.id);closedJobs.add(job.id)}else{openJobs.add(job.id);closedJobs.remove(job.id)};refreshPage()}
+                    tag="fleet.job.${job.id}";minimumHeight=dp(56);setPadding(dp(8),dp(8),dp(8),dp(8));isClickable=true;isFocusable=true
+                    contentDescription="${job.device.name}. ${jobLabel(job.state)}. Open device details"
+                    setBackgroundResource(android.R.drawable.list_selector_background);setOnClickListener{openJobDialog(group.id,job.id)}
                 }
-                val itemTitle=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL}
-                itemTitle.addView(text(job.device.name,16,true),LinearLayout.LayoutParams(0,-2,1f))
-                itemTitle.addView(ImageView(activity).apply{setImageDrawable(NativeUi.Icon(activity,"down",color(R.color.ui_text_secondary)));rotation=if(shown)180f else 0f;importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(dp(22),dp(22)))
-                item.addView(itemTitle)
-                add(text("${if(job.route==FleetRoute.BLE)"Bluetooth" else "Zigbee OTA"} · ${if(job.route==FleetRoute.BLE&&job.state==FleetJobState.AWAITING_RETURN)"Firmware verified · waiting for Zigbee" else jobLabel(job.state)}",13,secondary=true),item,4)
-                add(item,gap=4)
-                if(shown){
-                    copy(job.message)
-                if(job.state==FleetJobState.RUNNING)add(ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;isIndeterminate=job.progress==null;progress=job.progress?:0;progressTintList=ColorStateList.valueOf(color(R.color.ui_primary));contentDescription=job.progress?.let{"Transfer $it percent"}?:"Checking this dimmer"})
-                if(job.state==FleetJobState.WAITING_NEARBY&&!group.paused){
-                    copy("Stand near this dimmer and enable its Bluetooth mode. Only this selected device will be updated.")
-                    if(job.device.networkId!=null&&job.device.ieee!=null)action("Enable Bluetooth from Zigbee",enabled=network.state.value.connected&&!jobBusy){perform("Enable Bluetooth"){withContext(Dispatchers.IO){network.prepareBluetooth(job.device.networkId,job.device.ieee)}}}
-                    action("Phone nearby · continue",filled=true){FleetUpdateService.command(activity,FleetUpdateService.NEARBY,group.id,job.id)}
-                }
-                if(job.route==FleetRoute.ZIGBEE&&job.state in setOf(FleetJobState.UNCERTAIN_RESET,FleetJobState.AWAITING_RETURN))action("Check server status",filled=true,enabled=!jobBusy&&network.state.value.connected){perform("Check update status"){runtime.queue.reconcile(job.id,FleetJobReconciler{network.reconcile(it)})}}
-                if(job.route==FleetRoute.BLE&&job.state in setOf(FleetJobState.PAUSED,FleetJobState.UNCERTAIN_RESET,FleetJobState.AWAITING_RETURN)){
-                    action("Verify firmware over Bluetooth",filled=job.state!=FleetJobState.AWAITING_RETURN,enabled=!jobBusy&&!state.busy){perform("Read update evidence"){withContext(Dispatchers.IO){runtime.refreshBleEvidence(job.id)}}}
-                    action("Open device session",enabled=!jobBusy&&!state.busy){perform("Select device session"){withContext(Dispatchers.IO){runtime.selectBleSession(job.id)};(activity as? MainActivity)?.refreshSelectedSession();showSession()}}
-                }
-                if(job.route==FleetRoute.BLE&&job.state==FleetJobState.AWAITING_RETURN)action("Confirm this dimmer is back online",filled=true){AlertDialog.Builder(activity).setTitle("Is ${job.device.name} back online?").setMessage("Confirm only after checking this exact dimmer in Zigbee2MQTT or Home Assistant.").setNegativeButton("Not yet",null).setPositiveButton("Back online"){_,_->FleetUpdateService.command(activity,FleetUpdateService.RETURN,group.id,job.id)}.show()}
-
-                }
-                divider(gap=4)
+                item.addView(text(job.device.name,16,true))
+                item.addView(text("${if(job.route==FleetRoute.BLE)"Bluetooth" else "Zigbee"} · ${jobLabel(job.state)}",13,secondary=true))
+                card.addView(item,LinearLayout.LayoutParams(-1,-2).apply{marginStart=dp(16);topMargin=dp(4)})
             }
         }
-        divider(gap=0)
+        add(card,gap=12)
+    }
+    private fun openJobDialog(groupId:String,jobId:String){
+        jobDialog?.dismiss()
+        val content=column().apply{setPadding(dp(20),dp(8),dp(20),dp(16))}
+        jobDialogKey=groupId to jobId;jobDialogBody=content
+        val scrollable=ScrollView(activity).apply{addView(content)}
+        val dialog=AlertDialog.Builder(activity).setTitle("Device update").setView(scrollable).setPositiveButton("Close",null).create()
+        jobDialog=dialog;dialog.setOnDismissListener{if(jobDialog===dialog){jobDialog=null;jobDialogBody=null;jobDialogKey=null}}
+        dialog.show();refreshJobDialog()
+    }
+    private fun refreshJobDialog(){
+        val key=jobDialogKey?:return
+        val group=runtime.queue.groups.value.firstOrNull{it.id==key.first}?:return
+        val job=group.jobs.firstOrNull{it.id==key.second}?:return
+        val content=jobDialogBody?:return
+        content.removeAllViews();jobDialog?.setTitle(job.device.name)
+        copy("${if(job.route==FleetRoute.BLE)"Bluetooth" else "Zigbee"} · ${jobLabel(job.state)}",content,false)
+        copy(job.message,content)
+        if(job.state==FleetJobState.RUNNING)add(ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;isIndeterminate=job.progress==null;progress=job.progress?:0;progressTintList=ColorStateList.valueOf(color(R.color.ui_primary))},content)
+        if(job.state==FleetJobState.WAITING_NEARBY&&!group.paused){
+            copy("Stand near this dimmer and enable Bluetooth.",content)
+            if(job.device.networkId!=null&&job.device.ieee!=null)action("Turn on Bluetooth",content,enabled=network.state.value.connected&&!jobBusy){perform("Turn on Bluetooth"){network.prepareBluetooth(job.device.networkId,job.device.ieee)}}
+            action("Phone nearby · continue",content,filled=true){FleetUpdateService.command(activity,FleetUpdateService.NEARBY,group.id,job.id)}
+        }
+        if(job.route==FleetRoute.ZIGBEE&&job.state in setOf(FleetJobState.UNCERTAIN_RESET,FleetJobState.AWAITING_RETURN))action("Check server status",content,filled=true,enabled=!jobBusy&&network.state.value.connected){perform("Check update status"){runtime.queue.reconcile(job.id,FleetJobReconciler{network.reconcile(it)})}}
+        if(job.route==FleetRoute.BLE&&job.state in setOf(FleetJobState.PAUSED,FleetJobState.UNCERTAIN_RESET,FleetJobState.AWAITING_RETURN)){
+            action("Verify firmware over Bluetooth",content,enabled=!jobBusy&&!state.busy){perform("Read update evidence"){runtime.refreshBleEvidence(job.id)}}
+            action("Open device session",content,enabled=!jobBusy&&!state.busy){perform("Select device session"){runtime.selectBleSession(job.id);(activity as? MainActivity)?.refreshSelectedSession();jobDialog?.dismiss();showSession()}}
+        }
+        if(job.route==FleetRoute.BLE&&job.state==FleetJobState.AWAITING_RETURN)action("Confirm this dimmer is back online",content,filled=true){
+            AlertDialog.Builder(activity).setTitle("Is ${job.device.name} back online?").setMessage("Check this dimmer in Zigbee2MQTT or Home Assistant first.").setNegativeButton("Not yet",null).setPositiveButton("Back online"){_,_->FleetUpdateService.command(activity,FleetUpdateService.RETURN,group.id,job.id)}.show()
+        }
     }
     private fun jobLabel(state:FleetJobState)=when(state){
         FleetJobState.QUEUED->"Queued";FleetJobState.WAITING_NEARBY->"Phone needed";FleetJobState.RUNNING->"Updating";FleetJobState.PAUSED->"Paused";FleetJobState.UNCERTAIN_RESET->"Outcome needs checking";FleetJobState.AWAITING_RETURN->"Waiting for return";FleetJobState.VERIFIED->"Completed";FleetJobState.BLOCKED->"Not updatable";FleetJobState.FAILED->"Needs attention";FleetJobState.CANCELLED->"Cancelled"

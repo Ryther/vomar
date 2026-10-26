@@ -16,6 +16,8 @@ internal data class InitialInstallSnapshot(val phase:InitialInstallPhase=Initial
     val mutationMayHaveStarted:Boolean=false,val commitMayHaveBeenWritten:Boolean=false,val resetCatchUsed:Boolean=false,
     val cpuDisposition:String="not observed",val journalFailure:Boolean=false,val message:String="No first installation is active",val candidate:Boolean=false,val debugStateUncertain:Boolean=false,
     val watchdog:ObservedWatchdogProfile?=null,val watchdogHandoff:String?=null,
+    val programmingPreparation:String?=null,val installStep:String?=null,val installAddress:Int?=null,
+    val progressDone:Int=0,val progressTotal:Int=0,val progressLabel:String="",
     val resume:Boolean=false,val resumeHeadSha256:String?=null,val resumeFrontierPage:Int?=null,val resumeClassification:String?=null)
 internal class InitialInstallReceipt private constructor(val binding:InstallBinding,val ficrSha256:String,val uicrSha256:String) {
     private val available=AtomicBoolean(true)
@@ -85,10 +87,11 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
             stopped();val link=connect(request,cancelled::get,null);connection=link
             publish(snapshot.copy(phase=InitialInstallPhase.CAPTURING,resetCatchUsed=link.lease.resetCatchUsed,watchdog=link.lease.watchdogProfile,watchdogHandoff=link.lease.watchdogHandoff,
                 cpuDisposition="last observed halted; exclusive connection retained",message="Capturing two complete quiescent original passes"))
-            val started=Instant.now();val passes=mutableListOf<Map<String,ByteArray>>()
+            val started=Instant.now();val passes=mutableListOf<Map<String,ByteArray>>();var readBytes=0
+            fun progress(label:String,done:Int,total:Int){if(done!=total&&done-snapshot.progressDone<16384)return;snapshot=snapshot.copy(progressDone=done,progressTotal=total,progressLabel=label);observed(snapshot)}
             repeat(2){
                 stopped();require(link.lease.currentIdentity()==request.target)
-                passes+=listOf("flash.bin","ficr.bin","uicr.bin").associateWith{file->stopped();link.lease.readOriginalRegion(file)}
+                passes+=listOf("flash.bin","ficr.bin","uicr.bin").associateWith{file->stopped();link.lease.readOriginalRegion(file){done->progress("Reading backup ${passes.size+1}/2",readBytes+done,2*(0x100000+8192))}.also{readBytes+=it.size}}
                 stopped();require(link.lease.currentIdentity()==request.target)
             }
             val archive=QuiescentArchive.create(passes[0],passes[1],link.provenance,started,Instant.now(),link.lease.originalCpuControl,link.lease.resetCatchUsed,link.lease.watchdogProfile)
@@ -147,9 +150,9 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
         require(review.requestId==request.requestId&&review.bindingId==prepared.binding.id&&review.reviewedReleaseSha256==prepared.binding.releaseSha256&&review.journalHeadSha256==prepared.journalHeadSha256){"Fresh repair review does not match held request/binding/release/journal"}
         try{
             stopped();val link=checkNotNull(connection)
-            publish(snapshot.copy(phase=InitialInstallPhase.INSTALLING,message="Explicit repair: validating all unissued original pages before bounded reconstruction"))
-            val result=ExplicitResumeEngine().run(prepared,link.lease.authorizer(prepared.binding),::stopped);val outcome=result.outcome
-            snapshot=snapshot.copy(mutationMayHaveStarted=outcome.mutationMayHaveStarted,commitMayHaveBeenWritten=outcome.commitMayHaveBeenWritten,journalFailure=outcome.journalFailure,
+            publish(snapshot.copy(phase=InitialInstallPhase.INSTALLING,progressDone=0,progressTotal=0,progressLabel="",message="Explicit repair: validating all unissued original pages before bounded reconstruction"))
+            val result=ExplicitResumeEngine().runWithProgress(prepared,link.lease.authorizer(prepared.binding),onProgress={label,done,total->snapshot=snapshot.copy(progressLabel=label,progressDone=done,progressTotal=total);observed(snapshot)},checkCancelled=::stopped);val outcome=result.outcome
+            snapshot=snapshot.copy(mutationMayHaveStarted=outcome.mutationMayHaveStarted,commitMayHaveBeenWritten=outcome.commitMayHaveBeenWritten,journalFailure=outcome.journalFailure,installStep=outcome.stoppedAt.name,installAddress=outcome.address,
                 resumeHeadSha256=result.journalHeadSha256?:snapshot.resumeHeadSha256,resumeClassification=result.mode?.name?:snapshot.resumeClassification)
             val disposition=closeConnection()
             publish(snapshot.copy(phase=if(outcome.verified)InitialInstallPhase.VERIFIED_HALTED else InitialInstallPhase.FAILED,cpuDisposition=disposition,message=outcome.message))
@@ -167,12 +170,12 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
             val plan=qualified?.let{InstallPlan.prepare(original,it)}?:checkNotNull(candidate).let{c->
                 c.reviewOneBench(request.target,request.requestId,link.lease.generation,review.reviewedReleaseSha256).use{permit->c.preparePlan(original,permit,request.requestId,link.lease.generation)}}
             require(plan.binding==binding)
-            publish(snapshot.copy(phase=InitialInstallPhase.INSTALLING,message="Writing with durable intent and erased anchor commit until final verification"))
-            val outcome=FirstInstallEngine().run(plan,link.lease.authorizer(binding),journal,::stopped)
+            publish(snapshot.copy(phase=InitialInstallPhase.INSTALLING,progressDone=0,progressTotal=0,progressLabel="",message="Writing with durable intent and erased anchor commit until final verification"))
+            val outcome=FirstInstallEngine().run(plan,link.lease.authorizer(binding),journal,onProgress={label,done,total->snapshot=snapshot.copy(progressLabel=label,progressDone=done,progressTotal=total);observed(snapshot)},checkCancelled=::stopped)
             // Teardown itself can fail after commit acknowledgement. Preserve
             // the engine's uncertainty before entering that failure boundary.
             snapshot=snapshot.copy(mutationMayHaveStarted=outcome.mutationMayHaveStarted,
-                commitMayHaveBeenWritten=outcome.commitMayHaveBeenWritten,journalFailure=outcome.journalFailure)
+                commitMayHaveBeenWritten=outcome.commitMayHaveBeenWritten,journalFailure=outcome.journalFailure,installStep=outcome.stoppedAt.name,installAddress=outcome.address)
             val disposition=closeConnection()
             publish(snapshot.copy(phase=if(outcome.verified)InitialInstallPhase.VERIFIED_HALTED else InitialInstallPhase.FAILED,
                 mutationMayHaveStarted=outcome.mutationMayHaveStarted,commitMayHaveBeenWritten=outcome.commitMayHaveBeenWritten,
@@ -198,7 +201,8 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
         val mutated=link.lease.mutationMayHaveStarted
         // Capture uncertainty before resource teardown even if cleanup fails.
         snapshot=snapshot.copy(mutationMayHaveStarted=snapshot.mutationMayHaveStarted||mutated,resetCatchUsed=snapshot.resetCatchUsed||link.lease.resetCatchUsed,
-            debugStateUncertain=snapshot.debugStateUncertain||link.lease.debugStateUncertain)
+            debugStateUncertain=snapshot.debugStateUncertain||link.lease.debugStateUncertain,
+            programmingPreparation=link.lease.programmingPreparation?:snapshot.programmingPreparation)
         connection=null
         try{link.lease.finish()}finally{link.close()}
         return if(link.lease.startMayHaveOccurred)"explicit verified reset/start may have occurred; no automatic retry"
@@ -212,14 +216,16 @@ internal class InitialInstallController(private val connect:(InstallCaptureReque
         require(review.requestId==request.requestId&&review.bindingId==proof.binding.id&&review.reviewedReleaseSha256==proof.binding.releaseSha256)
         try{
             stopped();proof.consume(review);receipt=null
-            publish(snapshot.copy(phase=InitialInstallPhase.STARTING,message="Rechecking complete verified image, UID and UICR before explicit reset/start"))
+            publish(snapshot.copy(phase=InitialInstallPhase.STARTING,progressDone=0,progressTotal=0,progressLabel="",message="Rechecking complete verified image, UID and UICR before explicit reset/start"))
             persistence.recordStart(proof.binding,request.requestId,false);stopped()
             val link=connect(request,cancelled::get,proof);connection=link;link.lease.retainHaltForPriorUncertainty()
             publish(snapshot.copy(watchdog=link.lease.watchdogProfile,watchdogHandoff=link.lease.watchdogHandoff))
             require(link.lease.currentIdentity()==proof.binding.target)
             fun hash(bytes:ByteArray)=java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString(""){"%02x".format(it.toInt() and 255)}
             require(hash(link.lease.readOriginalRegion("ficr.bin"))==proof.ficrSha256&&hash(link.lease.readOriginalRegion("uicr.bin"))==proof.uicrSha256){"Verified target FICR/UICR changed"}
-            require(hash(link.lease.readOriginalRegion("flash.bin"))==proof.binding.installedSha256){"Complete verified FLASH changed; CPU remains halted"}
+            require(hash(link.lease.readOriginalRegion("flash.bin"){done->
+                if(done==0x100000||done-snapshot.progressDone>=16384){snapshot=snapshot.copy(progressDone=done,progressTotal=0x100000,progressLabel="Checking firmware");observed(snapshot)}
+            })==proof.binding.installedSha256){"Complete verified FLASH changed; CPU remains halted"}
             stopped();link.lease.startVerifiedReset();require(link.lease.startAcknowledged)
             persistence.recordStart(proof.binding,request.requestId,true)
             closeConnection();publish(snapshot.copy(phase=InitialInstallPhase.STARTED,cpuDisposition="new reset vector explicitly released after full receipt verification",

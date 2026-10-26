@@ -13,7 +13,7 @@ import java.util.UUID
 /** Caller supplies an app-private dedicated directory, not an export/input
  * folder. Linux/JVM-tested durable adapter; Android SAF integration is separate.
  * An incomplete first record still reserves the binding and fails closed. */
-class FileInstallJournal(private val directory:Path):InstallJournalStore {
+class FileInstallJournal(private val directory:Path,private val originalRestore:Boolean=false):InstallJournalStore {
     private fun path(id:String):Path {require(Regex("[0-9a-f]{64}").matches(id));return directory.resolve("$id.json")}
     @Synchronized override fun load(bindingId:String):InstallJournalRecord? {
         val file=path(bindingId);if(!Files.exists(file,LinkOption.NOFOLLOW_LINKS))return null
@@ -78,7 +78,7 @@ class FileInstallJournal(private val directory:Path):InstallJournalStore {
         if(phase==InstallPhase.PAGE_ERASE_INTENT)require(address!=null&&address%4096==0&&mutated&&!commit)
         if(phase==InstallPhase.PAGE_WRITE_INTENT)require(address!=null&&mutated&&!commit)
         if(phase in setOf(InstallPhase.COMMIT_INTENT,InstallPhase.COMMIT_WRITTEN))require(address==0xb0fc&&commit)
-        if(phase==InstallPhase.VERIFIED)require(address==null&&mutated&&commit)
+        if(phase==InstallPhase.VERIFIED)require(address==null&&mutated&&commit!=originalRestore)
         return InstallJournalRecord(binding,sequence,phase,address,mutated,commit,failure,message)
     }
 }

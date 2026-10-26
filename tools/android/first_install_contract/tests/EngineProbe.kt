@@ -77,11 +77,13 @@ internal fun engineProbe(args:Array<String>) {
             if(scenario in setOf("journal-after-commit-intent","file-after-commit-intent")&&record.phase==InstallPhase.COMMIT_INTENT)error("Intent was saved but its acknowledgement failed")
         }
     }
+    val measured=mutableListOf<Int>()
     val outcome=FirstInstallEngine().run(plan,object:SwdAuthorizer {
         override fun acquire(binding:InstallBinding):AuthorizedSwdSession {event("acquire");check(binding==plan.binding);return port}
-    },store){check(!cancellation){"Cancelled explicitly"}}
+    },store,onProgress={_,done,total->check(total==4*AnchorV1.FLASH);check(measured.isEmpty()||done>measured.last());measured+=done}){check(!cancellation){"Cancelled explicitly"}}
     if(scenario in setOf("good","file-backed","bench-good")) {
         check(outcome.verified&&journal?.phase==InstallPhase.VERIFIED&&finalCommit&&closes==1){outcome.toString()}
+        check(measured.last()==4*AnchorV1.FLASH)
         check(flash.contentEquals(plan.finalImage())&&uicr.contentEquals(original.uicr()))
         check(trace.takeLast(2)==listOf("close","journal:VERIFIED"))
         val copy=plan.finalImage();copy.fill(0);check(sha256(plan.finalImage())==plan.binding.installedSha256)

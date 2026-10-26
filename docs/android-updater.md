@@ -1,4 +1,41 @@
-# Vimar Updater Android 1.0.3
+# Vimar Updater Android 1.0.6
+
+App 1.0.6 (versionCode 26) introduces guided first installation and more compact
+connection, device and update workflows. It includes first-install correction
+`461bc712`. Before reviewed
+FLASH writes, the driver reads all eight ACL regions and, when necessary, resets
+with vector catch while retaining HALT and verifying identity, original UICR,
+watchdog and permissions. Backup capture and verify-only repair do not request
+this reset. ACL and UICR registers are never programmed by this preparation.
+Reports retain `programmingPreparation`, `installStep` and `installAddress`.
+Devices uses compact rows, tappable status dots, a search icon beside Show and a
+fixed review action. Connections has a header status dot, separated sections,
+bottom Connect and edit action; connection/topic rows have edit and two-step
+red deletion. Updates shows selected firmware in the header, actual download
+progress and source settings on a floating action. Activity contains its devices
+within each group; settings/archive are row actions and device details open a
+dialog. Archiving changes presentation metadata only and preserves queued work.
+
+First installation is a guided firmware → device → backup → install → start
+flow, with pinned status and measured progress. It saves and reopens the original
+privately, associates it with Devices by UID and offers optional export and
+explicit original restoration from the device. A single chooser detects qualified,
+beta and local packages. Missing outer artifact signatures are admitted only for
+manual device review; image signatures and compatibility remain mandatory. An
+unsigned descriptor cannot manufacture an active-watchdog capability. Online,
+fleet and Zigbee qualification policies remain unchanged.
+
+**Devices → device → Update firmware** replaces the Bluetooth trial entry in
+Settings. A selected known UID is checked against live identity, including after
+legacy recovery preparation and before MAIN upload. No radio, USB, firmware
+operation or approval is restored merely by opening a screen.
+
+The 1.0.6 signed APK is delivered locally under
+`experiments/android-updater/releases/1.0.6/`. Software checks and native emulator
+captures are recorded under `experiments/android-updater/builds/1.0.6/owner-notes/`.
+Physical first-install, original-restore and phone/radio qualification remain
+separate; these interface changes do not claim that qualification.
+
 
 App 1.0.3 (versionCode 23) refines the production interface within the approved
 native design. Devices offers firmware review only when saved devices can use
@@ -65,7 +102,7 @@ with a separate private candidate selection, foreground lifetime, Stop and
 report export. Normal release, fleet and Zigbee routes still reject candidates.
 
 For exact phone steps, see [Update a mounted dimmer by Bluetooth](android-bluetooth-trial.md).
-The app version is 1.0.3. Firmware packages have independent versions and
+The app version is 1.0.6. Firmware packages have independent versions and
 qualification records.
 
 App0.6.3 explicitly queues the initial system pairing request after LE service

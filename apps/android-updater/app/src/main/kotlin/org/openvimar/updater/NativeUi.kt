@@ -53,29 +53,37 @@ internal object NativeUi {
         setColor(fill);cornerRadius=dp(context,radius).toFloat()
         stroke?.let {setStroke(dp(context,width),it)}
     }
-    private fun states(context:Context,filled:Boolean,outline:Boolean,selected:Boolean=false):Drawable {
+    private fun states(context:Context,filled:Boolean,outline:Boolean,selected:Boolean=false,tone:Int?=null):Drawable {
         fun color(id:Int)=context.getColor(id)
         fun surface(focused:Boolean)=shape(context,
-            if(filled)color(R.color.ui_primary) else if(selected)color(R.color.ui_panel) else android.graphics.Color.TRANSPARENT,
-            stroke=if(focused)color(R.color.ui_primary) else if(outline)color(R.color.ui_outline) else null,
+            if(filled)tone?:color(R.color.ui_primary) else if(selected)color(R.color.ui_panel) else android.graphics.Color.TRANSPARENT,
+            stroke=if(focused)tone?:color(R.color.ui_primary) else if(outline)tone?:color(R.color.ui_outline) else null,
             width=if(focused)2 else 1)
         val drawable=StateListDrawable().apply {
             addState(intArrayOf(-android.R.attr.state_enabled),shape(context,color(R.color.ui_disabled)))
             addState(intArrayOf(android.R.attr.state_focused),surface(true))
             addState(intArrayOf(),surface(false))
         }
-        val tint=color(R.color.ui_primary)
+        val tint=tone?:color(R.color.ui_primary)
         return RippleDrawable(ColorStateList.valueOf((tint and 0xffffff) or 0x22000000),drawable,shape(context,-1))
     }
-    fun button(context:Context,label:String,filled:Boolean=false,outline:Boolean=false,action:()->Unit)=Button(context).apply {
+    fun button(context:Context,label:String,filled:Boolean=false,outline:Boolean=false,
+        danger:Boolean=label=="Cancel"||label.startsWith("Remove ")||label.startsWith("Cancel ")||label=="Stop"||label.startsWith("Stop "),action:()->Unit)=Button(context).apply {
         text=label;isAllCaps=false;gravity=Gravity.CENTER;minHeight=dp(context,48);minimumHeight=dp(context,48)
         minWidth=0;minimumWidth=0;setPadding(dp(context,16),dp(context,10),dp(context,16),dp(context,10))
         textSize=15f;includeFontPadding=false;setLineSpacing(dp(context,2).toFloat(),1f)
         typeface=Typeface.create(if(filled)"sans-serif-medium" else "sans-serif",Typeface.NORMAL)
-        stateListAnimator=null;background=states(context,filled,outline);backgroundTintList=null
+        val tone=if(danger)context.getColor(R.color.ui_error) else null
+        val dark=context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK==Configuration.UI_MODE_NIGHT_YES
+        stateListAnimator=null;background=states(context,filled,outline,tone=tone);backgroundTintList=null
         setTextColor(ColorStateList(arrayOf(intArrayOf(android.R.attr.state_enabled),intArrayOf()),
-            intArrayOf(context.getColor(if(filled)R.color.ui_on_primary else R.color.ui_primary),context.getColor(R.color.ui_on_disabled))))
+            intArrayOf(if(danger)if(filled)if(dark)context.getColor(R.color.ui_surface) else android.graphics.Color.WHITE else tone!! else context.getColor(if(filled)R.color.ui_on_primary else R.color.ui_primary),context.getColor(R.color.ui_on_disabled))))
         setOnClickListener {action()}
+    }
+    fun emphasis(view:Button,filled:Boolean){
+        val context=view.context;view.background=states(context,filled,false);view.backgroundTintList=null
+        view.setTextColor(ColorStateList(arrayOf(intArrayOf(android.R.attr.state_enabled),intArrayOf()),intArrayOf(context.getColor(if(filled)R.color.ui_on_primary else R.color.ui_primary),context.getColor(R.color.ui_on_disabled))))
+        view.typeface=Typeface.create(if(filled)"sans-serif-medium" else "sans-serif",Typeface.NORMAL)
     }
     fun label(context:Context,value:String,size:Int=15,strong:Boolean=false,secondary:Boolean=false)=TextView(context).apply {
         text=value;textSize=size.toFloat();includeFontPadding=false
@@ -148,6 +156,29 @@ internal object NativeUi {
         contentDescription=label;tooltipText=label;setPadding(dp(context,12),dp(context,12),dp(context,12),dp(context,12))
         setCompoundDrawablesWithIntrinsicBounds(Icon(context,name,context.getColor(R.color.ui_primary),22),null,null,null)
     }
+    fun actionIcon(context:Context,name:String,label:String,danger:Boolean=false,action:()->Unit)=iconButton(context,name,label,action).apply {
+        if(danger)setCompoundDrawablesWithIntrinsicBounds(Icon(context,name,context.getColor(R.color.ui_error)),null,null,null)
+    }
+    fun floatingAction(context:Context,name:String,label:String,action:()->Unit)=button(context,"",filled=true,action=action).apply {
+        contentDescription=label;tooltipText=label;setPadding(dp(context,16),dp(context,16),dp(context,16),dp(context,16))
+        setCompoundDrawablesWithIntrinsicBounds(Icon(context,name,context.getColor(R.color.ui_on_primary),24),null,null,null)
+        background=RippleDrawable(ColorStateList.valueOf(0x22000000),shape(context,context.getColor(R.color.ui_primary),28),shape(context,-1,28))
+        elevation=dp(context,6).toFloat()
+    }
+    class Dot(context:Context,color:Int):Drawable(){
+        private val size=dp(context,12)
+        private val paint=Paint(Paint.ANTI_ALIAS_FLAG).apply{this.color=color}
+        override fun draw(canvas:Canvas){canvas.drawCircle(bounds.exactCenterX(),bounds.exactCenterY(),minOf(bounds.width(),bounds.height())/2f,paint)}
+        override fun getIntrinsicWidth()=size
+        override fun getIntrinsicHeight()=size
+        override fun setAlpha(alpha:Int){paint.alpha=alpha;invalidateSelf()}
+        override fun setColorFilter(filter:ColorFilter?){paint.colorFilter=filter;invalidateSelf()}
+        @Deprecated("Drawable opacity") override fun getOpacity()=PixelFormat.TRANSLUCENT
+    }
+    fun stateDot(context:Context,label:String,color:Int,action:()->Unit)=button(context,"",action=action).apply {
+        contentDescription=label;tooltipText=label;setPadding(dp(context,18),dp(context,18),dp(context,18),dp(context,18))
+        setCompoundDrawablesWithIntrinsicBounds(Dot(context,color),null,null,null)
+    }
     class Icon(context:Context,name:String,color:Int,size:Int=22):Drawable() {
         private val pixels=dp(context,size)
         private val path=Path().apply {
@@ -160,6 +191,12 @@ internal object NativeUi {
                 "plus"->{line(12f,4f,12f,20f);line(4f,12f,20f,12f)}
                 "down"->{moveTo(5f,9f);lineTo(12f,16f);lineTo(19f,9f)}
                 "search"->{addCircle(10f,10f,7f,Path.Direction.CW);line(15f,15f,21f,21f)}
+                "edit"->{moveTo(4f,16f);lineTo(4f,21f);lineTo(9f,20f);lineTo(21f,8f);lineTo(16f,3f);close();line(13f,6f,18f,11f)}
+                "trash"->{line(4f,6f,20f,6f);line(9f,3f,15f,3f);moveTo(6f,6f);lineTo(7f,21f);lineTo(17f,21f);lineTo(18f,6f);line(10f,10f,10f,17f);line(14f,10f,14f,17f)}
+                "close"->{line(6f,6f,18f,18f);line(18f,6f,6f,18f)}
+                "archive"->{addRect(3f,4f,21f,8f,Path.Direction.CW);moveTo(5f,8f);lineTo(5f,21f);lineTo(19f,21f);lineTo(19f,8f);line(9f,12f,15f,12f)}
+                "update"->{line(12f,20f,12f,4f);moveTo(5f,11f);lineTo(12f,4f);lineTo(19f,11f)}
+                "help"->{addCircle(12f,12f,9f,Path.Direction.CW);moveTo(9f,8f);cubicTo(9f,4f,17f,5f,15f,10f);lineTo(12f,12f);lineTo(12f,14f);addCircle(12f,18f,.5f,Path.Direction.CW)}
                 else->{moveTo(9f,5f);lineTo(16f,12f);lineTo(9f,19f)}
             }
         }

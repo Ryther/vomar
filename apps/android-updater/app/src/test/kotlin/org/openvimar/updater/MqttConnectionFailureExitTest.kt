@@ -38,6 +38,7 @@ class MqttConnectionFailureExitTest {
         assertEquals(1,cleanupCalls)
         assertFalse(state.connected)
         assertEquals("Connection stopped.",state.status)
+        assertFalse(state.connectionError)
         assertSame(original,propagated)
         assertFalse(state.status.contains("fixture-password"))
     }
@@ -53,6 +54,7 @@ class MqttConnectionFailureExitTest {
         assertTrue(original.suppressed.contains(cleanup))
         assertFalse(state.connected)
         assertTrue(state.status.contains("hostname",true))
+        assertTrue(state.connectionError)
         listOf("fixture-password","fixture-secret","private-broker.example").forEach { assertFalse(state.status.contains(it)) }
     }
 
@@ -67,6 +69,7 @@ class MqttConnectionFailureExitTest {
         assertEquals(1,cleanupCalls)
         assertFalse(state.connected)
         assertTrue(state.status.contains("hostname",true))
+        assertTrue(state.connectionError)
     }
 
     @Test fun failedCleanupCannotReplaceCancellationOrItsStoppedState()=runBlocking {
@@ -80,5 +83,6 @@ class MqttConnectionFailureExitTest {
         assertTrue(original.suppressed.contains(cleanup))
         assertFalse(state.connected)
         assertEquals("Connection stopped.",state.status)
+        assertFalse(state.connectionError)
     }
 }

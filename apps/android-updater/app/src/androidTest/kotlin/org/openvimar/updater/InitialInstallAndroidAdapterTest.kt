@@ -14,6 +14,7 @@ class InitialInstallAndroidAdapterTest:InstrumentationTestCase() {
     private fun context()=object:ContextWrapper(instrumentation.targetContext){
         private val folder=File(super.getFilesDir(),"first-install-test-${System.nanoTime()}").apply{mkdirs()}
         override fun getFilesDir()=folder
+        override fun getSharedPreferences(name:String,mode:Int)=super.getSharedPreferences("${folder.name}-$name",mode)
     }
     private fun archive():ByteArray {
         val flash=ByteArray(0x100000){0xff.toByte()};byteArrayOf(0,0,2,0x20,1,0x10,0,0).copyInto(flash)
@@ -31,10 +32,32 @@ class InitialInstallAndroidAdapterTest:InstrumentationTestCase() {
             store.saveOriginal("ef1faf4b-cd24-42c7-8508-8d51b4f10ad5",bytes)
             assertEquals(original.archiveSha256,AndroidInitialInstallPersistence(context).reopenOriginal(original.archiveSha256).archiveSha256)
             val request=InstallCaptureRequest("ef1faf4b-cd24-42c7-8508-8d51b4f10ad5","synthetic-only",original.identity,"11".repeat(32))
-            store.saveState(InitialInstallSnapshot(InitialInstallPhase.FAILED,request,mutationMayHaveStarted=true,commitMayHaveBeenWritten=true,message="Synthetic lost acknowledgement"))
+            store.saveState(InitialInstallSnapshot(InitialInstallPhase.FAILED,request,mutationMayHaveStarted=true,commitMayHaveBeenWritten=true,programmingPreparation="Synthetic ACL preparation",installStep="PAGE_ERASE_INTENT",installAddress=4096,message="Synthetic lost acknowledgement"))
             val report=AndroidInitialInstallPersistence(context).diagnostic()
             assertEquals(request.requestId,report.getString("requestId"));assertTrue(report.getBoolean("commitMayHaveBeenWritten"))
+            assertEquals("Synthetic ACL preparation",report.getString("programmingPreparation"));assertEquals("PAGE_ERASE_INTENT",report.getString("installStep"));assertEquals(4096,report.getInt("installAddress"))
             assertFalse(report.has("flash"));assertFalse(report.has("regions"));assertTrue(report.toString().length<16384)
+        }finally{context.filesDir.deleteRecursively()}
+    }
+    fun testPrivateBackupHandoffReopensExactBytesAndCatalogMatchesUidOnly(){
+        val context=context()
+        try{
+            val store=AndroidInitialInstallPersistence(context);val bytes=archive();val checked=OriginalArchive.verify(bytes)
+            store.saveOriginal("ef1faf4b-cd24-42c7-8508-8d51b4f10ad5",bytes)
+            val port=store.privateExport(checked.archiveSha256)
+            val exported=OriginalArchive.exportAndReopen(checked,port)
+            assertTrue(exported.document.startsWith("file:"));val material=exported.deriveOriginal();assertEquals(checked.identity,material.identity)
+            fun hash(value:ByteArray)=java.security.MessageDigest.getInstance("SHA-256").digest(value).joinToString(""){"%02x".format(it.toInt() and 255)}
+            val fixed="11".repeat(32);val binding=InstallBinding(checked.identity,checked.archiveSha256,fixed,fixed,hash(material.anchor()),hash(material.table()),fixed,fixed)
+            store.saveExportReceipt(material,binding)
+            val journal=FileInstallJournal(store.journalDirectory);assertTrue(journal.begin(InstallJournalRecord(binding,1,InstallPhase.PREPARED,null,false,false)))
+            val retained=AndroidInitialInstallPersistence(context).reopenRetained(binding.id)
+            assertEquals(checked.archiveSha256,retained.reopenOriginal(exported.document,port::reopen).archiveSha256)
+            val uid=listOf("%08x".format(checked.identity.uid0),"%08x".format(checked.identity.uid1))
+            assertEquals(1,store.backupsFor(uid).size);assertTrue(store.backupsFor(listOf("deadbeef","01020304")).isEmpty())
+            assertTrue(store.originalBytes(checked.archiveSha256).contentEquals(bytes))
+            val changed=bytes.copyOf().apply{this[10]=(this[10].toInt() xor 1).toByte()}
+            try{port.create(changed);fail("Private handoff must reject different bytes")}catch(_:IllegalArgumentException){}
         }finally{context.filesDir.deleteRecursively()}
     }
     fun testActualAndroidFilesystemExportReceiptAndProgressedResumeFence(){

@@ -48,7 +48,11 @@ internal fun resumeEngineProbe(args:Array<String>){
   override fun close(){closes++}
  }
  val authorizer=object:SwdAuthorizer{override fun acquire(binding:InstallBinding):AuthorizedSwdSession{check(binding==port.binding);return port}}
- var result=ExplicitResumeEngine().run(review,authorizer){check(!cancellation){"Cancelled"}}
+ val measured=mutableMapOf<String,Int>()
+ var result=ExplicitResumeEngine().runWithProgress(review,authorizer,onProgress={label,done,total->
+  check(total==AnchorV1.FLASH&&done in 4096..total);check(done>(measured[label]?:0));measured[label]=done
+ }){check(!cancellation){"Cancelled"}}
+ if(scenario in setOf("good","body-ready","body-short-frontier","committed"))check(measured["Final verification"]==AnchorV1.FLASH)
  if(scenario=="replay-prepared"){
   check(!result.outcome.verified&&mutations==1);cancellation=false
   result=ExplicitResumeEngine().run(review,authorizer);check(mutations==1&&result.outcome.mutationMayHaveStarted&&result.outcome.commitMayHaveBeenWritten)

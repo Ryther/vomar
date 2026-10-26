@@ -494,3 +494,40 @@ def test_quiescent_watchdog_observation_rejects_malformed_or_unsafe_active_shape
 
 def test_every_app_owned_directory_entry_is_durable_before_publication(kotlin,tmp_path):
     subprocess.run([*kotlin,'durable-directories',str(tmp_path)],check=True)
+
+
+@pytest.mark.parametrize('scenario',['good','wrong-uid','wrong-uicr','wrong-ficr','wrong-generation','cancel','readback'])
+def test_original_restore_exact_private_backup_is_bound_to_live_device_and_durable_page_intents(kotlin,tmp_path,scenario):
+    regions,manifest=original_fixture();source=tmp_path/'original.zip';source.write_bytes(archive(regions,manifest))
+    subprocess.run([*kotlin,'original-restore',str(source),str(tmp_path),scenario],check=True)
+
+
+@pytest.mark.parametrize('candidate',[False,True])
+@pytest.mark.parametrize('signatures',['present','missing','invalid'])
+def test_local_packages_accept_outer_unsigned_without_qualifying_online_release(kotlin,tmp_path,candidate,signatures):
+    raw,key,_,_=common_fixture(candidate=candidate)
+    if signatures!='present':
+        with zipfile.ZipFile(io.BytesIO(raw)) as z: entries={name:z.read(name) for name in z.namelist()}
+        for name in ['manifest.sig','first-install.sig']:
+            if signatures=='missing': entries.pop(name)
+            else: entries[name]=b'bad signature'
+        out=io.BytesIO()
+        with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
+            for name,data in entries.items():z.writestr(name,data)
+        raw=out.getvalue()
+    source=tmp_path/'local.zip';source.write_bytes(raw);pub=tmp_path/'public.der';pub.write_bytes(key)
+    subprocess.run([*kotlin,'local-inspect',str(source),str(pub)],check=True)
+    if signatures!='present':
+        result=subprocess.run([*kotlin,'release',str(source),str(pub),str(tmp_path)],capture_output=True)
+        assert result.returncode!=0,'Unsigned local artifact must not gain qualified release authority'
+
+
+
+def test_local_unsigned_descriptor_cannot_invent_active_watchdog_authority(kotlin,tmp_path):
+    raw,key,_,_=common_fixture(candidate=True,watchdog_handoff='paused-reset-before-main-v1')
+    with zipfile.ZipFile(io.BytesIO(raw)) as z: entries={name:z.read(name) for name in z.namelist() if name!='first-install.sig'}
+    out=io.BytesIO()
+    with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z:
+        for name,data in entries.items():z.writestr(name,data)
+    source=tmp_path/'local.zip';source.write_bytes(out.getvalue());pub=tmp_path/'public.der';pub.write_bytes(key)
+    subprocess.run([*kotlin,'local-inspect',str(source),str(pub),'no-handoff'],check=True)

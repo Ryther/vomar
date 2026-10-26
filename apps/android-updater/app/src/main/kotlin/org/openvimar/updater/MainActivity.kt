@@ -398,7 +398,7 @@ class MainActivity : Activity() {
         }
     }
     override fun onStart(){super.onStart();bound=bindService(Intent(this,UpdateService::class.java),connection,Context.BIND_AUTO_CREATE)}
-    override fun onResume(){super.onResume();render()}
+    override fun onResume(){super.onResume();render();if(::fleet.isInitialized)fleet.resume()}
     override fun onStop(){candidatePicker?.close();observing?.cancel();if(bound)unbindService(connection);bound=false;service=null;super.onStop()}
 
     private fun searchBluetooth(){

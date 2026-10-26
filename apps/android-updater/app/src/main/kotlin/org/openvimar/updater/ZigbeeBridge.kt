@@ -47,7 +47,7 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
             val filters=canonical.networks.flatMap { n -> listOf("${n.baseTopic}/bridge/devices","${n.baseTopic}/bridge/state","${n.baseTopic}/bridge/event","${n.baseTopic}/bridge/response/device/ota_update/+") }
             connection.subscribe(filters);subscribed.addAll(filters)
             mutable.update { it.copy(connected=true,status="Connected · waiting for bridge inventory") }
-        } catch(e:Exception) { reader?.cancel();reader=null;connection.disconnect();mutable.value=NetworkBackendState(status="Connection failed");throw e }
+        } catch(e:Exception) { reader?.cancel();reader=null;connection.disconnect();mutable.value=NetworkBackendState(status="Connection failed",connectionError=true);throw e }
     }
     suspend fun refreshInventory() {
         val current=requireNotNull(profile) { "Connect to a broker first" }
@@ -55,7 +55,7 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
         connection.subscribe(current.networks.map { "${it.baseTopic}/bridge/devices" })
     }
     private fun lost() {
-        mutable.update { it.copy(connected=false,status="Connection lost · reconnect explicitly") }
+        mutable.update { it.copy(connected=false,status="Connection lost · reconnect explicitly",connectionError=true) }
         pending.values.forEach { it.result.completeExceptionally(NetworkLostException()) };pending.clear()
     }
     suspend fun disconnect() {

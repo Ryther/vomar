@@ -97,7 +97,8 @@ internal class JlinkInstallWire(private val channel:InstallBulkChannel,
         require(address>=0&&address%4==0L&&length in 4..512&&length%4==0&&address%1024+length<=1024)
         val memory=address+length<=0x100000L||address>=0x10000000L&&address+length<=0x10002000L
         val register=length==4&&address in setOf(0xe000edf0L,0xe000edf8L,0xe000edfcL,0xe000ed0cL,0x4001e400L,0x4001e504L,0x40010400L,0x40010504L,0x40010508L,0x4001050cL)||address==0x40010504L&&length==12
-        require(memory||register){"Programming read address is not allowed"}
+        val flashPermissions=length==12&&address in 0x4001e800L..0x4001e870L&&(address-0x4001e800L)%16==0L
+        require(memory||register||flashPermissions){"Programming read address is not allowed"}
     }
     fun readWords(address:Long,length:Int):ByteArray {
         readSpan(address,length);require(ready)
@@ -109,7 +110,7 @@ internal class JlinkInstallWire(private val channel:InstallBulkChannel,
             for(i in values.indices){val at=i*54;when(bits(reply,at+8,3).toInt()){
                 1->{val v=bits(reply,at+11,32);if(bits(reply,at+43,1).toInt()!=parity(v)){invalidateCaches();throw IOException("Programming block parity mismatch")};values[i]=v}
                 2->{waited=true;break}
-                4->{invalidateCaches();throw IOException("Programming read FAULT")}
+                4->{invalidateCaches();throw IOException("Programming read FAULT in block 0x%08x".format(address))}
                 else->{invalidateCaches();throw IOException("Programming read invalid ACK")}}}
             if(!waited){status();return ByteArray(length){i->(values[i/4+1] ushr((i%4)*8)).toByte()}}
             if(attempt==2)throw IOException("Programming block WAIT limit")
@@ -119,7 +120,11 @@ internal class JlinkInstallWire(private val channel:InstallBulkChannel,
         }
         throw IOException("Programming block incomplete")
     }
-    private fun writeWord(address:Long,value:Long){require(value in 0..0xffffffffL);ensureCsw();apWrite(4,address);apWrite(12,value)}
+    private fun writeWord(address:Long,value:Long){
+        require(value in 0..0xffffffffL)
+        try{ensureCsw();apWrite(4,address);apWrite(12,value)}
+        catch(error:Exception){throw IOException("Write 0x%08x: %s".format(address,error.message?:error.javaClass.simpleName),error)}
+    }
     fun writeDebugControl(value:Long){require(value in setOf(0xa05f0000L,0xa05f0001L,0xa05f0003L));writeWord(0xe000edf0L,value)}
     /** DCRSR REGWnR stays zero: READ PC(0x0f), xPSR(0x10), MSP(0x11).
      * No general core-register write/PSP selector is available. Primary table:
@@ -174,6 +179,7 @@ internal class JlinkInstallWire(private val channel:InstallBulkChannel,
     fun programFlashWords(address:Int,data:ByteArray){
         require(address>=0&&address%4==0&&data.size in 4..256&&data.size%4==0&&address<=0x100000-data.size&&address/4096==(address+data.size-1)/4096&&address%1024+data.size<=1024)
         ensureCsw();apWrite(4,address.toLong())
-        for(i in data.indices step 4)apWrite(12,bits(data,i*8,32))
+        for(i in data.indices step 4)try{apWrite(12,bits(data,i*8,32))}
+            catch(error:Exception){throw IOException("Programming FLASH 0x%08x: %s".format(address+i,error.message?:error.javaClass.simpleName),error)}
     }
 }

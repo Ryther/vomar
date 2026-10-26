@@ -75,9 +75,9 @@ class InitialInstallService:Service() {
                 try{ticket.checkActive();val found=AndroidInitialInstallIdentity.inspect(this,deviceName){ticket.cancelled||destroyed};ticket.checkActive()
                     val options=persistence.resumeOptions(found.target);ticket.checkActive()
                     synchronized(inspectionLock){inspectedDeviceName=deviceName;target.value=found.target;observedWatchdog.value=found.watchdog;retainedOptions.value=options}
-                    inspection.value=if(!found.watchdog.active)"Live identity/geometry and inactive watchdog read; no halt/reset attempted"
-                        else if(runCatching{found.watchdog.requireAcquisitionShape()}.isSuccess)"Live identity read; watchdog active and paused on HALT. A signed loader handoff is required; no halt/reset attempted"
-                        else "Live identity read; active watchdog profile is unsupported for capture. No halt/reset attempted"}
+                    inspection.value=if(!found.watchdog.active)"Device ready for backup."
+                        else if(runCatching{found.watchdog.requireAcquisitionShape()}.isSuccess)"Device ready. Backup will pause the device; firmware must support its watchdog."
+                        else "Backup unavailable: this watchdog cannot be paused safely. Check firmware compatibility."}
                 catch(error:Exception){clearInspection();inspection.value=error.message?:"Identity inspection failed"}
                 finally{policy.finished(ticket);main.post{if(policy.current()==null)stopForeground(STOP_FOREGROUND_REMOVE)}}
             }
@@ -107,7 +107,7 @@ class InitialInstallService:Service() {
                 try{
                     owned.checkActive();val key=KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(resources.openRawResource(R.raw.firmware_public).use{it.readBytes()}))
                     @Suppress("DEPRECATION") val version=packageManager.getPackageInfo(packageName,0).versionName?:error("App version unavailable")
-                    val inspected=if(candidate)CandidateRelease.inspect(frozen,key,version) else null
+                    val inspected=if(candidate)CandidateRelease.inspectLocal(frozen,key,version) else null
                     val qualified=if(candidate)null else CommonRelease.verify(frozen,key,version)
                     require((inspected?.releaseSha256?:qualified?.releaseSha256)==request.reviewedReleaseSha256)
                     owned.checkActive();holdAwake(owned)
@@ -117,7 +117,10 @@ class InitialInstallService:Service() {
                         persistence.reopenRetained(option.bindingId)
                     }else null
                     val reopened=if(retained!=null)retained.reopenOriginal(checkNotNull(originalUri).toString()){document->
-                        AndroidInitialInstallDocuments.reopenExisting(contentResolver,Uri.parse(document)){owned.cancelled||destroyed}
+                        if(Uri.parse(document).scheme=="file"){
+                            val hash=checkNotNull(retained).binding.archiveSha256
+                            val privatePort=persistence.privateExport(hash);privatePort.reopen(document)
+                        }else AndroidInitialInstallDocuments.reopenExisting(contentResolver,Uri.parse(document)){owned.cancelled||destroyed}
                     }else null
                     owned.checkActive()
                     val active=InitialInstallController({r,cancelled,proof->AndroidInitialInstallConnection.open(this,r,cancelled={owned.cancelled||destroyed||cancelled()},
@@ -131,7 +134,12 @@ class InitialInstallService:Service() {
                         val head=checkNotNull(retained).checkpoint.headSha256
                         if(inspected!=null)active.prepareResumeCandidate(request,inspected,reopened,persistence.resumeJournal,head)
                         else active.prepareResumeQualified(request,checkNotNull(qualified),reopened,persistence.resumeJournal,head)
-                    }else if(inspected!=null)active.beginCandidate(request,inspected) else active.beginQualified(request,checkNotNull(qualified))
+                    }else {
+                        if(inspected!=null)active.beginCandidate(request,inspected) else active.beginQualified(request,checkNotNull(qualified))
+                        if(active.snapshot.phase==InitialInstallPhase.AWAITING_EXPORT){
+                            active.export(persistence.privateExport(checkNotNull(active.snapshot.archiveSha256)))
+                        }
+                    }
                 }catch(error:Exception){serviceError(error,request,candidate)}
                 finally{completeIfTerminal(owned)}
             }

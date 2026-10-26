@@ -38,15 +38,24 @@ object CommonRelease {
     internal fun inspectCandidate(raw:ByteArray,publicKey:PublicKey,appVersion:String):Pair<VerifiedCommonSet,ByteArray> {
         val result=verifyMode(raw,publicKey,appVersion,true);return result.first to requireNotNull(result.second)
     }
-    private fun verifyMode(raw:ByteArray,publicKey:PublicKey,appVersion:String,candidate:Boolean):Pair<VerifiedCommonSet,ByteArray?> {
-        val bytes=raw.copyOf();val expectedBase=baseEntries+(if(candidate)setOf("qualification.json") else emptySet())
+    /** Local owner-reviewed input has no release/qualification authority.
+     * Only outer artifact signatures may be absent: loader compatibility,
+     * image signatures, protected model/role tags and every digest stay checked. */
+    internal fun inspectLocal(raw:ByteArray,publicKey:PublicKey,appVersion:String):Pair<VerifiedCommonSet,ByteArray> {
+        val entries=StrictZip.read(raw,limits+("qualification.json" to 65536),2*1024*1024,setOf("manifest.json"),2*1024*1024)
+        val beta=obj(StrictJson.parse(entries.getValue("manifest.json")))["purpose"]=="qualification-candidate"
+        val result=verifyMode(raw,publicKey,appVersion,beta,true)
+        return result.first to (result.second?:byteArrayOf())
+    }
+    private fun verifyMode(raw:ByteArray,publicKey:PublicKey,appVersion:String,candidate:Boolean,local:Boolean=false):Pair<VerifiedCommonSet,ByteArray?> {
+        val bytes=raw.copyOf();val expectedBase=(if(local)baseEntries-setOf("manifest.sig","first-install.sig") else baseEntries)+(if(candidate)setOf("qualification.json") else emptySet())
         val entries=StrictZip.read(bytes,if(candidate)limits+("qualification.json" to 65536) else limits,2*1024*1024,expectedBase,2*1024*1024)
         // Freeze caller-supplied public-key encoding before any JCA use.
         val key=KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(publicKey.encoded.copyOf()))
         val p=AlgorithmParameters.getInstance("EC").apply{init(ECGenParameterSpec("secp256r1"))}.getParameterSpec(ECParameterSpec::class.java)
         require(key is ECPublicKey&&key.params.curve==p.curve&&key.params.generator==p.generator&&key.params.order==p.order&&key.params.cofactor==p.cofactor){"Pinned P256 public key required"}
         val manifestBytes=entries.getValue("manifest.json")
-        signature(key,manifestBytes,entries.getValue("manifest.sig"))
+        if(!local)signature(key,manifestBytes,entries.getValue("manifest.sig"))
         val m=obj(StrictJson.parse(manifestBytes))
         val requiredFields=required+(if(candidate)setOf("purpose") else emptySet())
         require(m.keys.containsAll(requiredFields)&&(m.keys-requiredFields).all{it in optional}){"Unsupported schema3 fields"}
@@ -70,12 +79,14 @@ object CommonRelease {
             if(field in m){expectedEntries+=file;componentHashes[field]=component(m[field],entries.getValue(file),file,role,if(role==4)0xb0000 else 0xc000,if(role==4)0x3f000 else 0xa2000,key).fileSha256}}
         if("zigbeeOta" in m){expectedEntries+="main.ota";val o=keys(m["zigbeeOta"],setOf("file","size","fileSha256","manufacturerCode","imageType","fileVersion","model","profile","mainSignedRegionSha256"))
             ZigbeeCarrierValidator.validate(ZigbeeOtaMetadata(o["file"] as String,integer(o["size"]),hash(o["fileSha256"]),integer(o["manufacturerCode"]),integer(o["imageType"]),o["fileVersion"] as Long,o["model"] as String,integer(o["profile"]),hash(o["mainSignedRegionSha256"])),entries.getValue("main.ota"),main);componentHashes["zigbeeOta"]=hash(o["fileSha256"])}
-        require(entries.keys==expectedEntries){"Manifest/ZIP entry mismatch"}
+        require((if(local)entries.keys-setOf("manifest.sig","first-install.sig") else entries.keys)==expectedEntries){"Manifest/ZIP entry mismatch"}
         val binding=keys(m["firstInstall"],setOf("file","size","sha256","signatureFile","signatureSha256"))
-        val descriptorBytes=entries.getValue("first-install.json");val descriptorSignature=entries.getValue("first-install.sig")
+        val descriptorBytes=entries.getValue("first-install.json");val descriptorSignature=entries["first-install.sig"]
         require(binding["file"]=="first-install.json"&&binding["signatureFile"]=="first-install.sig"&&binding["size"]==descriptorBytes.size.toLong()&&
-            hash(binding["sha256"])==sha256(descriptorBytes)&&hash(binding["signatureSha256"])==sha256(descriptorSignature))
-        signature(key,descriptorBytes,descriptorSignature)
+            hash(binding["sha256"])==sha256(descriptorBytes))
+        hash(binding["signatureSha256"])
+        if(!local)require(hash(binding["signatureSha256"])==sha256(requireNotNull(descriptorSignature)))
+        if(!local)signature(key,descriptorBytes,requireNotNull(descriptorSignature))
         val d=obj(StrictJson.parse(descriptorBytes));val descriptorFields=setOf("schemaVersion","type","model","layoutVersion","identityProtocol","loaderContracts","images")
         require(d.keys.containsAll(descriptorFields)&&(d.keys-descriptorFields).all{it=="watchdogHandoff"})
         val watchdog=if("watchdogHandoff" in d){require(d["watchdogHandoff"]==WatchdogHandoffAuthority.POLICY);d.getValue("watchdogHandoff") as String}else null
@@ -98,7 +109,11 @@ object CommonRelease {
             require(q["schemaVersion"]==3L&&q["model"]=="VIMAR30805"&&q["layoutVersion"]==2L&&records(q["loaderContracts"])==contracts&&checks.all{q[it]===false}){"Candidate must retain every pending qualification flag as literal false"}
             componentHashes["loader"]=sha256(loader);require(obj(q["components"])==componentHashes){"Candidate report components differ from actual signed assets"}
         }else null
-        return VerifiedCommonSet(sha256(bytes),family,loader,entries.getValue("main.signed.bin"),entries.getValue("recovery.signed.bin"),descriptorBytes,watchdog) to qualification
+        // A manually admitted unsigned envelope cannot manufacture a signed
+        // watchdog capability. A separately valid descriptor still authenticates
+        // that capability even when the outer manifest signature is absent.
+        val authenticatedWatchdog=if(!local||descriptorSignature!=null&&runCatching{signature(key,descriptorBytes,descriptorSignature)}.isSuccess)watchdog else null
+        return VerifiedCommonSet(sha256(bytes),family,loader,entries.getValue("main.signed.bin"),entries.getValue("recovery.signed.bin"),descriptorBytes,authenticatedWatchdog) to qualification
     }
     private fun signature(key:PublicKey,bytes:ByteArray,sig:ByteArray){require(sig.size in 8..80);require(Signature.getInstance("SHA256withECDSA").run{initVerify(key);update(bytes);verify(sig)}){"Project signature mismatch"}}
     private fun hash(value:Any?):String {require(value is String&&Regex("[0-9a-f]{64}").matches(value));return value}

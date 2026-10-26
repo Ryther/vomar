@@ -76,7 +76,7 @@ data class InstallOutcome(val verified:Boolean,val stoppedAt:InstallPhase,val ad
  * reset or UICR-writing API. All addresses below are fixed, not archive inputs. */
 class FirstInstallEngine {
     private val busy=AtomicBoolean(false)
-    fun run(plan:InstallPlan,authorizer:SwdAuthorizer,journal:InstallJournalStore,checkCancelled:()->Unit={}):InstallOutcome {
+    fun run(plan:InstallPlan,authorizer:SwdAuthorizer,journal:InstallJournalStore,onProgress:(String,Int,Int)->Unit={_,_,_->},checkCancelled:()->Unit={}):InstallOutcome {
         check(busy.compareAndSet(false,true)){"An installation is already active"}
         var lease:AuthorizedSwdSession?=null
         var phase=InstallPhase.PREPARED;var address:Int?=null;var sequence=0
@@ -117,7 +117,7 @@ class FirstInstallEngine {
             }
             record(InstallPhase.ORIGINAL_VERIFY)
             protectedPageGuard();require(s.readFicr().contentEquals(originalFicr)){"Live FICR differs from exported original"};active()
-            for(at in 0 until AnchorV1.FLASH step 4096)require(readPage(at).contentEquals(originalFlash.copyOfRange(at,at+4096))){"Live original FLASH differs from exported backup"}
+            for(at in 0 until AnchorV1.FLASH step 4096){require(readPage(at).contentEquals(originalFlash.copyOfRange(at,at+4096))){"Live original FLASH differs from exported backup"};onProgress("Checking original",at+4096,4*AnchorV1.FLASH)}
             protectedPageGuard();record(InstallPhase.ORIGINAL_VERIFIED)
             for(at in 0 until AnchorV1.FLASH step 4096) {
                 // One page transaction. No4KiB UICR rereads per word/batch.
@@ -132,11 +132,11 @@ class FirstInstallEngine {
                     record(InstallPhase.PAGE_WRITE_INTENT,destination);active()
                     s.program(destination,batch,generation)
                 }
-                require(readPage(at).contentEquals(wanted)){"FLASH page readback mismatch"};identity()
+                require(readPage(at).contentEquals(wanted)){"FLASH page readback mismatch"};identity();onProgress("Installing",AnchorV1.FLASH+at+4096,4*AnchorV1.FLASH)
             }
             fun verifyImage(committed:Boolean,wanted:String) {
                 val hash=MessageDigest.getInstance("SHA-256")
-                for(at in 0 until AnchorV1.FLASH step 4096){val actual=readPage(at);require(actual.contentEquals(plan.page(at,committed))){"Complete FLASH readback mismatch"};hash.update(actual)}
+                for(at in 0 until AnchorV1.FLASH step 4096){val actual=readPage(at);require(actual.contentEquals(plan.page(at,committed))){"Complete FLASH readback mismatch"};hash.update(actual);onProgress(if(committed)"Verifying firmware" else "Verifying installation",(if(committed)3 else 2)*AnchorV1.FLASH+at+4096,4*AnchorV1.FLASH)}
                 require(hash.digest().joinToString(""){"%02x".format(it.toInt() and 255)}==wanted)
             }
             record(InstallPhase.BODY_VERIFY);verifyImage(false,plan.binding.bodySha256);record(InstallPhase.BODY_VERIFIED)

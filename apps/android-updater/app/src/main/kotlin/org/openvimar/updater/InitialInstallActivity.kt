@@ -34,7 +34,12 @@ class InitialInstallActivity:Activity() {
     private lateinit var packageSummary:TextView
     private lateinit var targetSummary:TextView
     private lateinit var chooseRelease:Button
-    private lateinit var chooseCandidate:Button
+    private lateinit var progress:ProgressBar
+    private lateinit var progressText:TextView
+    private lateinit var recap:TextView
+    private lateinit var stepText:TextView
+    private lateinit var selectionPanel:LinearLayout
+    private lateinit var statusPanel:LinearLayout
     private lateinit var chooseDk:Button
     private var service:InitialInstallService?=null
     private var bound=false
@@ -45,7 +50,6 @@ class InitialInstallActivity:Activity() {
     private var selectedVersion:String?=null
     private var rawPackage:ByteArray?=null
     private var candidate=false
-    private var pickCandidate=false
     private var busy=false
     private var foreground=false
     private var selectedDevice:String?=null
@@ -90,7 +94,6 @@ class InitialInstallActivity:Activity() {
         selectedUri=savedInstanceState?.getString("uri")?.let(Uri::parse)
         selectedDigest=savedInstanceState?.getString("digest")
         candidate=savedInstanceState?.getBoolean("candidate")?:false
-        pickCandidate=savedInstanceState?.getBoolean("pickCandidate")?:false
         pendingExportRequest=savedInstanceState?.getString("exportRequest")
         pendingPermission=savedInstanceState?.getString("permissionRequest")
         resumeOriginalUri=savedInstanceState?.getString("resumeOriginal")?.let(Uri::parse)
@@ -98,43 +101,36 @@ class InitialInstallActivity:Activity() {
         resumeRelease=savedInstanceState?.getString("resumeRelease")
         resumeDeviceName=savedInstanceState?.getString("resumeDevice")
         resumeCandidate=savedInstanceState?.getBoolean("resumeCandidate")?:false
-        body=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(20),dp(16),dp(20),dp(28));setBackgroundColor(getColor(R.color.ui_surface))}
+        val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(getColor(R.color.ui_surface))}
+        NativeUi.insets(root)
+        val header=LinearLayout(this).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(20),dp(8),dp(12),0)}
+        header.addView(NativeUi.taskHeader(this,"First installation"){leave()},LinearLayout.LayoutParams(0,-2,1f))
+        header.addView(NativeUi.actionIcon(this,"help","First installation help"){showHelp()});root.addView(header)
+        body=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(20),dp(8),dp(20),dp(20))}
         val scroll=ScrollView(this).apply{isFillViewport=true;defaultFocusHighlightEnabled=false;setBackgroundColor(getColor(R.color.ui_surface));addView(body)}
-        val center=FrameLayout(this).apply{addView(scroll,FrameLayout.LayoutParams(-1,-1,Gravity.TOP or Gravity.CENTER_HORIZONTAL))}
-        // Insets belong to the viewport, never to the scrolling content.
-        NativeUi.insets(scroll)
-        center.addOnLayoutChangeListener{_,_,_,_,_,_,_,_,_->
-            val width=minOf(center.width,dp(720));val p=scroll.layoutParams as FrameLayout.LayoutParams
-            if(width>0&&p.width!=width){p.width=width;scroll.layoutParams=p}
-        }
-        add(NativeUi.taskHeader(this,"First installation"){leave()},0)
-        add(label("Install custom firmware on one dimmer using an Android USB host adapter and the DK’s J-Link port."),8)
-        status=NativeUi.status(this,"Choose a signed common release to begin.")
-        add(status,20)
-        section("Common release")
-        packageSummary=label("No release selected");add(packageSummary,4)
-        chooseRelease=button("Choose common release"){pickCandidate=false;pickPackage()};add(chooseRelease,8)
-        chooseCandidate=button("Bench qualification"){AlertDialog.Builder(this).setTitle("Bench qualification")
-            .setMessage("A qualification candidate has not passed the physical release checks. Use it for one deliberately reviewed bench trial. It cannot be used for fleet updates.")
-            .setPositiveButton("Choose candidate"){_,_->pickCandidate=true;pickPackage()}.setNegativeButton("Cancel",null).show()}
-        val qualification=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;addView(chooseCandidate,LinearLayout.LayoutParams(-1,-2))}
-        add(NativeUi.disclosure(this,"Qualification options","Hide qualification options",qualification),0);add(qualification,0)
-        section("Connected target")
-        targetSummary=label("Connect and select the DK. Target identity is read directly; no registration file is needed.");add(targetSummary,4)
-        chooseDk=button("Choose DK and read target"){chooseProbe()};add(chooseDk,8)
-        section("Installation")
-        actions=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};add(actions,4)
-        section("Your original firmware")
-        add(label("The original firmware is read twice while the CPU is halted. Before any flash write, save its verified ZIP to a location you choose. The app reopens that same file and checks every byte."),4)
-        add(label("Keep the phone, DK and dimmer connected throughout the procedure. The app never erases UICR and never starts an interrupted installation automatically."),10)
-        add(button("Save diagnostic report"){diagnostic=service?.diagnostic()?.toString(2)?:"{\"message\":\"No first installation has started\"}";startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/json").putExtra(Intent.EXTRA_TITLE,"vimar-first-install-report.json"),REPORT)},14)
-        // Attach complete content so initial keyboard focus can reach actions.
-        // Viewport focus remains usable without highlighting the whole screen.
+        root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
+        stepText=NativeUi.label(this,"1 · Choose firmware",20,true);add(stepText,16)
+        selectionPanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};add(selectionPanel,12)
+        fun selection(view:View,gap:Int=8){selectionPanel.addView(view,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(gap)})}
+        packageSummary=label("No firmware selected");selection(packageSummary)
+        chooseRelease=button("Choose firmware",true){pickPackage()};selection(chooseRelease)
+        targetSummary=label("Connect the DK to the dimmer and your phone.");selection(targetSummary,28)
+        chooseDk=button("Read connected device"){chooseProbe()};selection(chooseDk)
+        actions=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};add(actions,16)
+        statusPanel=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(20),dp(12),dp(20),dp(16));tag="initial.status"}
+        recap=NativeUi.label(this,"Choose firmware to begin",13,secondary=true);statusPanel.addView(recap)
+        status=NativeUi.label(this,"Ready",16,true).apply{accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE};statusPanel.addView(status,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})
+        progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;isIndeterminate=false;visibility=View.GONE;tag="initial.progress"}
+        statusPanel.addView(progress,LinearLayout.LayoutParams(-1,dp(8)).apply{topMargin=dp(12)})
+        progressText=NativeUi.label(this,"",13,secondary=true);statusPanel.addView(progressText)
+        root.addView(statusPanel)
+        val center=FrameLayout(this).apply{setBackgroundColor(getColor(R.color.ui_surface));addView(root,FrameLayout.LayoutParams(-1,-1,Gravity.TOP or Gravity.CENTER_HORIZONTAL))}
+        center.addOnLayoutChangeListener{_,_,_,_,_,_,_,_,_->val width=minOf(center.width,dp(720));val params=root.layoutParams as FrameLayout.LayoutParams;if(width>0&&params.width!=width){params.width=width;root.layoutParams=params}}
         setContentView(center)
         ContextCompat.registerReceiver(this,permissions,IntentFilter(permissionAction),ContextCompat.RECEIVER_NOT_EXPORTED)
         bound=bindService(Intent(this,InitialInstallService::class.java),connection,BIND_AUTO_CREATE)
         render()
-        selectedUri?.let{loadPackage(it,candidate,selectedDigest)}
+        selectedUri?.let{loadPackage(it,selectedDigest)}
     }
     private fun dp(n:Int)=NativeUi.dp(this,n)
     private fun label(text:String)=NativeUi.label(this,text,15,secondary=true)
@@ -147,23 +143,31 @@ class InitialInstallActivity:Activity() {
             .putExtra(Intent.EXTRA_MIME_TYPES,arrayOf("application/zip","application/octet-stream","application/x-zip-compressed")),PACKAGE)
     }
     private fun key()=KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(resources.openRawResource(R.raw.firmware_public).use{it.readBytes()}))
-    private fun loadPackage(uri:Uri,isCandidate:Boolean,expected:String?=null){
-        packageJob?.cancel();rawPackage=null;busy=true;renderActions();status.text="Checking the release signature and all components…"
+    private fun loadPackage(uri:Uri,expected:String?=null){
+        packageJob?.cancel();rawPackage=null;busy=true;renderActions();status.text="Checking firmware…"
         packageJob=scope.launch{
             val result=runCatching{withContext(Dispatchers.IO){
                 val bytes=contentResolver.openInputStream(uri)?.use{input->val out=ByteArrayOutputStream();val buffer=ByteArray(8192)
                     while(true){ensureActive();val n=input.read(buffer);if(n<0)break;require(n>0&&out.size()+n<=2*1024*1024){"The common ZIP must be at most 2 MiB"};out.write(buffer,0,n)};out.toByteArray()}?:error("The selected release could not be opened")
                 val appVersion=packageManager.getPackageInfo(packageName,0).versionName?:error("App version unavailable")
-                val digest=if(isCandidate)CandidateRelease.inspect(bytes,key(),appVersion).releaseSha256 else CommonRelease.verify(bytes,key(),appVersion).releaseSha256
+                val qualified=runCatching{CommonRelease.verify(bytes,key(),appVersion)}.getOrNull()
+                val manual=if(qualified==null)CandidateRelease.inspectLocal(bytes,key(),appVersion) else null
+                val digest=qualified?.releaseSha256?:checkNotNull(manual).releaseSha256
                 require(expected==null||expected==digest){"The selected document changed since it was reviewed"}
                 val manifest=ZipInputStream(bytes.inputStream()).use{zip->var version="Signed common release"
                     while(true){val entry=zip.nextEntry?:break;if(entry.name=="manifest.json"){version=JSONObject(String(zip.readBytes(),Charsets.UTF_8)).getJSONObject("main").getString("version");break}};version}
-                Triple(bytes,digest,manifest)
+                PackageChoice(bytes,digest,manifest,manual!=null)
             }}
             if(!isActive)return@launch
             busy=false
-            result.onSuccess{(bytes,digest,version)->selectedUri=uri;selectedDigest=digest;selectedVersion=version;rawPackage=bytes;candidate=isCandidate;status.text=if(candidate)"Signed candidate checked. Physical qualification remains pending." else "Signed common release checked. Select the connected target."}
-                .onFailure{selectedUri=null;selectedDigest=null;selectedVersion=null;rawPackage=null;status.text=it.message?:"Cannot validate this release. Choose a signed common ZIP."}
+            result.onSuccess{choice->
+                fun accept(){selectedUri=uri;selectedDigest=choice.digest;selectedVersion=choice.version;rawPackage=choice.bytes;candidate=choice.manual;status.text="Firmware selected. Connect and read the device.";renderPackage();renderActions()}
+                if(choice.manual&&expected==null&&foreground)AlertDialog.Builder(this@InitialInstallActivity).setTitle("Use this firmware?")
+                    .setMessage("This local package is beta or has no verified release signature. It has not passed the release checks. Version ${choice.version} will be used only for the device you review.")
+                    .setPositiveButton("Use firmware"){_,_->if(foreground&&!active())accept()}.setNegativeButton("Cancel",null).show()
+                else accept()
+            }
+                .onFailure{selectedUri=null;selectedDigest=null;selectedVersion=null;rawPackage=null;status.text=it.message?:"This is not a compatible Vomar firmware package."}
             if(snapshot.phase!=InitialInstallPhase.IDLE)render()else {renderPackage();renderActions()}
         }
     }
@@ -185,8 +189,8 @@ class InitialInstallActivity:Activity() {
         if(snapshot.phase!=InitialInstallPhase.IDLE)status.text=when(snapshot.phase){
             InitialInstallPhase.CONNECTING->if(snapshot.resume)"Checking the original backup and interrupted installation…" else "Checking the selected release and target…"
             InitialInstallPhase.CAPTURING->if(snapshot.resume)"Checking the target and saved evidence for repair…" else "Reading and comparing two full copies of the original firmware…"
-            InitialInstallPhase.AWAITING_EXPORT->"Both backup copies match. Save the original ZIP to continue."
-            InitialInstallPhase.AWAITING_REVIEW->"Backup saved and reopened successfully. Review this target before installing."
+            InitialInstallPhase.AWAITING_EXPORT->"Saving backup…"
+            InitialInstallPhase.AWAITING_REVIEW->"Backup saved. Ready to install."
             InitialInstallPhase.AWAITING_RESUME_REVIEW->"Repair review ready. Confirm before the complete image check and any needed writes."
             InitialInstallPhase.INSTALLING->if(snapshot.resume)"Repairing the reviewed installation. Keep USB and power connected." else "Installing firmware and checking each block. Keep USB and power connected."
             InitialInstallPhase.VERIFIED_HALTED->"The complete firmware is verified. Choose Start when you are ready."
@@ -194,16 +198,47 @@ class InitialInstallActivity:Activity() {
             InitialInstallPhase.STARTED->"Start acknowledged. Check normal device operation."
             else->snapshot.message
         }
-        else service?.inspectionMessage?.value?.takeIf{it.isNotBlank()}?.let{status.text=it}
+        else if(rawPackage==null)status.text="Choose firmware to begin."
+        else service?.inspectionMessage?.value?.takeIf{it.isNotBlank()}?.let{status.text=if(it.startsWith("Inspect the selected"))"Connect and read the device." else it}
         val target=snapshot.request?.target?:service?.inspectedTarget?.value
-        targetSummary.text=target?.let{"nRF52840 detected\nUID ${"%08x-%08x".format(it.uid0,it.uid1)} · 1 MiB flash\n${snapshot.request?.deviceName?:selectedDevice?:"Selected USB probe"}"}?:"No target identity read yet. Choose the connected DK to check the nRF52840."
+        targetSummary.text=target?.let{"Device ${"%08x-%08x".format(it.uid0,it.uid1)}"}?:"Connect the DK to the dimmer and your phone."
         renderPackage();renderActions()
     }
-    private fun renderPackage(){val digest=snapshot.request?.reviewedReleaseSha256?:selectedDigest;val isCandidate=if(snapshot.request!=null)snapshot.candidate else candidate
-        packageSummary.text=digest?.let{"${if(isCandidate)"Qualification candidate" else "Common release"} ${if(it==selectedDigest)selectedVersion?:"" else ""}\nSHA-256 ${it.take(12)}…${it.takeLast(8)}"}?:"No release selected"}
+    private data class PackageChoice(val bytes:ByteArray,val digest:String,val version:String,val manual:Boolean)
+    private fun renderPackage(){
+        val digest=snapshot.request?.reviewedReleaseSha256?:selectedDigest
+        packageSummary.text=if(digest==null)"No firmware selected" else "Firmware ${selectedVersion?:digest.take(12)}${if(candidate)" · beta / local" else ""}"
+        updatePinnedStatus()
+    }
+    private fun updatePinnedStatus(){
+        val step=when(snapshot.phase){
+            InitialInstallPhase.FAILED,InitialInstallPhase.CANCELLED->"Installation stopped"
+            InitialInstallPhase.IDLE->if(rawPackage==null)"1 · Choose firmware" else if(service?.inspectedTarget?.value==null)"2 · Connect device" else "3 · Back up original firmware"
+            InitialInstallPhase.CONNECTING,InitialInstallPhase.CAPTURING,InitialInstallPhase.AWAITING_EXPORT->"3 · Back up original firmware"
+            InitialInstallPhase.AWAITING_REVIEW,InitialInstallPhase.AWAITING_RESUME_REVIEW,InitialInstallPhase.INSTALLING->"4 · Install firmware"
+            else->"5 · Start device"
+        }
+        NativeUi.emphasis(chooseRelease,rawPackage==null)
+        NativeUi.emphasis(chooseDk,rawPackage!=null&&service?.inspectedTarget?.value==null)
+        chooseRelease.text=if(rawPackage==null)"Choose firmware" else "Change firmware"
+        chooseDk.text=if(service?.inspectedTarget?.value==null)"Read connected device" else "Change device"
+        stepText.text=step;selectionPanel.visibility=if(snapshot.phase==InitialInstallPhase.IDLE)View.VISIBLE else View.GONE
+        chooseDk.visibility=if(rawPackage!=null)View.VISIBLE else View.GONE;targetSummary.visibility=chooseDk.visibility
+        val target=snapshot.request?.target?:service?.inspectedTarget?.value
+        recap.text=listOfNotNull(selectedVersion?.let{"Firmware $it"},target?.let{"Device ${"%08x-%08x".format(it.uid0,it.uid1)}"}).joinToString(" · ")
+        recap.visibility=if(recap.text.isBlank())View.GONE else View.VISIBLE
+        val tone=when(snapshot.phase){InitialInstallPhase.FAILED->R.color.ui_error;InitialInstallPhase.CANCELLED->R.color.ui_available;InitialInstallPhase.AWAITING_REVIEW,InitialInstallPhase.VERIFIED_HALTED,InitialInstallPhase.STARTED->R.color.ui_current;else->R.color.ui_primary}
+        val color=getColor(tone);statusPanel.background=NativeUi.shape(this,android.graphics.Color.argb(if(resources.configuration.uiMode and 0x30==0x20)48 else 22,android.graphics.Color.red(color),android.graphics.Color.green(color),android.graphics.Color.blue(color)))
+        status.setTextColor(color)
+        val measured=snapshot.progressTotal>0&&snapshot.phase in setOf(InitialInstallPhase.CAPTURING,InitialInstallPhase.INSTALLING,InitialInstallPhase.STARTING)
+        progress.visibility=if(measured)View.VISIBLE else View.GONE;progressText.visibility=if(measured)View.VISIBLE else View.GONE
+        if(measured){val percent=(snapshot.progressDone.toLong()*100/snapshot.progressTotal).toInt();progress.progress=percent*10;progressText.text="${snapshot.progressLabel} · $percent%";progress.contentDescription=progressText.text}
+    }
     private fun renderActions(){
         if(!::actions.isInitialized)return
-        listOf(chooseRelease,chooseCandidate,chooseDk).forEach{it.isEnabled=!lockedSelection()&&!busy&&snapshot.phase==InitialInstallPhase.IDLE}
+        listOf(chooseRelease,chooseDk).forEach{it.isEnabled=!lockedSelection()&&!busy&&snapshot.phase==InitialInstallPhase.IDLE}
+        chooseDk.isEnabled=chooseDk.isEnabled&&rawPackage!=null
+        updatePinnedStatus()
         actions.removeAllViews()
         fun action(label:String,primary:Boolean=false,enabled:Boolean=true,tagValue:String?=null,block:()->Unit){actions.addView(button(label,primary,block).apply{isEnabled=enabled;tag=tagValue},LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})}
         fun copy(text:String){actions.addView(label(text),LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(8)})}
@@ -217,30 +252,26 @@ class InitialInstallActivity:Activity() {
                     val matching=rawPackage!=null&&selectedDigest==option.releaseSha256
                     if(!matching)copy("Choose the same common release used for this attempt before selecting its original backup.")
                     if(!option.originalAvailable)copy("The protected original is unavailable in this app. Save the diagnostic report before attempting a manual repair.")
-                    action("Choose existing original backup",enabled=matching&&!busy&&option.originalAvailable){pickResumeOriginal(option)}
+                    if(option.initialExportDocument.startsWith("file:")){
+                        resumeOriginalUri=Uri.parse(option.initialExportDocument);resumeBindingId=option.bindingId;resumeRelease=option.releaseSha256;resumeDeviceName=selectedDevice;resumeCandidate=candidate
+                    }else action("Choose existing original backup",enabled=matching&&!busy&&option.originalAvailable){pickResumeOriginal(option)}
                     if(resumeOriginalUri!=null&&resumeBindingId==option.bindingId){
                         copy("Original backup selected. Preparing a preview pauses this target and checks its identity and saved evidence; it does not erase or program flash.")
                         action("Prepare repair preview",true,matching&&!busy&&option.originalAvailable&&resumeRelease==selectedDigest&&resumeDeviceName==selectedDevice&&resumeCandidate==candidate,"initial.resume.preview"){prepareRepair(option)}
                     }
                 }else{
-                    copy("Read the target, then capture its original firmware. Capture temporarily stops the CPU; it does not program flash.")
-                    action("Capture original backup",true,!busy&&rawPackage!=null&&service?.inspectedTarget?.value!=null,"initial.capture"){reviewCapture()}
+                    if(rawPackage!=null&&service?.inspectedTarget?.value!=null)action("Backup",true,!busy&&rawPackage!=null&&service?.inspectedTarget?.value!=null,"initial.capture"){reviewCapture()}
                 }
             }
             InitialInstallPhase.CONNECTING,InitialInstallPhase.CAPTURING,InitialInstallPhase.INSTALLING,InitialInstallPhase.STARTING->{
-                actions.addView(ProgressBar(this).apply{isIndeterminate=true},LinearLayout.LayoutParams(dp(32),dp(32)).apply{topMargin=dp(12)})
                 action("Cancel operation"){service?.cancelInstall()}
-                copy(if(snapshot.mutationMayHaveStarted)"If interrupted after a flash write, the CPU stays halted. Keep the original ZIP and diagnostic report." else "The app owns this USB connection until it completes or cancellation finishes.")
+
             }
-            InitialInstallPhase.AWAITING_EXPORT->{
-                copy("Both complete backup passes match. Save the original ZIP; the app will reopen the same document before installation can be reviewed.")
-                action("Save original backup",true,enabled=pendingExportRequest==null){val uid=snapshot.request?.target?.let{"%08x-%08x".format(it.uid0,it.uid1)}?:"device";pendingExportRequest=snapshot.request?.requestId;renderActions();startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE,"vimar-$uid-original.zip"),ORIGINAL)}
-                action("Cancel installation"){service?.cancelInstall()}
-            }
+            InitialInstallPhase.AWAITING_EXPORT->{copy("Saving your verified backup on this phone…");action("Cancel installation"){service?.cancelInstall()}}
             InitialInstallPhase.AWAITING_REVIEW->{
-                copy("Original backup exported and reopened successfully. Check this target before replacing its firmware.")
-                copy("${if(snapshot.candidate)"One bench qualification trial" else "Common firmware installation"}\nUID ${snapshot.request?.target?.let{"%08x-%08x".format(it.uid0,it.uid1)}}\nOriginal ${snapshot.archiveSha256?.take(16)}…\nRelease ${snapshot.request?.reviewedReleaseSha256?.take(16)}…")
-                action("Review and install",true,tagValue="initial.install.confirm"){reviewInstall()}
+                copy("Your original firmware is saved on this phone and linked to this device.")
+                action("Export backup copy"){exportCopy()}
+                action("Install firmware",true,tagValue="initial.install.confirm"){reviewInstall()}
                 action("Cancel installation"){service?.cancelInstall()}
             }
             InitialInstallPhase.AWAITING_RESUME_REVIEW->{
@@ -252,7 +283,7 @@ class InitialInstallActivity:Activity() {
                 action("Cancel repair"){service?.cancelInstall()}
             }
             InitialInstallPhase.VERIFIED_HALTED->{
-                copy("The complete programmed image and original UICR match their expected hashes. The CPU remains halted until you explicitly start the new firmware.")
+                copy("Firmware installed. Start the device when ready.")
                 firstStartNote()?.let(::copy)
                 action("Start verified firmware",true){reviewStart()}
             }
@@ -264,6 +295,15 @@ class InitialInstallActivity:Activity() {
                 action(if(snapshot.mutationMayHaveStarted)"Prepare a different device" else "Prepare a new attempt"){newSession()}
             }
         }
+    }
+    private fun exportCopy(){
+        pendingExportRequest=snapshot.archiveSha256?:return
+        startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE,"vimar-original-backup.zip"),BACKUP_COPY)
+    }
+    private fun showHelp(){
+        AlertDialog.Builder(this).setTitle("First installation")
+            .setMessage("1. Choose a Vomar firmware ZIP. Local and beta packages need your confirmation.\n\n2. Connect the DK’s J-Link port to your phone and its SWD wires to the dimmer.\n\n3. Backup reads the original firmware twice while the CPU is paused. Matching copies are saved privately and linked by the hardware UID. An extra export is optional.\n\n4. Review and install on that exact device. Keep USB and power connected. UICR is preserved.\n\n5. Start the verified firmware. If interrupted after a write, the device stays paused for repair. Backups are removed if app data is cleared or the app is uninstalled; keep an exported copy.")
+            .setPositiveButton("Done",null).setNeutralButton("Export report"){_,_->diagnostic=service?.diagnostic()?.toString(2)?:"{}";startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/json").putExtra(Intent.EXTRA_TITLE,"vimar-first-install-report.json"),REPORT)}.show()
     }
     private fun firstStartNote():String? {
         val watchdog=snapshot.watchdog?:return null
@@ -311,8 +351,8 @@ class InitialInstallActivity:Activity() {
     }
     private fun ownerReview():InstallOwnerReview? {val request=snapshot.request?:return null;val binding=snapshot.binding?:return null;return InstallOwnerReview(request.requestId,binding.id,request.reviewedReleaseSha256)}
     private fun reviewInstall(){val review=ownerReview()?:return
-        AlertDialog.Builder(this).setTitle(if(snapshot.candidate)"Install this bench candidate?" else "Replace original firmware?")
-            .setMessage("This writes the reviewed common firmware to the target shown above. Your verified original backup has been exported. Keep the phone, DK and target connected. UICR is preserved.")
+        AlertDialog.Builder(this).setTitle(if(snapshot.candidate)"Install beta / local firmware?" else "Replace original firmware?")
+            .setMessage("This writes the reviewed common firmware to the target shown above. Your verified original backup is saved on this phone. Keep the phone, DK and target connected. UICR is preserved.")
             .setPositiveButton("Install firmware"){_,_->if(foreground&&snapshot.phase==InitialInstallPhase.AWAITING_REVIEW&&ownerReview()==review)runCatching{service?.install(review)}.onFailure{status.text=it.message?:"Installation review changed. Review the current transaction again."}}.setNegativeButton("Cancel",null).show()}
     private fun reviewStart(){val review=ownerReview()?:return
         AlertDialog.Builder(this).setTitle("Start verified firmware?").setMessage("The app will reconnect to this exact target, recheck the complete installed image and UICR, then start from the new reset vector.")
@@ -324,13 +364,13 @@ class InitialInstallActivity:Activity() {
     @Deprecated("Deprecated in Java")override fun onBackPressed()=leave()
     override fun onResume(){super.onResume();foreground=true;if(pendingPermission!=null){val device=manager.deviceList.values.firstOrNull{it.deviceName==selectedDevice&&manager.hasPermission(it)};if(device!=null){pendingPermission=null;inspect(device.deviceName)}}}
     override fun onPause(){foreground=false;super.onPause()}
-    override fun onSaveInstanceState(out:Bundle){super.onSaveInstanceState(out);selectedUri?.let{out.putString("uri",it.toString())};out.putString("digest",selectedDigest);out.putBoolean("candidate",candidate);out.putBoolean("pickCandidate",pickCandidate);out.putString("device",selectedDevice);out.putString("exportRequest",pendingExportRequest);out.putString("permissionRequest",pendingPermission)
+    override fun onSaveInstanceState(out:Bundle){super.onSaveInstanceState(out);selectedUri?.let{out.putString("uri",it.toString())};out.putString("digest",selectedDigest);out.putBoolean("candidate",candidate);out.putString("device",selectedDevice);out.putString("exportRequest",pendingExportRequest);out.putString("permissionRequest",pendingPermission)
         out.putString("resumeOriginal",resumeOriginalUri?.toString());out.putString("resumeBinding",resumeBindingId);out.putString("resumeRelease",resumeRelease);out.putString("resumeDevice",resumeDeviceName);out.putBoolean("resumeCandidate",resumeCandidate)}
     @Deprecated("Deprecated in Java")override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){super.onActivityResult(requestCode,resultCode,data)
         val exportRequest=if(requestCode==ORIGINAL)pendingExportRequest.also{pendingExportRequest=null;renderActions()}else null
         if(resultCode!=RESULT_OK)return;val uri=data?.data?:return
         when(requestCode){
-            PACKAGE->{if(active()){status.text="The current transaction already owns its reviewed release.";return};runCatching{contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)};loadPackage(uri,pickCandidate)}
+            PACKAGE->{if(active()){status.text="The current transaction already owns its reviewed release.";return};runCatching{contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)};loadPackage(uri)}
             ORIGINAL->{if(snapshot.phase==InitialInstallPhase.AWAITING_EXPORT&&exportRequest!=null&&snapshot.request?.requestId==exportRequest)runCatching{
                 // The receipt remains useful after process death when this
                 // provider supports durable SAF grants. Providers that do not
@@ -343,9 +383,14 @@ class InitialInstallActivity:Activity() {
                 runCatching{contentResolver.takePersistableUriPermission(uri,Intent.FLAG_GRANT_READ_URI_PERMISSION)}
                 resumeOriginalUri=uri;status.text="Original backup selected. Read the target if needed, then explicitly prepare the repair preview.";renderActions()
             }
+            BACKUP_COPY->{val hash=pendingExportRequest?:return;pendingExportRequest=null;scope.launch{runCatching{withContext(Dispatchers.IO){
+                val bytes=AndroidInitialInstallPersistence(this@InitialInstallActivity).originalBytes(hash)
+                val port=AndroidInitialInstallDocuments.export(contentResolver,uri){!isActive}
+                require(port.create(bytes)==uri.toString());require(port.reopen(uri.toString()).contentEquals(bytes)){"Exported copy differs"}
+            }}.onSuccess{status.text="Backup copy exported."}.onFailure{status.text=it.message?:"Could not export backup copy"}}}
             REPORT->{val text=diagnostic?:return;scope.launch{runCatching{withContext(Dispatchers.IO){contentResolver.openOutputStream(uri,"wt")?.use{it.write(text.toByteArray(Charsets.UTF_8))}?:error("Report destination unavailable")}}.onSuccess{status.text="Diagnostic report saved."}.onFailure{status.text=it.message?:"Could not save the report"}}}
         }
     }
     override fun onDestroy(){observing?.cancel();packageJob?.cancel();if(bound)unbindService(connection);unregisterReceiver(permissions);scope.cancel();super.onDestroy()}
-    private companion object{const val PACKAGE=41;const val ORIGINAL=42;const val REPORT=43;const val RESUME_ORIGINAL=44}
+    private companion object{const val PACKAGE=41;const val ORIGINAL=42;const val REPORT=43;const val RESUME_ORIGINAL=44;const val BACKUP_COPY=45}
 }

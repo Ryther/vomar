@@ -3,7 +3,8 @@
 !/inputs/README.md
 /analysis/
 /experiments/
-/work/
+# Match both the private directory and the symlink used by local worktrees.
+/work
 /third_party/openvsh/
 /_test*/
 /_tmp*/

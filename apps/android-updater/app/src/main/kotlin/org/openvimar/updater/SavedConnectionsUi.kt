@@ -18,7 +18,9 @@ internal class SavedConnectionsUi(
     private val scope:CoroutineScope,
     private val header:(String,String,Boolean,Boolean)->Unit,
     private val onConnected:()->Unit,
-    private val offlineImport:()->Unit
+    private val offlineImport:()->Unit,
+    private val dock:(View?)->Unit={},
+    private val headerState:(String?,Int?)->Unit={_,_->}
 ) {
     private var parent:LinearLayout?=null
     private var screen="list"
@@ -32,6 +34,8 @@ internal class SavedConnectionsUi(
     private var busy=false
     private var task:Job?=null
     private var failure:String?=null
+    private var pendingRemoval:String?=null
+    private val connectionErrors=mutableMapOf<String,String>()
     private var statusView:TextView?=null
     private var availabilityRefresh:(()->Unit)?=null
     private var secretFields=mutableListOf<EditText>()
@@ -66,12 +70,29 @@ internal class SavedConnectionsUi(
         r.addView(info,LinearLayout.LayoutParams(0,-2,1f));r.addView(ImageView(activity).apply{setImageDrawable(NativeUi.Icon(activity,"right",activity.getColor(R.color.ui_text_secondary)));importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO},LinearLayout.LayoutParams(dp(24),dp(24)))
         controls.add(r);add(r,gap=0);add(View(activity).apply{setBackgroundColor(activity.getColor(R.color.ui_line))},gap=0).layoutParams.height=dp(1)
     }
+    private fun editableRow(label:String,description:String,key:String,kind:String,canRemove:Boolean,open:()->Unit,edit:()->Unit,remove:()->Unit) {
+        val r=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL;minimumHeight=dp(64);contentDescription="$label. $description";isClickable=true;isFocusable=true;setOnClickListener{if(!busy){if(pendingRemoval==key){pendingRemoval=null;draw()}else open()}}}
+        val info=column();info.addView(NativeUi.label(activity,label,16,true));info.addView(NativeUi.label(activity,description,13,secondary=true))
+        r.addView(info,LinearLayout.LayoutParams(0,-2,1f))
+        if(pendingRemoval==key){
+            val confirm=NativeUi.button(activity,"Delete",filled=true,danger=true){if(!busy&&canRemove){pendingRemoval=null;remove()}}.apply{contentDescription="Confirm remove $kind $label";isEnabled=canRemove&&!busy}
+            controls.add(confirm);r.addView(confirm,LinearLayout.LayoutParams(-2,-2).apply{marginStart=dp(8)})
+        } else {
+            val editButton=NativeUi.actionIcon(activity,"edit","Edit $kind $label"){if(!busy){pendingRemoval=null;edit()}}
+            val trash=NativeUi.actionIcon(activity,"trash","Remove $kind $label",danger=true){if(!busy&&canRemove){pendingRemoval=key;draw()}}.apply{isEnabled=canRemove&&!busy}
+            listOf(editButton,trash).forEach{controls.add(it);r.addView(it,LinearLayout.LayoutParams(dp(48),dp(48)))}
+        }
+        controls.add(r);add(r,gap=0)
+        add(View(activity).apply{setBackgroundColor(activity.getColor(R.color.ui_line))},gap=0).layoutParams.height=dp(1)
+    }
+    private fun section(title:String){text(title,strong=true,secondary=false).let{(it.layoutParams as LinearLayout.LayoutParams).topMargin=dp(24)}}
+    fun showDetail(id:String){profileId=id;draft=null;dirty=false;go("detail")}
     fun openList(){screen="list";draft=null;dirty=false;failure=null;returnFromTopics=false}
     fun openTopics(id:String){profileId=id;screen="topics";draft=null;dirty=false;failure=null;returnFromTopics=true}
     fun render(container:LinearLayout) {parent=container;draw()}
     private fun draw() {
         val container=parent ?: return
-        availabilityRefresh=null
+        availabilityRefresh=null;dock(null);headerState(null,null)
         val retainedDirty=dirty;secretFields.forEach{it.text.clear()};secretFields.clear();dirty=retainedDirty;controls.clear();statusView=null;container.removeAllViews()
         val p=current()
         header(when(screen){"list"->"Connections";"detail"->p?.label?:"Connection";"edit"->if(p==null)"Add connection" else "Edit connection";"topics"->"Zigbee topics";"topic"->if(topicId==null)"Add topic" else "Edit topic";else->"Change credentials"},
@@ -87,33 +108,43 @@ internal class SavedConnectionsUi(
         if(next=="topic"){val n=(draft?:current())?.networks?.firstOrNull{it.id==topicId};topicName=n?.label.orEmpty();topicBase=n?.baseTopic.orEmpty();dirty=false}
         if(next=="topics")dirty=draft!=null
         if(next=="detail"||next=="list")dirty=false
-        failure=null;screen=next;draw()
+        failure=null;pendingRemoval=null;screen=next;draw()
     }
     private fun list() {
         text("Saved on this phone")
         val profiles=try{network.loadProfiles()}catch(_:Exception){text("Saved connections could not be read. Your data has not been changed.",secondary=false);return}
         if(profiles.isEmpty()){text("No saved connections",true,false);text("Save your broker and Zigbee2MQTT topics on this phone.");action("Add connection"){add()}}
-        profiles.forEach { p->row(p.label,"${if(network.state.value.connected&&network.activeProfileId==p.id)"Connected" else "Not connected"} · ${p.networks.size} ${if(p.networks.size==1)"topic" else "topics"}"){profileId=p.id;draft=null;dirty=false;go("detail")} }
+        profiles.forEach { p->
+            editableRow(p.label,"${if(network.state.value.connected&&network.activeProfileId==p.id)"Connected" else "Not connected"} · ${p.networks.size} ${if(p.networks.size==1)"topic" else "topics"}","profile:${p.id}","connection",!network.connectionInUse(p),
+                open={showDetail(p.id)},edit={profileId=p.id;draft=p;dirty=false;go("edit")},
+                remove={operate{network.removeProfile(p.id)}})
+        }
         if(profiles.size>1)text("One active connection at a time.")
         action("Import from a file"){offlineImport()}
     }
     private fun detail() {
         val p=current() ?: run{screen="list";draw();return}
-        statusView=NativeUi.status(activity,if(online())"Connected" else "Not connected").also{add(it)}
-        text("Broker address",secondary=false);text(p.serverUri)
-        val panel=column().apply{setPadding(dp(16),dp(12),dp(16),dp(12));background=NativeUi.shape(activity,activity.getColor(R.color.ui_panel))}
+        val error=connectionErrors[p.id]!=null || network.activeProfileId==p.id&&network.state.value.connectionError
+        if(online())connectionErrors.remove(p.id)
+        headerState(if(online())"Connected" else if(error)"Connection error" else "Not connected",activity.getColor(if(online())R.color.ui_current else if(error)R.color.ui_available else R.color.ui_error))
+        section("Broker address");text(p.serverUri)
+        section("Credentials")
         val saved=network.hasCredentials(p)
         val unavailable=saved&&!network.credentialsAvailable(p)
-        text(if(unavailable)"Saved credentials unavailable" else if(saved)"Credentials saved on this phone" else "No credentials saved",secondary=false,container=panel)
-        action(if(saved)"Change credentials" else "Add credentials",container=panel){dirty=false;go("credentials")}
-        add(panel)
-        row("Zigbee topics (${p.networks.size})","Names appear when adding devices."){draft=null;go("topics")}
+        text(if(unavailable)"Saved credentials unavailable" else if(saved)"Credentials saved on this phone" else "No credentials saved",secondary=false)
+        action(if(saved)"Change credentials" else "Add credentials"){dirty=false;go("credentials")}
+        val rule=View(activity).apply{setBackgroundColor(activity.getColor(R.color.ui_line))}
+        add(rule,gap=24).layoutParams.height=dp(1)
+        row("Zigbee topics (${p.networks.size})",p.networks.joinToString(" · "){it.label}){draft=null;go("topics")}
         val held=network.connectionInUse(p)
         if(held)text("Wait for the current update to finish.")
-        if(online())action("Disconnect",!held){operate{network.disconnect()}}
-        else {action("Connect",!held,true){connect(p)};text(if(saved)"Uses saved credentials" else "Connects without saved credentials")}
+        val connectButton=NativeUi.button(activity,if(online())"Disconnect" else "Connect",filled=!online()){
+            if(!busy){if(online())operate{network.disconnect()}else connect(p)}
+        }.apply{isEnabled=!held&&!busy;tag="connection.connect"}
+        controls.add(connectButton);dock(connectButton)
     }
     private fun connect(p:BrokerProfile) {
+        connectionErrors.remove(p.id)
         val other=network.loadProfiles().firstOrNull{it.id==network.activeProfileId&&it.id!=p.id&&network.state.value.connected}
         if(other!=null)AlertDialog.Builder(activity).setTitle("Switch to ${p.label}?").setMessage("${other.label} will disconnect. Its settings stay saved.").setNegativeButton("Cancel",null).setPositiveButton("Switch and connect"){_,_->operate(connecting=true){network.connect(p)}}.show()
         else operate(connecting=true){network.connect(p)}
@@ -154,13 +185,14 @@ internal class SavedConnectionsUi(
             } else operate {network.saveProfile(candidate,reconnect=online()&&connectionTransportChanged(original,candidate));profileId=candidate.id;draft=null;dirty=false;screen="detail"}
         }
         label()
-        if(original!=null)action("Remove connection",!network.connectionInUse(original)){
-            AlertDialog.Builder(activity).setTitle("Remove ${original.label}?").setMessage("Local settings and credentials will be removed. Saved devices remain.").setNegativeButton("Cancel",null).setPositiveButton("Remove"){_,_->operate{network.removeProfile(original.id);profileId=null;draft=null;dirty=false;screen="list"}}.show()
-        }
     }
     private fun topics() {
         val p=draft?:current() ?: return
-        p.networks.forEach{n->row(n.label,n.baseTopic){topicId=n.id;go("topic")}}
+        p.networks.forEach{n->editableRow(n.label,n.baseTopic,"topic:${n.id}","topic",!network.connectionInUse(current())&&(draft!=null||p.networks.size>1),
+            open={topicId=n.id;go("topic")},edit={topicId=n.id;go("topic")},remove={
+                val next=p.copy(networks=p.networks.filterNot{it.id==n.id})
+                if(draft!=null){draft=next;dirty=true;go("topics")}else operate{network.saveProfile(next,reconnect=online());dirty=false;screen="topics"}
+            })}
         if(p.networks.isEmpty()){text("No topics yet");action("Add topic"){add()}}
         if(p.networks.size==3)text("Up to 3 topics per connection.")
     }
@@ -185,11 +217,6 @@ internal class SavedConnectionsUi(
             if(baseChanged)AlertDialog.Builder(activity).setTitle("Change MQTT base topic?").setMessage("Saved devices keep their previous source. Import devices from the new topic separately.").setNegativeButton("Keep editing",null).setPositiveButton(if(online())"Save and reconnect" else "Save topic"){_,_->save()}.show() else save()
         }
         update()
-        if(old!=null)action("Remove topic",!held&&p.networks.size>1){AlertDialog.Builder(activity).setTitle("Remove ${old.label}?").setMessage("Saved devices remain but lose this source.").setNegativeButton("Cancel",null).setPositiveButton(if(online()&&draft==null)"Remove and reconnect" else "Remove"){_,_->
-            val candidate=p.copy(networks=p.networks.filterNot{it.id==old.id})
-            if(draft!=null){draft=candidate;dirty=true;go("topics")}else operate{network.saveProfile(candidate,reconnect=online());dirty=false;screen="topics"}
-        }.show()}
-        if(old!=null&&p.networks.size==1)text("Keep at least one topic, or remove this connection.")
     }
     private fun credentials() {
         val p=current() ?: return
@@ -208,7 +235,7 @@ internal class SavedConnectionsUi(
         val options=column()
         val clear=CheckBox(activity).apply{text="Use no credentials";minHeight=dp(48);setTextColor(activity.getColor(R.color.ui_text))};add(clear,options)
         val empty=CheckBox(activity).apply{text="Use an empty password";minHeight=dp(48);setTextColor(activity.getColor(R.color.ui_text))};add(empty,options)
-        add(NativeUi.disclosure(activity,"Sign-in options","Hide sign-in options",options));add(options,gap=0)
+        add(NativeUi.disclosure(activity,"Sign-in options","Hide sign-in options",options).apply{gravity=Gravity.CENTER},gap=24);add(options,gap=12)
         val held=network.connectionInUse(p)
         if(held)text("Wait for the current update to finish.")
         val save=formActions(if(online())"Save and reconnect" else "Save credentials",false,{discard{dirty=false;go("detail")}}){
@@ -226,13 +253,13 @@ internal class SavedConnectionsUi(
     private fun operate(connecting:Boolean=false,work:suspend()->Unit) {
         if(busy)return;busy=true;failure=null;controls.forEach{it.isEnabled=false}
         statusView?.text=if(connecting)"Connecting…" else "Saving…"
-        if(connecting)add(NativeUi.button(activity,"Cancel connection"){task?.cancel()})
+        if(connecting){headerState("Connecting",activity.getColor(R.color.ui_available));dock(NativeUi.button(activity,"Cancel connection"){task?.cancel()})}
         task=scope.launch {
             var connected=false
             try{withContext(Dispatchers.IO){work()};connected=connecting&&network.state.value.connected}
             catch(cancelled:CancellationException){failure="Connection stopped.";throw cancelled}
-            catch(e:SavedConnectionReconnectException){dirty=false;draft=null;screen="detail";failure="Changes saved · Not connected. "+presentMqttFailure(e.cause?:e).let{"${it.message} ${it.nextAction}"}}
-            catch(e:Exception){failure=if(connecting)presentMqttFailure(e).let{"${it.message} ${it.nextAction}"} else "Could not apply changes. Check the saved connection and try again."}
+            catch(e:SavedConnectionReconnectException){profileId?.let{connectionErrors[it]="Reconnect failed"};dirty=false;draft=null;screen="detail";failure="Changes saved · Not connected. "+presentMqttFailure(e.cause?:e).let{"${it.message} ${it.nextAction}"}}
+            catch(e:Exception){if(connecting)profileId?.let{connectionErrors[it]="Connection failed"};failure=if(connecting)presentMqttFailure(e).let{"${it.message} ${it.nextAction}"} else "Could not apply changes. Check the saved connection and try again."}
             finally{busy=false;draw();if(connected)onConnected()}
         }
     }

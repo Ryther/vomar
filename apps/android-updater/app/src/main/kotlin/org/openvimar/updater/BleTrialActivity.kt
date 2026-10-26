@@ -25,6 +25,7 @@ class BleTrialActivity:Activity() {
     private lateinit var target:TextView
     private lateinit var operationName:TextView
     private lateinit var operation:TextView
+    private val selectedRecord by lazy{intent.getStringExtra("deviceId")?.let{id->FleetStore(this).devices.firstOrNull{it.id==id}}}
     private var displayedAddress:String?=null
     private var displayedName:String?=null
     private lateinit var status:TextView
@@ -45,7 +46,7 @@ class BleTrialActivity:Activity() {
         super.onCreate(savedInstanceState)
         pendingExport=savedInstanceState?.getByteArray("reportSnapshot")
         val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(getColor(R.color.ui_surface))}
-        root.addView(NativeUi.taskHeader(this,"Bluetooth trial"){finish()}.apply{setPadding(dp(8),dp(8),dp(20),dp(8))})
+        root.addView(NativeUi.taskHeader(this,"Update firmware"){finish()}.apply{setPadding(dp(8),dp(8),dp(20),dp(8))})
         // Keep current feedback and Stop available independently of the task scroll.
         // Long errors remain readable by scrolling this bounded status viewport.
         operationName=NativeUi.label(this,"",15,true).apply{
@@ -69,21 +70,21 @@ class BleTrialActivity:Activity() {
         root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
         fun add(view:View,gap:Int=12){body.addView(view,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(gap)})}
         fun label(text:String,heading:Boolean=false):TextView=NativeUi.label(this,text,if(heading)18 else 15,heading,!heading).also{if(heading)ViewCompat.setAccessibilityHeading(it,true);add(it,if(heading)24 else 8)}
-        label("Test a signed package on one dimmer. Keep your phone nearby.")
+        label("Choose firmware for this device.")
         label("Package",true)
-        candidate=label("No candidate selected")
-        choose=NativeUi.button(this,"Choose candidate ZIP",outline=true){chooseCandidate()}.apply{tag="ble.trial.choose"};add(choose)
-        label("Dimmer",true)
+        candidate=label("No firmware selected")
+        choose=NativeUi.button(this,"Choose firmware",outline=true){chooseCandidate()}.apply{tag="ble.trial.choose"};add(choose)
+        label(selectedRecord?.name?:"Dimmer",true)
         label("On older firmware, switch the lamp off before enabling Bluetooth.")
         val help=NativeUi.label(this,"In Home Assistant or Zigbee2MQTT, activate Bluetooth/recovery on this dimmer. Keep it powered. Accept Android pairing; enter 824005 if asked.",15,secondary=true)
         add(NativeUi.disclosure(this,"Connection help","Hide connection help",help),0);add(help,0)
-        target=label("Find the nearby dimmer. Compatibility is checked before firmware is sent.")
-        find=NativeUi.button(this,"Find and inspect dimmer",outline=true){search()}.apply{tag="ble.trial.find"};add(find)
+        target=label("Inspect this device before updating.")
+        find=NativeUi.button(this,"Inspect device",outline=true){search()}.apply{tag="ble.trial.find"};add(find)
         label("Update",true)
         label("Review the selected dimmer before starting. If interrupted, inspect it again to resume saved progress.")
         run=NativeUi.button(this,"Review Bluetooth update",filled=true){review()}.apply{tag="ble.trial.run"};add(run)
-        export=NativeUi.button(this,"Save trial report"){exportReport()}.apply{tag="ble.trial.export"};add(export)
-        stop=NativeUi.button(this,"Stop trial",outline=true){startService(Intent(this,BleTrialService::class.java).setAction(BleTrialService.STOP))}.apply{tag="ble.trial.stop"}
+        export=NativeUi.button(this,"Export update report"){exportReport()}.apply{tag="ble.trial.export"};add(export)
+        stop=NativeUi.button(this,"Stop update",outline=true){startService(Intent(this,BleTrialService::class.java).setAction(BleTrialService.STOP))}.apply{tag="ble.trial.stop"}
         root.addView(stop,LinearLayout.LayoutParams(-1,-2).apply{setMargins(dp(20),dp(8),dp(20),dp(12))})
         val centered=FrameLayout(this).apply{
             setBackgroundColor(getColor(R.color.ui_surface))
@@ -101,7 +102,7 @@ class BleTrialActivity:Activity() {
     }
     private fun render(){
         val state=runtime.controller.state.value;val selection=runtime.selection.value;val busy=state.busy||importing
-        candidate.text=selection?.let{"Firmware ${it.version} · recovery ${it.recoveryVersion}\nSigned candidate · ${it.reference.digest.take(12)}…"} ?: "No candidate selected"
+        candidate.text=selection?.let{"Firmware ${it.version} · recovery ${it.recoveryVersion}\nLocal package · ${it.reference.digest.take(12)}…"} ?: "No firmware selected"
         val address=state.target?.address
         if(address!=displayedAddress){
             displayedAddress=address
@@ -115,43 +116,50 @@ class BleTrialActivity:Activity() {
         target.text=state.target?.let{
             if(it.identitySummary!=null)"Inspected firmware ${it.currentVersion ?: "unknown"} → ${it.version}\n${it.identitySummary}"
             else "Compatibility has not been confirmed for this address. Inspect it successfully before reviewing an update."
-        } ?: "Find the dimmer and inspect it before reviewing an update."
-        status.text=if(importing)"Checking the candidate signature and saving its exact bytes…" else runtime.message.value ?: state.status
+        } ?: "Inspect this device before reviewing the update."
+        status.text=if(importing)"Checking firmware…" else runtime.message.value ?: state.status
         progress.visibility=if(state.progressPercent!=null||busy)View.VISIBLE else View.GONE
         progress.isIndeterminate=state.progressPercent==null;progress.progress=state.progressPercent ?: 0
         choose.isEnabled=!busy
         find.isEnabled=selection!=null&&!busy
-        run.isEnabled=state.review!=null&&!busy
+        run.isEnabled=state.review!=null&&!busy&&matchesSelected(state.review!!)
         stop.visibility=if(state.busy)View.VISIBLE else View.GONE
         export.visibility=if(runtime.reportAvailable)View.VISIBLE else View.GONE
         export.isEnabled=runtime.reportAvailable&&!busy&&!exporting&&pendingExport==null
+    }
+    private fun matchesSelected(review:BleTrialReviewInfo):Boolean {
+        val selected=selectedRecord?:return true
+        return (selected.address==null||selected.address.equals(review.address,true))&&(selected.uid.size!=2||selected.uid==review.expectedUid)
     }
     private fun permissionsReady()=PermissionPolicy.required(Build.VERSION.SDK_INT).all{checkSelfPermission(it)==PackageManager.PERMISSION_GRANTED}
     private fun chooseCandidate(){
         if(importing||runtime.controller.state.value.busy)return
         runtime.controller.invalidate()
         runCatching{startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE),IMPORT)}
-            .onFailure{runtime.fail(it.message ?: "Choose a local candidate ZIP")}
+            .onFailure{runtime.fail(it.message ?: "Choose a Vomar firmware ZIP")}
     }
     private fun search(){
         if(runtime.selection.value==null||runtime.controller.state.value.busy||importing)return
         if(!permissionsReady()){
-            runtime.fail("Allow Bluetooth access, then choose Find and inspect dimmer again.")
+            runtime.fail("Allow Bluetooth access, then choose Inspect device again.")
             requestPermissions(PermissionPolicy.required(Build.VERSION.SDK_INT).toTypedArray(),PERMISSIONS);return
         }
-        picker?.close();picker=BluetoothCandidatePicker(this).also{it.show(allowLegacy=true){address->
-            if(foreground&&!runtime.controller.state.value.busy)launchService(Intent(this,BleTrialService::class.java).setAction(BleTrialService.INSPECT).putExtra(BleTrialService.ADDRESS,address))
-        }}
+        fun inspect(address:String){if(foreground&&!runtime.controller.state.value.busy)launchService(Intent(this,BleTrialService::class.java).setAction(BleTrialService.INSPECT).putExtra(BleTrialService.ADDRESS,address)
+            .putStringArrayListExtra("expectedUid",selectedRecord?.uid?.takeIf{it.size==2}?.let{ArrayList(it)}))}
+        val selected=selectedRecord
+        if(selected?.address!=null){inspect(selected.address);return}
+        picker?.close();picker=BluetoothCandidatePicker(this).also{it.show(allowLegacy=true){address->inspect(address)}}
     }
     private fun review(){
         val held=runtime.controller.state.value.review ?: return
+        if(!matchesSelected(held)){runtime.fail("Inspect the selected device again before updating.");return}
         if(runtime.controller.state.value.busy||!foreground)return
         val body=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(24),dp(12),dp(24),dp(8))}
-        body.addView(NativeUi.label(this,"${held.address}\nFirmware ${held.currentVersion ?: "unknown"} → ${held.version}\n${held.identitySummary}\n\nThis package is still under qualification. Authorize this Bluetooth trial only for the selected dimmer.",15))
+        body.addView(NativeUi.label(this,"${held.address}\nFirmware ${held.currentVersion ?: "unknown"} → ${held.version}\n${held.identitySummary}\n\nLocal or beta firmware may not have passed release checks. This update applies only to the selected device.",15))
         val confirm=if(held.resetRetryRequired)CheckBox(this).apply{text="I authorize one retry of the previously uncertain restart";minHeight=dp(48);setTextColor(getColor(R.color.ui_text));body.addView(this)} else null
-        val shown=AlertDialog.Builder(this).setTitle(if(held.resumable)"Resume this Bluetooth trial?" else "Start this Bluetooth trial?")
+        val shown=AlertDialog.Builder(this).setTitle(if(held.resumable)"Resume firmware update?" else "Update this device?")
             .setView(ScrollView(this).apply{addView(body)})
-            .setNegativeButton("Cancel"){_,_->runtime.controller.invalidate()}.setPositiveButton("Start trial",null).create()
+            .setNegativeButton("Cancel"){_,_->runtime.controller.invalidate()}.setPositiveButton("Update firmware",null).create()
         dialog=shown
         shown.setOnCancelListener{runtime.controller.invalidate()}
         shown.setOnShowListener{
@@ -159,7 +167,7 @@ class BleTrialActivity:Activity() {
             positive.isEnabled=confirm?.isChecked ?: true
             confirm?.setOnCheckedChangeListener{_,checked->positive.isEnabled=checked}
             positive.setOnClickListener{
-                if(!foreground||isFinishing||runtime.controller.state.value.busy||runtime.controller.state.value.review?.id!=held.id||runtime.selection.value?.reference?.digest!=held.digest){shown.dismiss();runtime.fail("The review changed. Inspect this dimmer again.");return@setOnClickListener}
+                if(!foreground||isFinishing||runtime.controller.state.value.busy||runtime.controller.state.value.review?.id!=held.id||!matchesSelected(held)||runtime.selection.value?.reference?.digest!=held.digest){shown.dismiss();runtime.fail("The review changed. Inspect this dimmer again.");return@setOnClickListener}
                 if(confirm!=null&&!confirm.isChecked)return@setOnClickListener
                 shown.dismiss()
                 launchService(Intent(this,BleTrialService::class.java).setAction(BleTrialService.EXECUTE).putExtra(BleTrialService.REVIEW,held.id).putExtra(BleTrialService.RETRY,confirm?.isChecked==true))
@@ -169,17 +177,17 @@ class BleTrialActivity:Activity() {
     }
     private fun launchService(intent:Intent){
         if(!permissionsReady()){runtime.fail("Bluetooth permission is missing. Allow it, then inspect the dimmer again.");return}
-        runCatching{ContextCompat.startForegroundService(this,intent)}.onFailure{runtime.fail("Android could not start the Bluetooth trial: ${it.message}")}
+        runCatching{ContextCompat.startForegroundService(this,intent)}.onFailure{runtime.fail("Android could not start the Bluetooth update: ${it.message}")}
     }
     private fun exportReport(){
         if(exporting||pendingExport!=null||runtime.controller.state.value.busy)return
         exporting=true;render()
         scope.launch{
             try{
-                val bytes=runtime.reportBytes() ?: error("No trial report yet. Inspect a dimmer first.")
+                val bytes=runtime.reportBytes() ?: error("No update report yet. Inspect a dimmer first.")
                 pendingExport=bytes.copyOf()
                 startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/json").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE,"vimar-bluetooth-trial.json"),EXPORT)
-            }catch(failure:Exception){pendingExport=null;runtime.fail(failure.message ?: "The trial report could not be opened")}
+            }catch(failure:Exception){pendingExport=null;runtime.fail(failure.message ?: "The update report could not be opened")}
             finally{exporting=false;render()}
         }
     }
@@ -199,14 +207,14 @@ class BleTrialActivity:Activity() {
             importing=true;render();scope.launch{
                 try{runtime.importCandidate(data.data!!)}
                 catch(cancelled:CancellationException){throw cancelled}
-                catch(failure:Exception){runtime.fail(failure.message ?: "This ZIP is not a signed compatible candidate")}
+                catch(failure:Exception){runtime.fail(failure.message ?: "This is not a compatible Vomar firmware package")}
                 finally{importing=false;render()}
             }
         }
     }
     @Deprecated("Android callback") override fun onRequestPermissionsResult(requestCode:Int,permissions:Array<out String>,grantResults:IntArray){
         super.onRequestPermissionsResult(requestCode,permissions,grantResults)
-        if(requestCode==PERMISSIONS)runtime.fail(if(permissionsReady())"Bluetooth access allowed. Choose Find and inspect dimmer to continue." else "Bluetooth access was not allowed. Allow it in Android settings, then try again.")
+        if(requestCode==PERMISSIONS)runtime.fail(if(permissionsReady())"Bluetooth access allowed. Choose Inspect device to continue." else "Bluetooth access was not allowed. Allow it in Android settings, then try again.")
     }
     override fun onSaveInstanceState(outState:Bundle){pendingExport?.let{outState.putByteArray("reportSnapshot",it)};super.onSaveInstanceState(outState)}
     override fun onResume(){super.onResume();foreground=true}

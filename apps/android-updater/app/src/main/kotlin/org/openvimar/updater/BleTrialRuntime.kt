@@ -29,7 +29,7 @@ internal class BleTrialRuntime(context:Context,verificationKey:PublicKey?=null,
     private val directory=File(app.filesDir,"ble-trial-state").apply{check(mkdirs()||isDirectory)}
     private val diagnostics=BleTrialDiagnosticCapture()
     val controller=BleTrialController(
-        candidateLoader={cache.inspectBleTrial(requireNotNull(selection.value){"Choose a signed candidate first"}.reference)},
+        candidateLoader={cache.inspectBleTrial(requireNotNull(selection.value){"Choose firmware first"}.reference)},
         transportFactory={address,check->
             diagnostics.target(address)
             transportOverride?.invoke(address,check) ?: TrialCheckedTransport(NordicBleTransport(app,address),check)
@@ -58,7 +58,7 @@ internal class BleTrialRuntime(context:Context,verificationKey:PublicKey?=null,
         check(controller.invalidate()){"A Bluetooth operation started while importing"}
         val saved=JSONObject().put("digest",reference.digest).put("family",reference.familySha256).put("path",reference.cachePath)
             .put("version",candidate.version).put("recovery",candidate.recoveryVersion)
-        check(preferences.edit().putString("candidate",saved.toString()).commit()){"Candidate selection could not be saved"}
+        check(preferences.edit().putString("candidate",saved.toString()).commit()){"Firmware selection could not be saved"}
         mutableSelection.value=BleTrialSelection(reference,candidate.version,candidate.recoveryVersion)
     }
     fun fail(message:String){if(!controller.state.value.busy){controller.invalidate();mutableMessage.value=message}}

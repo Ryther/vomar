@@ -40,6 +40,12 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
         var halted=false
         var debugControl=0L
         var mode=0
+        val flashAcl=Array(8){longArrayOf(0,0,0)}
+        var retainAclOnReset=false
+        var faultOnProtectedErase=false
+        private fun writable(address:Long,size:Int)=flashAcl.none{r->
+            r[0]%4096==0L&&r[1]>0&&r[1]%4096==0L&&r[2] and 2L!=0L&&address<r[0]+r[1]&&address+size>r[0]
+        }
         var corruptUicr=false
         var wdtRunning=false
         var wdtConfig=1L
@@ -63,19 +69,23 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
         var registerDelay=0
         var corePc=0x1000L
         var coreMsp=0x20020000L
+        var coreXpsr=0x01000000L
         var uid0=0x12345678L
         var uid1=0xabcdef01L
         private var registerData=0L
         fun firmwareReset(watchdog:Boolean=false){
             // Nordic POWER reset behavior: SYSRESETREQ does NOT reset WDT.
             // Only the independently modeled actual watchdog-reset event does.
-            resetCount++;resetSeen=true
+            resetCount++;resetSeen=true;mode=0
+            if(!retainAclOnReset)flashAcl.forEach{it.fill(0)}
             if(watchdog){wdtRunning=false;debugControl=0;demcr=0;csw=0x23000042L;bank=0}
             halted=debugControl and 1!=0L&&demcr and 1!=0L&&!ignoreVectorCatch
             debugControl=debugControl and 1L or if(halted)2L else 0L
-            corePc=(memory(4) and 0xfffffffeL) xor if(wrongResetPc)4L else 0L;coreMsp=memory(0) xor if(wrongResetMsp)8L else 0L
+            corePc=(memory(4) and 0xfffffffeL) xor if(wrongResetPc)4L else 0L;coreMsp=(memory(0) and 0xfffffffcL) xor if(wrongResetMsp)8L else 0L
+            coreXpsr=(memory(4) and 1L) shl 24
             if(!halted)stockInstructions++
         }
+        private var stickyAccessFault=false
         var stickyOverrun=false;private set
         var dummyWrites=0;private set
         var abortClears=0;private set
@@ -184,7 +194,7 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
         }
         private fun chooseAck(): Int {
             if(!ap&&(read&&address in listOf(0,4)||!read&&address==0))return 1
-            if(stickyOverrun)return 4
+            if(stickyOverrun||stickyAccessFault)return 4
             val inject=injection
             if(inject!=null&&inject.remaining>0&&inject.ap==ap&&inject.read==read&&inject.address==address) {
                 if(inject.skip>0)inject.skip--
@@ -204,7 +214,7 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
         }
         private fun debugRead(): Long {
             if(ap)protocol(!debugPowerReleased,"AP access after normal debug-session powerdown")
-            if(!ap)return when(address) {0->if(changedDpidrAfterReset&&events.count {it=="line-reset"}>1)0x12345677 else 0x2ba01477;4->ctrl or 0xa0000000L or if(stickyOverrun)2L else 0;12->posted;else->error("Unexpected DP read")}
+            if(!ap)return when(address) {0->if(changedDpidrAfterReset&&events.count {it=="line-reset"}>1)0x12345677 else 0x2ba01477;4->ctrl or 0xa0000000L or if(stickyOverrun)2L else 0L or if(stickyAccessFault)0x20L else 0L;12->posted;else->error("Unexpected DP read")}
             val old=posted
             posted=when(bank+address) {
                 0xfc->0x24770011;0->csw
@@ -227,6 +237,10 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
             0xe000ed0cL->0xfa050000L
             0x4001e400L->if(neverReady)0 else 1
             0x4001e504L->mode.toLong()
+            in 0x4001e800L..0x4001e87bL->{
+                val offset=(at-0x4001e800L).toInt();val field=offset%16/4
+                protocol(field<3,"reserved ACL register read");flashAcl[offset/16][field]
+            }
             0x40010400L->if(wdtRunning)1 else 0
             0x40010504L->wdtCrv
             0x40010508L->wdtRren
@@ -248,10 +262,10 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
                         0xe000edfcL->{demcr=data}
                         0xe000ed0cL->{protocol(data==0x05fa0004L,"SYSRESETREQ key/bit policy");firmwareReset()}
                         0xe000edf4L->{protocol(halted&&data in setOf(0x0fL,0x10L,0x11L),"DCRSR must request READ of PC/xPSR/MSP only; no REGWnR")
-                            registerData=when(data){0x0fL->corePc;0x10L->0x01000000L;0x11L->coreMsp;else->error("Forbidden selector")};registerDelay=1}
+                            registerData=when(data){0x0fL->corePc;0x10L->coreXpsr;0x11L->coreMsp;else->error("Forbidden selector")};registerDelay=1}
                         0x4001e504L->{protocol(halted&&data in 0..2,"NVMC mode");mode=data.toInt()}
-                        0x4001e508L->{protocol(halted&&mode==2&&data%4096==0L&&data in 0..0xff000,"page erase");flash.fill(0xff.toByte(),data.toInt(),data.toInt()+4096)}
-                        in 0L..0xffffcL->{protocol(halted&&mode==1,"FLASH program without halt/write mode");repeat(4){i->val v=(data ushr (i*8)).toByte();protocol(flash[tar.toInt()+i].toInt() and v.toInt()==v.toInt(),"NOR0->1");flash[tar.toInt()+i]=v}}
+                        0x4001e508L->{protocol(halted&&mode==2&&data%4096==0L&&data in 0..0xff000,"page erase");if(!writable(data,4096)){if(faultOnProtectedErase)stickyAccessFault=true} else flash.fill(0xff.toByte(),data.toInt(),data.toInt()+4096)}
+                        in 0L..0xffffcL->{protocol(halted&&mode==1,"FLASH program without halt/write mode");if(writable(tar,4))repeat(4){i->val v=(data ushr (i*8)).toByte();protocol(flash[tar.toInt()+i].toInt() and v.toInt()==v.toInt(),"NOR0->1");flash[tar.toInt()+i]=v}}
                         else->throw IOException("Forbidden memory write $tar")
                     }
                     onMemoryWrite(memoryWrites.last().first,data)
@@ -259,7 +273,7 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
                 }
                 else->error("Forbidden AP write")
             } else when(address) {
-                0->{protocol(data==0x1eL,"ABORT policy broadened");stickyOverrun=false;abortClears++}
+                0->{protocol(data==0x1eL,"ABORT policy broadened");stickyOverrun=false;stickyAccessFault=false;abortClears++}
                 4->{protocol(data in listOf(1L,0x50000000L,0x50000001L),"CTRL/STAT policy broadened")
                     if(data==1L)protocol(debugControl and 1==0L&&demcr and 1==0L,"Powerdown must follow DEBUGEN0/VC0 normal release")
                     debugPowerReleased=data==1L;ctrl=if(ignoreOverrunWrite)data and 1L.inv() else data}

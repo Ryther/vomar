@@ -50,7 +50,7 @@ internal class AndroidFleetReleases(context:Context) {
         val coroutine=currentCoroutineContext();val input=app.contentResolver.openInputStream(uri) ?: error("Release document unavailable")
         val ref=cache.import(input,{coroutine.ensureActive()});coroutine.ensureActive();select(ref)
     }
-    suspend fun fetchLatest(repository:String,onProgress:(Long)->Unit={}):FleetReleaseRef=withContext(Dispatchers.IO){
+    suspend fun fetchLatest(repository:String,onProgress:(Long)->Unit={},onTotal:(Long)->Unit={}):FleetReleaseRef=withContext(Dispatchers.IO){
         val repo=ReleaseSource.parse(repository) ?: error("Use a public GitHub owner/repository")
         val coroutine=currentCoroutineContext()
         val json=download("https://api.github.com/repos/$repo/releases/latest",2*1024*1024){input->
@@ -62,7 +62,7 @@ internal class AndroidFleetReleases(context:Context) {
         val assets=json.getJSONArray("assets")
         val candidates=(0 until assets.length()).map{assets.getJSONObject(it)}.filter{it.getString("name").endsWith(".zip",true)&&it.optLong("size",0) in 1..PackageReader.MAX_ZIP.toLong()}
         require(candidates.size==1){"Choose a local common ZIP: this release does not have exactly one bounded ZIP asset"}
-        val asset=candidates.single();val url=asset.getString("browser_download_url")
+        val asset=candidates.single();onTotal(asset.getLong("size"));onProgress(0);val url=asset.getString("browser_download_url")
         require(URL(url).host=="github.com"&&URL(url).path.startsWith("/$repo/releases/download/")){"Unexpected GitHub asset URL"}
         val ref=download(url,PackageReader.MAX_ZIP){cache.import(it,{coroutine.ensureActive()},onProgress)}
         coroutine.ensureActive();select(ref)

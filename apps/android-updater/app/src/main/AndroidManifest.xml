@@ -15,6 +15,7 @@
     <application android:label="@string/app_name" android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="false" android:icon="@android:drawable/ic_menu_upload" android:theme="@style/AppTheme" android:supportsRtl="true">
         <activity android:name=".DkUsbDiagnosticsActivity" android:exported="false" />
         <activity android:name=".BleTrialActivity" android:exported="false" />
+        <activity android:name=".OriginalRestoreActivity" android:exported="false" />
         <activity android:name=".InitialInstallActivity" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
@@ -26,6 +27,7 @@
         <service android:name=".UpdateService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <service android:name=".BleTrialService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <service android:name=".DkBackupService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <service android:name=".installer.OriginalRestoreService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <service android:name=".installer.InitialInstallService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

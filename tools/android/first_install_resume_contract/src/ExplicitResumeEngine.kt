@@ -46,7 +46,11 @@ data class ResumeResult(val outcome:InstallOutcome,val mode:ResumeMode?,val jour
  * Unissued pages must remain original. Prior mutation always retains HALT. */
 class ExplicitResumeEngine {
     private val busy=AtomicBoolean(false)
-    fun run(review:ReviewedResume,authorizer:SwdAuthorizer,checkCancelled:()->Unit={}):ResumeResult {
+    fun run(review:ReviewedResume,authorizer:SwdAuthorizer,checkCancelled:()->Unit={}):ResumeResult =
+        runMeasured(review,authorizer,checkCancelled,{_,_,_->})
+    fun runWithProgress(review:ReviewedResume,authorizer:SwdAuthorizer,onProgress:(String,Int,Int)->Unit,checkCancelled:()->Unit={}):ResumeResult =
+        runMeasured(review,authorizer,checkCancelled,onProgress)
+    private fun runMeasured(review:ReviewedResume,authorizer:SwdAuthorizer,checkCancelled:()->Unit,onProgress:(String,Int,Int)->Unit):ResumeResult {
         check(busy.compareAndSet(false,true)){"A resume is already active"}
         val plan=review.plan;val binding=plan.binding;val material=review.original.material
         var session:FileResumeJournal.Session?=null;var lease:AuthorizedSwdSession?=null
@@ -80,6 +84,7 @@ class ExplicitResumeEngine {
                 if(at>frontier)require(bytes.contentEquals(old.copyOfRange(at,at+4096))){"Unissued FLASH page differs from the protected original; automatic repair denied"}
                 bodyMatches=bodyMatches&&bytes.contentEquals(plan.page(at,false))
                 finalMatches=finalMatches&&bytes.contentEquals(plan.page(at,true))
+                onProgress("Checking repair",at+4096,AnchorV1.FLASH)
             }
             protected();mode=if(finalMatches)ResumeMode.VERIFY_ONLY else if(bodyMatches)ResumeMode.COMMIT_ONLY else ResumeMode.REBUILD
             if(mode==ResumeMode.REBUILD){
@@ -88,23 +93,23 @@ class ExplicitResumeEngine {
                     intent(ResumePhase.ERASE_INTENT,at,maxOf(frontier,at));active();s.erasePage(at,generation)
                     for(offset in 0 until 4096 step 256){val batch=wanted.copyOfRange(offset,offset+256);if(batch.all{it==0xff.toByte()})continue
                         phase=InstallPhase.PAGE_WRITE_INTENT;address=at+offset;intent(ResumePhase.WRITE_INTENT,address);active();s.program(at+offset,batch,generation)}
-                    require(page(at).contentEquals(wanted)){"Rebuilt page readback mismatch"};identity()
+                    require(page(at).contentEquals(wanted)){"Rebuilt page readback mismatch"};identity();onProgress("Repairing firmware",at+4096,AnchorV1.FLASH)
                 }
             }
-            fun verify(committed:Boolean,hash:String){val digest=MessageDigest.getInstance("SHA-256")
-                for(at in 0 until AnchorV1.FLASH step 4096){val bytes=page(at);require(bytes.contentEquals(plan.page(at,committed))){"Complete resumed FLASH readback mismatch"};digest.update(bytes)}
+            fun verify(committed:Boolean,hash:String,label:String){val digest=MessageDigest.getInstance("SHA-256")
+                for(at in 0 until AnchorV1.FLASH step 4096){val bytes=page(at);require(bytes.contentEquals(plan.page(at,committed))){"Complete resumed FLASH readback mismatch"};digest.update(bytes);onProgress(label,at+4096,AnchorV1.FLASH)}
                 require(digest.digest().joinToString(""){"%02x".format(it.toInt() and 255)}==hash)}
             if(mode!=ResumeMode.VERIFY_ONLY){
-                phase=InstallPhase.BODY_VERIFY;address=null;verify(false,binding.bodySha256);protected();intent(ResumePhase.BODY_VERIFIED)
+                phase=InstallPhase.BODY_VERIFY;address=null;verify(false,binding.bodySha256,"Verifying repair");protected();intent(ResumePhase.BODY_VERIFIED)
                 protected();phase=InstallPhase.COMMIT_INTENT;address=0xb0fc;mutated=true
                 intent(ResumePhase.COMMIT_INTENT,0xb0fc,frontier,true);active()
                 val word=ByteArray(4);putWord(word,0,AnchorV1.COMMIT);s.program(0xb0fc,word,generation)
             }else {
-                verify(true,binding.installedSha256);protected()
+                verify(true,binding.installedSha256,"Checking installed firmware");protected()
                 intent(ResumePhase.COMPLETE_IMAGE_VERIFIED,committed=true)
             }
             protected();phase=InstallPhase.FINAL_VERIFY;address=null;intent(ResumePhase.FINAL_VERIFY)
-            verify(true,binding.installedSha256);protected();s.close();lease=null
+            verify(true,binding.installedSha256,"Final verification");protected();s.close();lease=null
             intent(ResumePhase.VERIFIED);phase=InstallPhase.VERIFIED
             val head=session?.checkpoint?.headSha256;session?.close();session=null
             return ResumeResult(InstallOutcome(true,phase,null,true,true,false,"Complete known FLASH verified; target remains halted for a separate explicit start; hardware unqualified"),mode,head)

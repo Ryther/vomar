@@ -7,6 +7,16 @@ import java.security.spec.X509EncodedKeySpec
 
 fun main(args:Array<String>) {
     when(args[0]) {
+        "original-restore" -> originalRestoreProbe(args)
+        "local-inspect" -> {
+            val key=KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(Files.readAllBytes(Path.of(args[2]))))
+            val raw=Files.readAllBytes(Path.of(args[1]))
+            val local=CandidateRelease.inspectLocal(raw,key,"9.0.0")
+            check(local.releaseSha256==sha256(raw))
+            if(args.getOrNull(3)=="no-handoff")check(local.watchdogHandoff==null)
+            val ble=org.openvimar.updater.core.BleTrialCandidate.inspectLocal(raw,key,"9.0.0")
+            check(ble.digest==local.releaseSha256)
+        }
         "durable-directories" -> durableDirectoriesProbe(Path.of(args[1]))
         "watchdog-authority" -> {
             val key=KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(Files.readAllBytes(Path.of(args[2]))))

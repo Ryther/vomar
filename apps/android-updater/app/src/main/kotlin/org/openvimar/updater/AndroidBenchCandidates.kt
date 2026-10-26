@@ -18,18 +18,18 @@ internal class AndroidBenchCandidates(context:Context,verificationKey:PublicKey?
     private val key by lazy {verificationKey ?: KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(app.resources.openRawResource(R.raw.firmware_public).use{it.readBytes()}))}
     private fun appVersion()=app.packageManager.getPackageInfo(app.packageName,0).versionName ?: error("App version unavailable")
     private val cache=BenchCandidateCache(File(app.filesDir,"bench-candidates"),PackageReader.MAX_ZIP){bytes->
-        val inspected=CandidateRelease.inspect(bytes,key,appVersion())
+        val inspected=CandidateRelease.inspectLocal(bytes,key,appVersion())
         BenchCandidateRef(inspected.releaseSha256,inspected.familySha256,"")
     }
     suspend fun importLocal(uri:Uri,onProgress:(Long)->Unit={}):BenchCandidateRef=withContext(Dispatchers.IO) {
         val coroutine=currentCoroutineContext();coroutine.ensureActive()
-        val input=app.contentResolver.openInputStream(uri) ?: error("Candidate document unavailable")
+        val input=app.contentResolver.openInputStream(uri) ?: error("Firmware document unavailable")
         input.use{cache.import(it,{coroutine.ensureActive()},onProgress)}.also{coroutine.ensureActive()}
     }
     suspend fun inspect(reference:BenchCandidateRef):InspectedCommonCandidate=withContext(Dispatchers.IO) {
         val coroutine=currentCoroutineContext()
         val bytes=cache.read(reference){coroutine.ensureActive()};coroutine.ensureActive()
-        CandidateRelease.inspect(bytes,key,appVersion()).also{candidate->
+        CandidateRelease.inspectLocal(bytes,key,appVersion()).also{candidate->
             coroutine.ensureActive()
             require(candidate.releaseSha256==reference.digest&&candidate.familySha256==reference.familySha256){"Inspected candidate reference changed"}
         }
@@ -37,8 +37,8 @@ internal class AndroidBenchCandidates(context:Context,verificationKey:PublicKey?
     suspend fun inspectBleTrial(reference:BenchCandidateRef):org.openvimar.updater.core.BleTrialCandidate=withContext(Dispatchers.IO) {
         val coroutine=currentCoroutineContext()
         val bytes=cache.read(reference){coroutine.ensureActive()};coroutine.ensureActive()
-        org.openvimar.updater.core.BleTrialCandidate.inspect(bytes,key,appVersion()).also {
-            coroutine.ensureActive();require(it.digest==reference.digest&&it.familySha256==reference.familySha256){"Candidate reference changed"}
+        org.openvimar.updater.core.BleTrialCandidate.inspectLocal(bytes,key,appVersion()).also {
+            coroutine.ensureActive();require(it.digest==reference.digest&&it.familySha256==reference.familySha256){"Firmware selection changed"}
         }
     }
 
