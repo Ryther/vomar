@@ -32,6 +32,7 @@ jobs:
       VIMAR_WEST: /home/runner/.cache/vomar/ncs-venv/bin/west
       VIMAR_BUILD_PYTHON: /home/runner/.cache/vomar/ncs-venv/bin/python
       ZEPHYR_SDK_INSTALL_DIR: /home/runner/.cache/vomar/zephyr-sdk-1.0.1
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
@@ -39,6 +40,16 @@ jobs:
         with: {persist-credentials: false}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with: {python-version: '3.13.12'}
+      - name: Reserve disk capacity for NCS and the CodeQL database
+        if: runner.environment == 'github-hosted'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/local/.ghcup /opt/ghc
+          df -h "$GITHUB_WORKSPACE"
+          python - <<'PY'
+          import os,shutil
+          if shutil.disk_usage(os.environ['GITHUB_WORKSPACE']).free < 30 * 1024**3:
+              raise SystemExit('At least 30 GiB free is required before NCS/CodeQL setup')
+          PY
       - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gperf device-tree-compiler
       - run: python -m pip install --require-hashes -r requirements-dev.lock
       - run: python tools/dev/bootstrap.py firmware

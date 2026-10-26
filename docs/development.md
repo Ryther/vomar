@@ -30,8 +30,9 @@ Recreation interrupts the current container sessions, so save active work first.
 Changing the JSON or restarting the forwarding proxy alone cannot add a mount to
 an already running container.
 
-The public profile's complete image build/reopen still needs live verification;
-static checks and mocked daemon responses do not establish that it boots.
+The `Devcontainer required` job builds and reopens the complete public profile.
+Inspect its actual result for the candidate revision; static checks and mocked
+daemon responses alone do not establish that it boots.
 
 `python tools/dev/bootstrap.py workspace` installs locked development tools into
 private state. `codex --version`, `opencode --version` and `claude --version`
@@ -64,3 +65,45 @@ Sources: [Codex CLI](https://learn.chatgpt.com/docs/codex/cli),
 [Android command tools](https://developer.android.com/studio#command-tools),
 [NCS](https://github.com/nrfconnect/sdk-nrf),
 [Zephyr SDK](https://github.com/zephyrproject-rtos/sdk-ng).
+
+## Native CI prerequisites
+
+Linux GUI tests need the operating system's GL/EGL runtime before importing
+PySide6, including in offscreen mode. The desktop and UX jobs install those
+libraries before tests; packaging prerequisites installed later cannot repair an
+earlier import failure.
+
+The macOS Intel job builds the locked cryptography source with static OpenSSL,
+an explicit Homebrew OpenSSL directory and no cached wheels. It verifies the
+native extension's links before freezing, then retains the actual frozen CLI,
+signed-package verification and GUI smoke checks. This avoids a collision
+between cryptography's build-time OpenSSL and another bundled `libssl.3.dylib`.
+See [cryptography's static macOS build procedure](https://cryptography.io/en/latest/installation/#building-cryptography-on-macos).
+The workflow change must still pass on an Intel runner; Linux checks cannot
+establish that native package's behavior.
+
+Firmware and native CodeQL jobs reclaim unused Android/.NET/Haskell SDKs only
+on disposable GitHub-hosted runners and require 30 GiB free before setup. They
+retain the CodeQL tool cache, the pinned Nordic graph and all product profile
+builds. Build parallelism is capped at two; no cleanup step runs in the public
+Dev Container. If capacity is still insufficient, inspect disk usage and the
+failed build before choosing another runner; do not omit profiles or extraction.
+
+CodeQL's shared source paths must exist in every interpreted job. Generated
+firmware snapshots are captured by the C build's compiler tracing and checked
+against the original product source archive, rather than included as nonexistent
+paths in Python extraction. Successful uploads also require the GitHub code
+scanning configuration described in [GitHub setup](github-setup.md).
+
+Host C coverage instruments only durable firmware sources, including inline
+functions in that source tree. Disposable test harnesses and synthetic SDK
+headers are excluded before compilation. GCC maps and executed profiles must
+still match exactly, and gcovr errors remain fatal. Run the actual native suites
+and produce XML with:
+
+```sh
+python -m tools.release.c_coverage --output _test/c-coverage
+```
+
+Use a new output directory for each run so older execution profiles cannot
+stand in for the current candidate's execution.

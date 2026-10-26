@@ -75,6 +75,7 @@ jobs:
       VIMAR_WEST: /home/runner/.cache/vomar/ncs-venv/bin/west
       VIMAR_BUILD_PYTHON: /home/runner/.cache/vomar/ncs-venv/bin/python
       ZEPHYR_SDK_INSTALL_DIR: /home/runner/.cache/vomar/zephyr-sdk-1.0.1
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -82,6 +83,16 @@ jobs:
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with: {python-version: '3.13.12'}
+      - name: Reserve disk capacity for all firmware profiles
+        if: runner.environment == 'github-hosted'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/local/.ghcup /opt/ghc
+          df -h "$GITHUB_WORKSPACE"
+          python - <<'PY'
+          import os,shutil
+          if shutil.disk_usage(os.environ['GITHUB_WORKSPACE']).free < 30 * 1024**3:
+              raise SystemExit('At least 30 GiB free is required before NCS setup')
+          PY
       - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gperf device-tree-compiler binutils-arm-none-eabi
       - run: python -m pip install --require-hashes -r requirements-dev.lock
       - run: python tools/dev/bootstrap.py firmware
@@ -131,13 +142,31 @@ jobs:
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with: {python-version: '3.13.12'}
+      - name: Install Linux GUI runtime before tests
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-0 libdbus-1-3 libfontconfig1 fonts-dejavu-core libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
+      - name: Build Intel macOS cryptography with static OpenSSL
+        if: matrix.platform == 'macos-x64'
+        shell: bash
+        run: |
+          printf 'OPENSSL_DIR=%s\n' "$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
+          printf 'OPENSSL_STATIC=1\nPIP_NO_BINARY=cryptography\nPIP_NO_CACHE_DIR=1\n' >> "$GITHUB_ENV"
       - run: python -m pip install --require-hashes -r requirements-desktop.lock
+      - name: Require static cryptography OpenSSL on Intel macOS
+        if: matrix.platform == 'macos-x64'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import subprocess
+          from cryptography.hazmat.bindings import _rust
+          links=subprocess.check_output(['otool','-L',_rust.__file__],text=True)
+          if any('libssl' in line or 'libcrypto' in line for line in links.splitlines()[1:]):
+              raise SystemExit('cryptography must use static OpenSSL before freezing')
+          PY
       - run: python -m pip install --no-deps .
       - name: GUI and core tests
         env: {QT_QPA_PLATFORM: offscreen}
         run: python -m pip install --require-hashes -r requirements-dev.lock && python -m pytest apps/desktop-updater/tests
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
       - run: python -m pip install --require-hashes -r requirements-security.lock
       - run: pip-audit --disable-pip --no-deps -r requirements-desktop.lock -f json -o native-dependency-audit.json
       - run: python -m tools.release.package_desktop --output _test/native
