@@ -30,8 +30,6 @@ args=sys.argv[1:]
 if any(x in args for x in ('--version','-dumpversion','-dumpmachine','-print-search-dirs')):raise SystemExit(subprocess.call([os.environ['VOMAR_REAL_GCC'],*args]))
 sources=[a for a in args if a.endswith(('.c','.S')) and not a.startswith('-')]
 root=Path(os.environ['VOMAR_C_SOURCE_ROOT']).resolve()
-def product(source):return Path(source).resolve().is_relative_to(root)
-if not any(product(source) for source in sources):raise SystemExit(subprocess.call([os.environ['VOMAR_REAL_GCC'],*([] if sources else ['--coverage']),*args]))
 profile=Path(os.environ['VOMAR_C_PROFILE'])/uuid.uuid4().hex;profile.mkdir();started=time.time()
 common=['--coverage','-fprofile-abs-path','-fprofile-filter-files='+re.escape(str(root))+'/', '-fprofile-dir='+str(profile)]
 extra=[]
@@ -42,7 +40,7 @@ if len(sources)>1 and '-c' not in args and '-fsyntax-only' not in args:
   index=flags.index('-o');del flags[index:index+2]
  for i,source in enumerate(sources):
   obj=directory/('unit'+str(i)+'.o')
-  r=subprocess.run([os.environ['VOMAR_REAL_GCC'],*(common if product(source) else []),*flags,'-c',source,'-o',str(obj)])
+  r=subprocess.run([os.environ['VOMAR_REAL_GCC'],*common,*flags,'-c',source,'-o',str(obj)])
   if r.returncode:raise SystemExit(r.returncode)
   objects[source]=str(obj)
  args=[objects.get(a,a) for a in args];extra=list(directory.glob('*.gcno'))
