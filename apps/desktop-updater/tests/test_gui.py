@@ -3,6 +3,23 @@ os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 from PySide6.QtCore import QObject,Signal
 from PySide6.QtWidgets import QApplication
 from vomar_updater.gui.app import Window,theme
+import pytest
+
+
+@pytest.fixture(scope='module', autouse=True)
+def owned_application():
+    """Keep Qt alive until every test widget has been destroyed."""
+    import shiboken6
+    from PySide6.QtCore import QCoreApplication, QEvent
+    app = QApplication.instance() or QApplication([])
+    yield app
+    for widget in app.topLevelWidgets():
+        if shiboken6.isValid(widget):
+            widget.close()
+            if shiboken6.isValid(widget):
+                shiboken6.delete(widget)
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    app.processEvents()
 
 class Worker(QObject):
     result=Signal(str,str);failure=Signal(str,str);progress_event=Signal(str);ready=Signal()
