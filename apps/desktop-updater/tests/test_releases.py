@@ -9,7 +9,7 @@ def fixture(tmp_path):
     records=[]
     for role in REQUIRED_ROLES:
         name='vomar-firmware-0.1.0.zip' if role=='firmware-common' else role+'.dat'
-        (tmp_path/name).write_bytes(role.encode());r={'role':role,'filename':name,'componentVersion':'1.0.0'}
+        (tmp_path/name).write_bytes(role.encode());r={'role':role,'filename':name,'componentVersion':'0.1.0' if role in ('licenses','offline-guide') else '1.0.0'}
         if role=='android-apk':r['androidVersionCode']=20
         if role.startswith('desktop-'):_,platform,architecture=role.split('-');r.update(platform=platform,architecture='x64' if architecture=='setup' else architecture)
         records.append(r)

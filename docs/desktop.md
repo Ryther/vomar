@@ -10,6 +10,10 @@ engine. End users need no Python, Nordic SDK, Gradle or development container.
 Each supported platform is built separately; a Linux test does not qualify
 Windows/macOS drivers or Bluetooth.
 
+The desktop component is version 1.1.0. The CLI, Windows installed application
+and executable metadata, and macOS bundle metadata use that native version.
+Download filenames use the coordinated distribution version, which can differ.
+
 ## Install
 
 - Linux x64: extract the tar.gz, run `sh Vomar/install.sh`, and open Vomar from

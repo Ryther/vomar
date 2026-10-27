@@ -5,6 +5,7 @@ Gradle, private builders or SDKs. Frozen builds collect these imports explicitly
 """
 from __future__ import annotations
 from dataclasses import dataclass
+from vomar_updater import __version__
 from .admission import seal,require
 import io
 import json
@@ -58,7 +59,7 @@ class Package:
     def image(self,role):return self.entries()[self.manifest[role]['file']]
 
 
-def inspect_package(raw,public_key,app_version='1.0.0'):
+def inspect_package(raw,public_key,app_version=__version__):
     if not isinstance(raw,bytes):raise ValueError('Immutable package bytes required')
     key=(serialization.load_pem_public_key(public_key) if public_key.startswith(b'-----') else serialization.load_der_public_key(public_key))
     if not isinstance(key,ec.EllipticCurvePublicKey) or not isinstance(key.curve,ec.SECP256R1):raise ValueError('Pinned P256 anchor required')
@@ -108,7 +109,7 @@ def inspect_package(raw,public_key,app_version='1.0.0'):
     return _admitted(raw,mraw,m)
 
 
-def inspect_candidate(raw,public_key,app_version='1.0.0'):
+def inspect_candidate(raw,public_key,app_version=__version__):
     """Separate single-device qualification route, never a normal/fleet release."""
     from tools.firmware.package_common_android_update_v3 import _validate_common_v3_bundle
     key=serialization.load_pem_public_key(public_key) if public_key.startswith(b'-----') else serialization.load_der_public_key(public_key)

@@ -7,12 +7,15 @@ import json
 import os
 from pathlib import Path
 import platform
+import plistlib
+import re
 import shutil
 import subprocess
 import sys
 import sysconfig
 import tarfile
 import tempfile
+import tomllib
 import urllib.request
 import zipfile
 
@@ -20,6 +23,63 @@ ROOT=Path(__file__).resolve().parents[2]
 
 
 def run(*args,**kwargs):return subprocess.run([str(x) for x in args],check=True,**kwargs)
+
+
+def native_version():
+    version=tomllib.loads((ROOT/'pyproject.toml').read_text())['project']['version']
+    if not isinstance(version,str) or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',version) or any(int(part)>65535 for part in version.split('.')):
+        raise ValueError('Native desktop version must be a platform-representable numeric SemVer')
+    return version
+
+
+def windows_version_resource(output,version):
+    """Generate PyInstaller's version resource in the private build directory."""
+    parts=tuple(int(part) for part in version.split('.'))+(0,)
+    path=output/'native-version.txt'
+    path.write_text(f'''VSVersionInfo(
+  ffi=FixedFileInfo(filevers={parts!r}, prodvers={parts!r}, mask=0x3f,
+                   flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0, 0)),
+  kids=[StringFileInfo([StringTable('040904B0', [
+    StringStruct('FileDescription', 'Vomar'),
+    StringStruct('FileVersion', {version!r}),
+    StringStruct('ProductName', 'Vomar'),
+    StringStruct('ProductVersion', {version!r})
+  ])]), VarFileInfo([VarStruct('Translation', [1033, 1200])])]
+)
+''',encoding='utf-8')
+    return path
+
+
+def verify_cli_version(cli,version,output,env):
+    observed=run(cli,'--version',cwd=output,env=env,capture_output=True,text=True).stdout.strip()
+    if observed!=version:raise ValueError(f'CLI native version mismatch: expected {version}, observed {observed!r}')
+    return observed
+
+
+def verify_macos_version(bundle,version):
+    with (bundle/'Contents/Info.plist').open('rb') as source:info=plistlib.load(source)
+    observed={key:info.get(key) for key in ('CFBundleShortVersionString','CFBundleVersion')}
+    if any(value!=version for value in observed.values()):raise ValueError(f'macOS native version mismatch: {observed!r}')
+    return observed
+
+
+def verify_windows_version(executable,version):
+    # Pass paths as environment data, never as executable PowerShell text.
+    script='''$ErrorActionPreference = 'Stop'
+$v = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($env:VOMAR_VERSION_TARGET)
+[ordered]@{
+    fileVersion = $v.FileVersion
+    productVersion = $v.ProductVersion
+    fileParts = @($v.FileMajorPart, $v.FileMinorPart, $v.FileBuildPart, $v.FilePrivatePart)
+    productParts = @($v.ProductMajorPart, $v.ProductMinorPart, $v.ProductBuildPart, $v.ProductPrivatePart)
+} | ConvertTo-Json -Compress
+'''
+    result=run('powershell.exe','-NoProfile','-NonInteractive','-Command',script,env={**os.environ,'VOMAR_VERSION_TARGET':str(executable)},capture_output=True,text=True)
+    observed=json.loads(result.stdout)
+    parts=[int(part) for part in version.split('.')]+[0]
+    if observed!={'fileVersion':version,'productVersion':version,'fileParts':parts,'productParts':parts}:
+        raise ValueError(f'Windows native version mismatch for {executable.name}: {observed!r}')
+    return observed
 
 
 def fetch(item,path):
@@ -65,14 +125,17 @@ def notices(output):
 def build(output,version):
     if platform.system()=='Darwin' and platform.machine() not in ('arm64','aarch64'):
         raise ValueError('macOS builds require Apple Silicon (arm64)')
-    if not __import__('re').fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',version):raise ValueError('Distribution SemVer required')
+    if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',version):raise ValueError('Distribution SemVer required')
+    desktop_version=native_version()
     from .branding import synchronize,SIZES
     if synchronize(check=True):raise ValueError('Stale brand assets; run python -m tools.release.branding --sync')
     output=output.absolute();output.mkdir(parents=True,exist_ok=False)
     probe=probe_tools(output);licenses=notices(output)
-    env={**os.environ,'VOMAR_PROBE_ROOT':str(probe),'VOMAR_NOTICES_ROOT':str(licenses),'MACOSX_DEPLOYMENT_TARGET':'14.4'}
+    env={**os.environ,'VOMAR_PROBE_ROOT':str(probe),'VOMAR_NOTICES_ROOT':str(licenses),'VOMAR_NATIVE_VERSION':desktop_version,'MACOSX_DEPLOYMENT_TARGET':'14.4'}
     brand=ROOT/'assets/branding'
-    if platform.system()=='Windows':env['VOMAR_NATIVE_ICON']=str(brand/'vomar.ico')
+    if platform.system()=='Windows':
+        env['VOMAR_NATIVE_ICON']=str(brand/'vomar.ico')
+        env['VOMAR_VERSION_RESOURCE']=str(windows_version_resource(output,desktop_version))
     elif platform.system()=='Darwin':
         iconset=output/'Vomar.iconset';iconset.mkdir()
         for size in (16,32,128,256,512):
@@ -104,7 +167,7 @@ def build(output,version):
                 if p.is_file():z.write(p,'Vomar/'+str(p.relative_to(bundle)))
         catalog=json.loads((ROOT/'tools/release/runtime-tools.json').read_text());item=catalog['inno']['assets']['innosetup-7.1.0-x64.exe'];installer=output/'inno.exe';fetch(item,installer)
         run(installer,'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/DIR='+str(output/'inno'))
-        run(output/'inno/ISCC.exe','/DVersion='+version,'/DRuntime='+str(bundle),'/DBrandIcon='+str(brand/'vomar.ico'),'/O'+str(output),ROOT/'apps/desktop-updater/packaging/windows/vomar.iss')
+        run(output/'inno/ISCC.exe','/DNativeVersion='+desktop_version,'/DDistributionVersion='+version,'/DRuntime='+str(bundle),'/DBrandIcon='+str(brand/'vomar.ico'),'/O'+str(output),ROOT/'apps/desktop-updater/packaging/windows/vomar.iss')
     elif system=='Darwin':
         run('codesign','--force','--deep','--sign','-',bundle)
         stage=output/'dmg';stage.mkdir();shutil.copytree(bundle,stage/'Vomar.app',symlinks=True);(stage/'Applications').symlink_to('/Applications',target_is_directory=True)
@@ -115,7 +178,12 @@ def build(output,version):
     cli=bundle/('Contents/MacOS/vomar-cli' if system=='Darwin' else 'vomar-cli.exe' if system=='Windows' else 'vomar-cli')
     # Run outside the source tree with no repository PYTHONPATH or SDK environment.
     smoke_env={k:v for k,v in os.environ.items() if k not in ('PYTHONPATH','VIMAR_NCS_WORKSPACE','VIMAR_BUILD_PYTHON','ZEPHYR_BASE','ANDROID_HOME')}
-    run(cli,'--version',cwd=output,env=smoke_env);run(cli,'--help',cwd=output,env=smoke_env)
+    version_verification={'cli':verify_cli_version(cli,desktop_version,output,smoke_env)}
+    if system=='Darwin':version_verification['macos']=verify_macos_version(bundle,desktop_version)
+    elif system=='Windows':
+        setup=output/f'vomar-desktop-{version}-windows-{arch}-setup.exe'
+        version_verification['windows']={path.name:verify_windows_version(path,desktop_version) for path in (bundle/'Vomar.exe',cli,setup)}
+    run(cli,'--help',cwd=output,env=smoke_env)
     probe_exe=probe/('bin/openocd.exe' if system=='Windows' else 'bin/openocd')
     run(probe_exe,'--version',cwd=output,env=smoke_env)
     frozen_probe=bundle/('Contents/Resources' if system=='Darwin' else '_internal')/'vomar_updater/resources/probe/bin'/probe_exe.name
@@ -128,7 +196,7 @@ def build(output,version):
     native_platform=('windows' if system=='Windows' else 'macos' if system=='Darwin' else 'linux')+'-'+arch
     built=sorted(output.glob('vomar-desktop-*'))
     (output/('native-'+native_platform+'.json')).write_text(json.dumps(native(bundle,native_platform,built),indent=2)+'\n')
-    (output/('package-report-'+native_platform+'.json')).write_text(json.dumps({'platform':system,'architecture':arch,'artifact':artifact.name,'sha256':hashlib.sha256(artifact.read_bytes()).hexdigest(),'size':artifact.stat().st_size,'physicalBleUsbQualification':False,'trustedOsSigning':False},indent=2)+'\n')
+    (output/('package-report-'+native_platform+'.json')).write_text(json.dumps({'platform':system,'architecture':arch,'distributionVersion':version,'nativeVersion':desktop_version,'nativeVersionVerification':version_verification,'artifact':artifact.name,'sha256':hashlib.sha256(artifact.read_bytes()).hexdigest(),'size':artifact.stat().st_size,'physicalBleUsbQualification':False,'trustedOsSigning':False},indent=2)+'\n')
     return artifact
 
 

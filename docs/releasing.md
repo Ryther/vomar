@@ -5,6 +5,27 @@ from Conventional Commits and creates drafts with vMAJOR.MINOR.PATCH tags.
 Firmware, Android versionName/versionCode, desktop and converter versions are
 independent native owners; no release step resets them to the distribution tag.
 
+The planned first official distribution is **2.0.0**. Put `Release-As: 2.0.0`
+in the actual integration squash commit body on main, then review the generated
+Release Please proposal. The footer must survive the squash; a PR comment alone
+cannot select the release version. Release Please continues to own `VERSION`,
+the release manifest state, changelog and tag. Do not hand-edit those files.
+
+Distribution filenames use 2.0.0 while embedded native versions remain independent.
+For example, a distribution can contain firmware 1.1.1, Android 1.1.2/code32,
+desktop 1.1.0 and converter 1.0.0. This example does not qualify those binaries
+for publication. Android upgrade ordering uses its monotonically increasing
+versionCode; signed firmware admission uses the firmware identity and version,
+never the distribution tag. Compare each native candidate with the installed
+versions before qualification; calling the distribution 2.0.0 cannot make an older
+native image an upgrade.
+
+The distribution manifest requires all four component owners and binds every
+artifact's componentVersion to its owner. Notices, guide and inventory use the
+distribution version. Desktop packaging verifies frozen CLI output, Windows
+installer/executable version resources and both macOS bundle version fields
+against the native desktop owner before writing a successful package report.
+
 ## Candidate and signing
 
 Validate one full immutable source SHA through the reusable workflow. Build/test
@@ -24,14 +45,15 @@ A signed firmware qualification candidate is downloaded by exact SHA-256 and
 verified. Promotion requires a separately protected report with all thirteen
 literal physical checks true, exact component hashes and loader contracts.
 It preserves component/loader/carrier bytes and signs qualified outer metadata.
-The current 1.0.0 candidate has every physical flag false, so promotion and stable
-publication must fail. Host, GUI and hosted-runner tests cannot fill those flags.
+A candidate with any physical flag false cannot be promoted or published as
+stable firmware. Host, GUI and hosted-runner tests cannot fill those flags.
 
 ## Complete immutable draft
 
-The assembler requires common firmware, its exact OTA carrier, signed APK, four
-native desktop packages, Windows per-user installer, converter, notices and the
-offline guide. release-manifest.json schema1 records roles, sizes, hashes,
+The assembler requires common firmware, its exact OTA carrier, signed APK, three
+native desktop archives, the Windows per-user installer, converter, notices and
+the offline guide plus the complete dependency inventory archive (eleven artifact
+roles, release-manifest.json and SHA256SUMS). release-manifest.json schema1 records roles, sizes, hashes,
 component versions and the source commit. SHA256SUMS covers the full asset set.
 
 The publisher defaults to dry-run. It discovers the exact draft, rejects duplicate

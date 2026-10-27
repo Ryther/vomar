@@ -11,6 +11,8 @@ REQUIRED_ROLES = frozenset(('firmware-common','zigbee-ota','android-apk','deskto
 OPTIONAL_ROLES = frozenset(('source-sbom',))
 TOP = {'schemaVersion','distributionVersion','tag','commit','components','artifacts'}
 ARTIFACT = {'role','filename','size','sha256','componentVersion'}
+COMPONENTS = frozenset(('firmware','android','desktop','zigbee2mqtt'))
+ROLE_COMPONENT = {'firmware-common':'firmware','zigbee-ota':'firmware','android-apk':'android','zigbee2mqtt-converter':'zigbee2mqtt',**{role:'desktop' for role in REQUIRED_ROLES if role.startswith('desktop-')}}
 
 
 def loads(raw):
@@ -38,7 +40,7 @@ def validate(value, directory=None):
     version=value['distributionVersion']
     if not isinstance(version,str) or not re.fullmatch(SEMVER,version) or value['tag']!='v'+version:raise ValueError('Version/tag mismatch')
     if not isinstance(value['commit'],str) or not re.fullmatch('[0-9a-f]{40}',value['commit']):raise ValueError('Full immutable commit required')
-    if type(value['components']) is not dict or not value['components']:raise ValueError('Component versions required')
+    if type(value['components']) is not dict or value['components'].keys()!=COMPONENTS:raise ValueError('Component versions required')
     for k,v in value['components'].items():
         if not re.fullmatch('[a-z][a-z0-9-]*',k) or not isinstance(v,str) or not re.fullmatch(SEMVER,v):raise ValueError('Invalid component version')
     if type(value['artifacts']) is not list or not len(REQUIRED_ROLES)<=len(value['artifacts'])<=32:raise ValueError('Incomplete or oversized distribution')
@@ -51,6 +53,9 @@ def validate(value, directory=None):
         if type(a['size']) is not int or not 0<a['size']<=2**31:raise ValueError('Artifact size outside bounds')
         if not isinstance(a['sha256'],str) or not re.fullmatch('[0-9a-f]{64}',a['sha256']):raise ValueError('Invalid artifact hash')
         if not isinstance(a['componentVersion'],str) or not re.fullmatch(SEMVER,a['componentVersion']):raise ValueError('Invalid component version')
+        owner=ROLE_COMPONENT.get(role)
+        expected=value['components'][owner] if owner else version
+        if a['componentVersion']!=expected:raise ValueError('Artifact component version mismatch: '+role)
         if role=='android-apk':
             if type(a.get('androidVersionCode')) is not int or not 1<=a['androidVersionCode']<=2147483647:raise ValueError('Native Android versionCode required')
         elif 'androidVersionCode' in a:raise ValueError('Unexpected Android versionCode')
@@ -75,7 +80,7 @@ def build_manifest(version,commit,records,directory,components=None):
         p=Path(directory)/name
         if p.is_symlink() or not p.is_file():raise ValueError('Regular artifact required')
         artifacts.append({**a,'size':p.stat().st_size,'sha256':digest(p.read_bytes())})
-    return validate({'schemaVersion':1,'distributionVersion':version,'tag':'v'+version,'commit':commit,'components':components or {'firmware':'1.0.0','android':'1.0.0','desktop':'1.0.0'},'artifacts':sorted(artifacts,key=lambda a:a['role'])},directory)
+    return validate({'schemaVersion':1,'distributionVersion':version,'tag':'v'+version,'commit':commit,'components':{component:'1.0.0' for component in COMPONENTS} if components is None else components,'artifacts':sorted(artifacts,key=lambda a:a['role'])},directory)
 
 
 def main():
