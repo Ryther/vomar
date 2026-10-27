@@ -113,6 +113,7 @@ jobs:
     if: needs.resolve.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     environment: release-publication
+    permissions: {contents: read, actions: read, checks: read}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ github.workflow_sha }}', path: trusted, persist-credentials: false}
@@ -135,7 +136,8 @@ jobs:
               Path(name).write_text(os.environ[variable])
           PY
       - env:
-          GH_TOKEN: ${{ secrets.RELEASE_PUBLICATION_TOKEN }}
+          GH_TOKEN: ${{ secrets.VOMAR_RELEASE_PUBLICATION_TOKEN }}
+          GH_CHECKS_TOKEN: ${{ github.token }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >-
           PYTHONPATH=trusted python -m tools.release.publish --directory assets

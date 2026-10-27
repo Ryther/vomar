@@ -33,3 +33,24 @@ def test_qualification_is_bound_to_distribution_source_revision():
     raw=json.dumps(q).encode();p={'qualificationSha256':digest(raw),'loaderContracts':[]}
     with pytest.raises(ValueError):qualification(p,raw,'a'*40)
     assert qualification(p,raw,'b'*40)==q
+
+
+@pytest.mark.parametrize('reader', [None, 'workflow-reader'])
+def test_check_read_never_uses_publication_credential(monkeypatch,reader):
+    import io,json,types,urllib.request
+    from tools.release.publish import GitHub,verify_checks
+    requests=[]
+    def open_request(request,timeout):
+        requests.append(request)
+        return io.BytesIO(json.dumps({'total_count':0,'check_runs':[]}).encode())
+    monkeypatch.setattr(urllib.request,'build_opener',lambda *args:types.SimpleNamespace(open=open_request))
+    if reader is None:
+        remote=GitHub('Ryther/vomar','release-writer')
+    else:
+        remote=GitHub('Ryther/vomar','release-writer',checks_token=reader)
+    value=remote.checks('a'*40)
+    assert requests[-1].get_header('Authorization') == ('Bearer workflow-reader' if reader else None)
+    with pytest.raises(ValueError,match='Missing exact-candidate required checks'):
+        verify_checks(value,'a'*40)
+    remote.releases()
+    assert requests[-1].get_header('Authorization')=='Bearer release-writer'

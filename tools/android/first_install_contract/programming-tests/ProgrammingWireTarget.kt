@@ -54,6 +54,7 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
         var wdtRunsWhileHalted:Boolean
             get()=wdtConfig and 8L!=0L
             set(value){wdtConfig=if(value)wdtConfig or 8L else wdtConfig and 8L.inv()}
+        var readyAfterPolls=0
         var neverReady=false
         var corruptReadParity=false
         var corruptReadParityCount=0
@@ -102,7 +103,7 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
             when(bytes[0].toInt() and 255) {
                 0xe8->response=word(1L shl 17)
                 0xc7->response=word(when(bytes[1].toInt() and 255) {255->2;254->selected.toLong();1->selected.toLong().also {selected=1};else->error("Unsupported interface")})
-                5->protocol(bytes.contentEquals(byteArrayOf(5,100,0)),"unexpected speed")
+                5->protocol(bytes.contentEquals(byteArrayOf(5,100,0))||bytes.contentEquals(byteArrayOf(5,0xe8.toByte(),3)),"unexpected speed")
                 0xcf->{
                     val count=(bytes[2].toInt() and 255) or ((bytes[3].toInt() and 255) shl 8)
                     val n=(count+7)/8;protocol(bytes.size==4+2*n,"malformed raw packet")
@@ -180,7 +181,8 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
                 }
                 Phase.WRITE->{
                     protocol(drive,"write data not driven")
-                    if(ack!=1)protocol(output==0,"WAIT/FAULT dummy data contains a register value")
+                    // ADIv5 B4.3.2: ORUN requires a data phase even on
+                    // WAIT/FAULT; rejected write data is ignored, not applied.
                     if(bitIndex<32)written=written or (output.toLong() shl bitIndex)
                     else {
                         protocol(output==java.lang.Long.bitCount(written) and 1,"bad write parity")
@@ -235,7 +237,7 @@ internal class ProgrammingWireTarget(initialOverrun: Boolean=false,private val i
             0xe000edf8L->{protocol(!registerNeverReady&&registerDelay<0,"DCRDR read before S_REGRDY handshake");registerData}
             0xe000edfcL->demcr
             0xe000ed0cL->0xfa050000L
-            0x4001e400L->if(neverReady)0 else 1
+            0x4001e400L->if(neverReady||readyAfterPolls-->0)0 else 1
             0x4001e504L->mode.toLong()
             in 0x4001e800L..0x4001e87bL->{
                 val offset=(at-0x4001e800L).toInt();val field=offset%16/4

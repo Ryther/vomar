@@ -24,7 +24,7 @@ def matching_notes(data,profile):
  raise ValueError('Executed profile has no matching compiler map')
 
 WRAPPER='''#!/usr/bin/env python3
-import glob,os,shutil,subprocess,sys,tempfile,time,uuid
+import glob,os,re,shutil,subprocess,sys,tempfile,time,uuid
 from pathlib import Path
 args=sys.argv[1:]
 if any(x in args for x in ('--version','-dumpversion','-dumpmachine','-print-search-dirs')):raise SystemExit(subprocess.call([os.environ['VOMAR_REAL_GCC'],*args]))
@@ -56,7 +56,7 @@ while index<len(args):
  if arg.startswith('-I') and len(arg)>2:arg='-I'+str(preserve_directory(arg[2:]))
  rewritten.append(arg);index+=1
 args=rewritten
-common=['--coverage','-fprofile-abs-path','-fprofile-dir='+str(profile)]
+common=['--coverage','-fprofile-abs-path','-fprofile-filter-files='+re.escape(str(root))+'/', '-fprofile-dir='+str(profile)]
 extra=[]
 if len(sources)>1 and '-c' not in args and '-fsyntax-only' not in args:
  directory=profile/'objects';directory.mkdir();objects={}
@@ -80,8 +80,8 @@ if result.returncode==0:
 raise SystemExit(result.returncode)
 '''
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);a=p.parse_args();output=a.output.resolve();profile=output/'profiles';profile.mkdir(parents=True,exist_ok=True);bin_dir=output/'bin';bin_dir.mkdir(exist_ok=True);wrapper=bin_dir/'gcc';wrapper.write_text(WRAPPER);wrapper.chmod(0o755);(bin_dir/'cc').write_text(WRAPPER);(bin_dir/'cc').chmod(0o755)
- env={**os.environ,'VOMAR_REAL_GCC':shutil.which('gcc'),'VOMAR_C_PROFILE':str(profile),'VOMAR_C_SOURCE_ROOT':str(ROOT),'PATH':str(bin_dir)+os.pathsep+os.environ['PATH']}
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);a=p.parse_args();output=a.output.resolve();output.mkdir(parents=True,exist_ok=False);profile=output/'profiles';profile.mkdir(parents=True,exist_ok=True);bin_dir=output/'bin';bin_dir.mkdir(exist_ok=True);wrapper=bin_dir/'gcc';wrapper.write_text(WRAPPER);wrapper.chmod(0o755);(bin_dir/'cc').write_text(WRAPPER);(bin_dir/'cc').chmod(0o755)
+ env={**os.environ,'VOMAR_REAL_GCC':shutil.which('gcc'),'VOMAR_C_PROFILE':str(profile),'VOMAR_C_SOURCE_ROOT':str(ROOT/'firmware'),'PATH':str(bin_dir)+os.pathsep+os.environ['PATH']}
  subprocess.run([sys.executable,'-m','pytest','tools/firmware/tests','tools/hardware/tests','tools/android/tests','-q'],cwd=ROOT,env=env,check=True)
  data=list(profile.rglob('*.gcda'))
  if not data:raise ValueError('No actual native execution coverage was recorded')

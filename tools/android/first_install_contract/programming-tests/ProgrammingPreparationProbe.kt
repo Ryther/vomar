@@ -5,7 +5,7 @@ import org.openvimar.updater.installer.*
 
 /** Regression on the actual Kotlin wire/lease against independently modeled
  * volatile nRF52840 FLASH permissions. No USB or physical device access. */
-internal fun programmingPreparationProbe(scenario:String){
+internal fun programmingPreparationProbe(scenario:String,candidate:InspectedCommonCandidate?=null){
  val target=ProgrammingWireTarget();target.logLimit=2000
  if(scenario!="prepare-acl-empty-vectors")byteArrayOf(0,0,2,0x20,1,0x10,0,0).copyInto(target.flash)
  if(scenario=="prepare-acl-even-vector")target.flash.fill(0,4,8)
@@ -22,12 +22,12 @@ internal fun programmingPreparationProbe(scenario:String){
  target.ignoreVectorCatch=scenario=="prepare-acl-uncaught"
  val identity=TargetIdentity(0x12345678,0xabcdef01,0x41414430)
  val token=checkNotNull(DkUsbOperationGate.acquire("synthetic programming preparation"))
- val hash="00".repeat(32);val binding=InstallBinding(identity,hash,hash,hash,hash,hash,hash,hash)
+ val hash="00".repeat(32);val binding=InstallBinding(identity,hash,candidate?.releaseSha256?:hash,candidate?.familySha256?:hash,hash,hash,hash,hash)
  var cancelled=false
  if(scenario=="prepare-acl-cancel")target.onMemoryWrite={at,_->if(at==0xe000ed0cL)cancelled=true}
  val handoff=if(scenario=="prepare-acl-watchdog"){
   target.wdtRunning=true;target.wdtCrv=327680;target.wdtRren=1
-  WatchdogHandoffAuthority.fromSignedDescriptor("paused-reset-before-main-v1",hash,hash,identity,token.generation)
+  checkNotNull(candidate).authorizeWatchdogHandoff(identity,token.generation)
  }else null
  var clock=0L
  val lease=NrfInitialInstallLease(JlinkInstallWire(target,{token.checkCurrent()}),token,{cancelled},{clock.also{clock+=10_000_000}})

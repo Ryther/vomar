@@ -1,6 +1,14 @@
-# Vimar Updater Android 1.0.6
+# Vimar Updater Android 1.0.7
 
-App 1.0.6 (versionCode 26) introduces guided first installation and more compact
+App 1.0.7 (versionCode 27) optimizes first installation and interrupted repair:
+queued USB/SWD work, 1MHz programming clock, bounded USB presence checks and reuse
+of already-correct repair pages. A second overall bar sits below the current
+phase, with an approximate remaining time learned from measured progress. It
+retains original/UID validation, ACL preparation, durable intent, halted CPU and
+complete readback. Physical phone/DK speed remains separately unqualified.
+See [First installation](android-first-install.md#progress-remaining-time-and-usb-speed).
+
+App 1.0.6 (versionCode 26) introduced guided first installation and more compact
 connection, device and update workflows. It includes first-install correction
 `461bc712`. Before reviewed
 FLASH writes, the driver reads all eight ACL regions and, when necessary, resets
@@ -30,9 +38,9 @@ Settings. A selected known UID is checked against live identity, including after
 legacy recovery preparation and before MAIN upload. No radio, USB, firmware
 operation or approval is restored merely by opening a screen.
 
-The 1.0.6 signed APK is delivered locally under
-`experiments/android-updater/releases/1.0.6/`. Software checks and native emulator
-captures are recorded under `experiments/android-updater/builds/1.0.6/owner-notes/`.
+The 1.0.7 signed APK is delivered locally under
+`experiments/android-updater/releases/1.0.7/`. Software checks and native emulator
+captures are recorded under `experiments/android-updater/builds/1.0.7/usb-performance/`.
 Physical first-install, original-restore and phone/radio qualification remain
 separate; these interface changes do not claim that qualification.
 
@@ -102,7 +110,7 @@ with a separate private candidate selection, foreground lifetime, Stop and
 report export. Normal release, fleet and Zigbee routes still reject candidates.
 
 For exact phone steps, see [Update a mounted dimmer by Bluetooth](android-bluetooth-trial.md).
-The app version is 1.0.6. Firmware packages have independent versions and
+The app version is 1.0.7. Firmware packages have independent versions and
 qualification records.
 
 App0.6.3 explicitly queues the initial system pairing request after LE service

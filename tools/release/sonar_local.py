@@ -118,7 +118,7 @@ def compare(base: Path, candidate: Path, output: Path) -> None:
         scan_codes = {}
         for project, source in (("vomar-baseline", base), ("vomar-candidate", candidate)):
             scan_codes[project] = scan(source, project, output, token)
-            export_analysis(lambda path, params: request(path, params, token=token), project, output / project)
+            export_analysis(lambda path, params: request(path, params, token=token), project, output / project, backend="community")
         before = json.loads((output / "vomar-baseline/issues.json").read_text())
         after = json.loads((output / "vomar-candidate/issues.json").read_text())
         introduced = introduced_issues(before, after)

@@ -16,6 +16,7 @@
   "mounts": [
     "source=vomar-sdk-cache,target=/home/vscode/.cache/vomar,type=volume",
     "source=vomar-agent-state,target=/home/vscode/.local/share/vomar-agents,type=volume",
+    "source=vimar-30805-codex,target=/home/vscode/.codex,type=volume",
     "source=vomar-gradle-cache,target=/home/vscode/.gradle,type=volume",
     "source=vomar-github-state,target=/home/vscode/.config/gh,type=volume"
   ],
@@ -26,7 +27,8 @@
         "ms-python.python",
         "ms-vscode.cpptools",
         "redhat.java",
-        "ms-vscode.cmake-tools"
+        "ms-vscode.cmake-tools",
+        "openai.chatgpt"
       ]
     }
   },
@@ -45,5 +47,10 @@
       "installDirectlyFromGitHubRelease": true
     }
   },
-  "postStartCommand": "python tools/dev/container_check.py"
+  "postStartCommand": "python tools/dev/container_check.py",
+  "runArgs": [
+    "--device=${localEnv:VOMAR_USB_DEVICE:/dev/null}",
+    "--group-add=plugdev",
+    "--volume=${localEnv:VOMAR_DBUS_SOURCE:vomar-no-host-dbus}:/run/dbus:ro"
+  ]
 }
