@@ -1,0 +1,56 @@
+name: Review exact Sonar findings
+on:
+  workflow_dispatch:
+    inputs:
+      sha: {description: Exact analyzed main commit (40 lowercase hex characters), required: true, type: string}
+      review_json: {description: Reviewed schema1 issue records with fingerprints and source hashes (maximum 64 KiB), required: true, type: string}
+      apply: {description: Apply only the explicitly reviewed falsepositive transitions, required: true, type: boolean, default: false}
+permissions: {contents: read}
+concurrency: {group: sonar-review-main, cancel-in-progress: false}
+jobs:
+  review:
+    if: github.repository == 'Ryther/vomar' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    environment: sonar-analysis
+    timeout-minutes: 30
+    steps:
+      - name: Initialize durable review report before checkout
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path=Path('_test/sonar-review');path.mkdir(parents=True)
+          (path/'report.json').write_text(json.dumps({'schemaVersion':1,'status':'workflow-started','mayHaveApplied':False})+'\n')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.workflow_sha }}', path: trusted, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - name: Validate bounded review and exact candidate SHA before data checkout
+        env:
+          CANDIDATE_SHA: ${{ inputs.sha }}
+          SONAR_REVIEW_JSON: ${{ inputs.review_json }}
+        run: PYTHONPATH=trusted python -m tools.release.sonar_review --stage-input --sha "$CANDIDATE_SHA"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ inputs.sha }}', path: candidate, persist-credentials: false}
+      - name: Preflight all issues and optionally apply reviewed transitions
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+          TRUSTED_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          APPLY: ${{ inputs.apply }}
+        run: PYTHONPATH=trusted python -m tools.release.sonar_review --sha "$CANDIDATE_SHA" --apply "$APPLY"
+      - name: Retain workflow outcome without printing review or credentials
+        if: always()
+        env: {OUTCOME: '${{ job.status }}'}
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          path=Path('_test/sonar-review/report.json')
+          report={'workflowOutcome':os.environ['OUTCOME'],'checkpointPresent':path.is_file()}
+          (path.parent/'workflow-outcome.json').write_text(json.dumps(report,indent=2)+'\n')
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with: {name: 'sonar-reviewed-findings-${{ github.run_id }}-${{ github.run_attempt }}', path: _test/sonar-review, if-no-files-found: error, retention-days: 30}
