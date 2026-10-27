@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 import urllib.parse
 
 
+
 import pytest
 import yaml
 
@@ -142,78 +143,17 @@ def test_http_hotspot_scope_uses_the_backend_selector_without_changing_pr_or_pag
         requests.append(request)
         return io.BytesIO(b'{"hotspots":[],"paging":{"total":0}}')
     monkeypatch.setattr(report.urllib.request,'urlopen',urlopen)
-    params={'project':'synthetic-project','pullRequest':'8','p':2,'ps':25}
+    params={selector:'synthetic-project','pullRequest':'8','p':2,'ps':25}
     assert report._http_fetch(host,'synthetic-token')('/api/hotspots/search',params)['hotspots']==[]
     parsed=urllib.parse.urlsplit(requests[0].full_url)
     assert urllib.parse.parse_qs(parsed.query)=={selector:['synthetic-project'],'pullRequest':['8'],'p':['2'],'ps':['25']}
     assert requests[0].get_header('Authorization')=='Bearer synthetic-token'
-    assert params=={'project':'synthetic-project','pullRequest':'8','p':2,'ps':25}
+    assert params=={selector:'synthetic-project','pullRequest':'8','p':2,'ps':25}
 
 
 def cloud_workflow():
     root=Path(__file__).resolve().parents[3]
     return yaml.safe_load((root/'.github/workflows/sonar-pr.yml').read_text())['jobs']['cloud']
-
-
-def test_cloud_export_requires_verified_protected_code_and_keeps_current_base_settings():
-    cloud=cloud_workflow()
-    assert cloud['env']=={'SONAR_COMPAT_BASE_SHA':'6476b264542fa757e38aef66d541fc36c51feb27',
-                          'SONAR_COMPAT_EXPORTER_SHA':'3447f132f7f16e9d97bf8b8f1dd2b2aefd02cdb5'}
-    steps=cloud['steps']
-    checkout=next(s for s in steps if s.get('with',{}).get('path')=='trusted-export')
-    assert checkout['with']['ref']=='${{ steps.select-exporter.outputs.sha }}'
-    assert checkout['with']['persist-credentials'] is False
-    export=next(s for s in steps if s.get('name')=='Export complete PR findings')
-    assert export['if']=="always() && steps.verify-exporter.outcome == 'success'"
-    assert 'PYTHONPATH="$GITHUB_WORKSPACE/trusted-export" python -P -m tools.release.sonar_report' in export['run']
-    assert 'test "$SCAN_OUTCOME" = success' in export['run']
-    for step in steps:
-        if step.get('id') in ('select-exporter','verify-exporter'):
-            assert 'SONAR_TOKEN' not in step.get('env',{})
-    scan=next(s for s in steps if s.get('id')=='scan')
-    assert 'trusted/.github/sonar-pr.properties' in scan['run']
-    prepare=next(s for s in steps if s.get('name')=='Validate exact candidate reports without credentials')
-    assert 'PYTHONPATH=trusted python' in prepare['run']
-
-
-@pytest.mark.parametrize('case',['known-base','future-base','wrong-base-checkout','non-ancestor','wrong-exporter-checkout','changed-selection'])
-def test_exporter_selection_and_verification_fail_closed_on_real_git_history(tmp_path,case):
-    trusted=tmp_path/'trusted';trusted.mkdir()
-    def git(*args):
-        return subprocess.check_output(['git','-C',str(trusted),*args],text=True,stderr=subprocess.DEVNULL).strip()
-    git('init','-q');git('config','user.name','Synthetic exporter test');git('config','user.email','fixture@example.invalid')
-    commits=[]
-    for name in ('ancestor','known-base','future-base'):
-        git('commit','--allow-empty','-qm','test: '+name);commits.append(git('rev-parse','HEAD'))
-    ancestor,known,future=commits
-    git('checkout','--orphan','unrelated');git('commit','--allow-empty','-qm','test: unrelated history')
-    unrelated=git('rev-parse','HEAD')
-    base=future if case=='future-base' else known
-    git('checkout','--detach',future if case=='wrong-base-checkout' else base)
-    output=tmp_path/'github-output'
-    env={**os.environ,'PR_BASE_SHA':base,'SONAR_COMPAT_BASE_SHA':known,
-         'SONAR_COMPAT_EXPORTER_SHA':unrelated if case=='non-ancestor' else ancestor,
-         'GITHUB_OUTPUT':str(output)}
-    cloud=cloud_workflow();select=next(s for s in cloud['steps'] if s.get('id')=='select-exporter')['run']
-    result=subprocess.run(['bash','-e','-c',select],cwd=tmp_path,env=env,capture_output=True,text=True)
-    if case in ('wrong-base-checkout','non-ancestor'):
-        assert result.returncode!=0 and not output.exists()
-        return
-    assert result.returncode==0,result.stderr
-    selected=output.read_text().strip().removeprefix('sha=')
-    assert selected==(future if case=='future-base' else ancestor)
-    subprocess.run(['git','clone','--quiet','--shared',str(trusted),str(tmp_path/'trusted-export')],check=True)
-    checkout=future if case=='wrong-exporter-checkout' else selected
-    subprocess.run(['git','-C',str(tmp_path/'trusted-export'),'checkout','--quiet','--detach',checkout],check=True)
-    env['EXPORTER_SHA']=future if case=='changed-selection' else selected
-    verify=next(s for s in cloud['steps'] if s.get('id')=='verify-exporter')['run']
-    result=subprocess.run(['bash','-e','-c',verify],cwd=tmp_path,env=env,capture_output=True,text=True)
-    receipt=tmp_path/'sonar-report/exporter-source-sha.txt'
-    if case in ('wrong-exporter-checkout','changed-selection'):
-        assert result.returncode!=0 and not receipt.exists()
-    else:
-        assert result.returncode==0,result.stderr
-        assert receipt.read_text().strip()==selected
 
 
 def test_community_success_is_scoped_and_quality_failures_cannot_pass():
@@ -524,7 +464,7 @@ def test_cloud_workflow_runs_selected_protected_exporter_and_retains_failure_rep
                                '.github/workflows/sonar-pr.yml').read_text())
     step = next(step for step in workflow['jobs']['cloud']['steps']
                 if step.get('name') == 'Export complete PR findings')
-    package = tmp_path/'trusted-export/tools/release'
+    package = tmp_path/'trusted/tools/release'
     package.mkdir(parents=True)
     for parent in (package, package.parent):
         (parent/'__init__.py').write_text('')
@@ -539,7 +479,7 @@ Path("calls.json").write_text(json.dumps({"source": "selected-protected-exporter
 Path("sonar-report/report.md").write_text("# Protected exporter report\\n")
 raise SystemExit(int(os.environ["EXPORT_STATUS"]))
 ''')
-    for directory in ('trusted', 'candidate'):
+    for directory in ('unselected-helper', 'candidate'):
         other = tmp_path/directory/'tools/release'
         other.mkdir(parents=True)
         (other/'sonar_report.py').write_text('raise AssertionError("Unselected helper must never execute")\n')

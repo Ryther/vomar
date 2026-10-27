@@ -2,9 +2,11 @@
 import ctypes as c
 import hashlib
 import json
+import os
 from pathlib import Path
 import struct
 import sys
+import sysconfig
 import subprocess
 import zlib
 import io
@@ -12,7 +14,6 @@ import zipfile
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
-from tools.firmware.tests.local_inputs import local_input
 from cryptography.hazmat.primitives.asymmetric import ec
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -467,6 +468,7 @@ def test_signed_unknown_watchdog_handoff_is_rejected(kotlin,tmp_path,policy):
 
 
 def test_independent_python_watchdog_descriptor_fixtures_preserve_exact_signed_capability(kotlin,tmp_path):
+    from tools.firmware.tests.local_inputs import local_input
     fixtures=ROOT/'experiments/inherited-watchdog-contract-20261023'
     local_input(fixtures/'synthetic-public.der')
     for purpose in ['qualified','candidate']:local_input(fixtures/f'synthetic-{purpose}.zip')
@@ -475,6 +477,7 @@ def test_independent_python_watchdog_descriptor_fixtures_preserve_exact_signed_c
 
 
 def test_real_signed_watchdog_candidate_has_capability_but_normal_release_still_rejects(kotlin,tmp_path):
+    from tools.firmware.tests.local_inputs import local_input
     fixture=local_input(ROOT/'experiments/common-candidate-0.6.2-20261023-watchdog-v1/vimar-30805-0.6.2-qualification-candidate.zip')
     assert hashlib.sha256(fixture.read_bytes()).hexdigest()=='665dba4b5ad4a852f384522e7133c2488b04e28b8ccd946bb012a7fb0eb3f40b'
     key=serialization.load_pem_public_key((ROOT/'firmware/keys/dev-public.pem').read_bytes())
@@ -535,3 +538,25 @@ def test_local_unsigned_descriptor_cannot_invent_active_watchdog_authority(kotli
         for name,data in entries.items():z.writestr(name,data)
     source=tmp_path/'local.zip';source.write_bytes(out.getvalue());pub=tmp_path/'public.der';pub.write_bytes(key)
     subprocess.run([*kotlin,'local-inspect',str(source),str(pub),'no-handoff'],check=True)
+
+
+def test_gradle_fixture_generator_runs_outside_repository_without_pythonpath(tmp_path):
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    output = tmp_path / "fixtures"
+    # Bypass editable-install path hooks so this matches a clean Gradle worker.
+    subprocess.run(
+        [sys.executable, "-S", "-c",
+         "import runpy, sys; sys.path.extend(sys.argv[3:]); "
+         "sys.argv = [sys.argv[1], '--output', sys.argv[2]]; "
+         "runpy.run_path(sys.argv[0], run_name='__main__')",
+         str(ROOT / "tools/android/generate_first_install_test_fixtures.py"), str(output),
+         sysconfig.get_path("purelib"), sysconfig.get_path("platlib")],
+        cwd=tmp_path, env=env, check=True, capture_output=True, text=True,
+    )
+    for name in ("candidate", "watchdog", "original", "original-erased-tail"):
+        with zipfile.ZipFile(output / f"{name}.zip") as package:
+            assert package.testzip() is None
+    for name in ("candidate", "watchdog"):
+        public_key = serialization.load_der_public_key((output / f"{name}-public.der").read_bytes())
+        assert isinstance(public_key, ec.EllipticCurvePublicKey)
