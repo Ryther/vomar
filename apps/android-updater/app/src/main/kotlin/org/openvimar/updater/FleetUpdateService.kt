@@ -58,7 +58,7 @@ class FleetUpdateService:Service(){
         else startForeground(NOTIFICATION,notification("Checking the selected update group…"))
     }
     private fun notification(message:String)=Notification.Builder(this,CHANNEL)
-        .setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("Vimar updates")
+        .setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("Vomar updates")
         .setContentText(message).setOngoing(true).setContentIntent(PendingIntent.getActivity(this,3,Intent(this,MainActivity::class.java),PendingIntent.FLAG_IMMUTABLE)).build()
     override fun onTimeout(startId:Int,fgsType:Int){runtime.queue.pauseAll();idleStop=true;mutableStatus.value="Android paused background work. Reopen Activity and check device status before resuming.";stopForeground(STOP_FOREGROUND_REMOVE);stopSelf()}
     override fun onDestroy(){if(!idleStop)runtime.queue.pauseAll();scope.cancel();super.onDestroy()}

@@ -18,3 +18,11 @@ requested restart, verified readback and observed device return are distinct.
 
 The inherited palette is established; the desktop rail/row composition is an
 implementation assumption while the user is unavailable, not a new user approval.
+
+The supplied Vomar concept 01 artwork lives in `assets/branding`; its manifest
+pins the original image bytes. Use the banner in the README and documentation
+home, the symbol in system icons, Settings app information on Android and the
+desktop header. In-app symbols use a compact ivory #FAF8F3 backplate in either
+theme. Preserve operational headings and visible status/Stop controls. Never
+recolor or stretch the raster artwork. See the branding README for synchronization
+and platform packaging.

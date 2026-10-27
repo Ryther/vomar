@@ -24,6 +24,7 @@ jobs:
       - run: python -m pip install --no-deps --no-build-isolation -e .
       - run: python -m tools.release.component_versions --output reports/component-versions.json
       - run: python -m tools.release.public_tree
+      - run: python -m tools.release.branding --check
       - run: python -m coverage run --source=. -m pytest tools/release/tests tools/dev/tests apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
       - run: mkdir -p reports && python -m coverage xml -o reports/python-coverage.xml
       - run: python -m tools.release.prepare_pr_analysis --python-coverage reports/python-coverage.xml --repository .

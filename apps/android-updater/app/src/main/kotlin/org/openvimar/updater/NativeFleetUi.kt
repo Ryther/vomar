@@ -621,7 +621,17 @@ internal class NativeFleetUi(
         section("Release checks")
         add(CheckBox(activity).apply{text="Check GitHub when Updates opens";setTextColor(color(R.color.ui_text));minHeight=dp(48);isChecked=store.preferences.getBoolean("autoCheck",true);setOnCheckedChangeListener{_,checked->store.preferences.edit().putBoolean("autoCheck",checked).apply()}})
         val appVersion=runCatching{activity.packageManager.getPackageInfo(activity.packageName,0).versionName}.getOrNull()
-        copy(listOfNotNull("Vimar Updater",appVersion).joinToString(" · "))
+        val brand=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(0,dp(16),0,dp(8))}
+        val mark=ImageView(activity).apply{
+            id=R.id.vomar_brand_icon
+            setImageResource(R.drawable.vomar_icon);scaleType=ImageView.ScaleType.FIT_CENTER
+            setPadding(dp(4),dp(4),dp(4),dp(4))
+            background=android.graphics.drawable.GradientDrawable().apply{setColor(color(R.color.vomar_icon_background));cornerRadius=dp(6).toFloat()}
+            importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }
+        brand.addView(mark,LinearLayout.LayoutParams(dp(40),dp(40)))
+        brand.addView(text(listOfNotNull(activity.getString(R.string.app_name),appVersion).joinToString(" · "),16).apply{setPadding(dp(12),0,0,0)},LinearLayout.LayoutParams(0,-2,1f))
+        add(brand)
     }
     private fun tools(){
         section("Install")
@@ -777,5 +787,5 @@ internal class NativeFleetUi(
             override fun afterTextChanged(s:Editable?){}
         })
     }
-    fun sourceNotice(message:String){AlertDialog.Builder(activity).setTitle("Vimar Updater").setMessage(message).setPositiveButton("Close",null).show()}
+    fun sourceNotice(message:String){AlertDialog.Builder(activity).setTitle(R.string.app_name).setMessage(message).setPositiveButton("Close",null).show()}
 }

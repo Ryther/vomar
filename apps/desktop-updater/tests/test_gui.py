@@ -31,6 +31,7 @@ class Worker(QObject):
 
 def test_native_navigation_keyboard_and_stop():
     app=QApplication.instance() or QApplication([]);theme(app,'light');w=Worker();window=Window(w);window.show();app.processEvents()
+    assert not window.windowIcon().isNull()
     assert window.stack.count()==3
     window.nav[2].click();assert window.stack.currentIndex()==2
     window.nav[0].click();assert window.stack.currentIndex()==0

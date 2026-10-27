@@ -60,6 +60,36 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
     }
     private fun click(text:String){val view=nodes().filterIsInstance<TextView>().firstOrNull{it.text.toString()==text||it.contentDescription?.toString()==text}?:error("Missing action $text");instrumentation.runOnMainSync{assertTrue(view.isEnabled);view.performClick()};instrumentation.waitForIdleSync()}
     private fun capture(name:String){instrumentation.waitForIdleSync();Thread.sleep(1500);val config=activity.resources.configuration;val viewport="${config.screenWidthDp}x${config.screenHeightDp}-font${(config.fontScale*100).toInt()}";val file=File(instrumentation.targetContext.getExternalFilesDir("ui-review-v050"),"$viewport/$name.png");file.parentFile!!.mkdirs();instrumentation.uiAutomation.takeScreenshot().let{bitmap->try{file.outputStream().use{bitmap.compress(Bitmap.CompressFormat.PNG,100,it)}}finally{bitmap.recycle()}}}
+    private fun verifyBrand(theme:String){
+        instrumentation.targetContext.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE).edit().putString("theme",theme).commit()
+        val native=fixture(emptyList())
+        instrumentation.runOnMainSync{native.navigate("settings")}
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync{nodes().filterIsInstance<ScrollView>().firstOrNull()?.fullScroll(View.FOCUS_DOWN)}
+        instrumentation.waitForIdleSync()
+        val context=instrumentation.targetContext
+        assertEquals("Vomar",context.applicationInfo.loadLabel(context.packageManager).toString())
+        assertTrue(context.packageManager.getApplicationIcon(context.packageName) is android.graphics.drawable.AdaptiveIconDrawable)
+        assertTrue(texts().any{it.startsWith("Vomar · ")})
+        val mark=native.root.findViewById<android.widget.ImageView>(R.id.vomar_brand_icon)
+        assertNotNull(mark)
+        val visible=android.graphics.Rect()
+        val layoutDeadline=System.currentTimeMillis()+10000
+        var fullyVisible=false
+        while(!fullyVisible&&System.currentTimeMillis()<layoutDeadline){
+            instrumentation.runOnMainSync{
+                nodes().filterIsInstance<ScrollView>().firstOrNull()?.fullScroll(View.FOCUS_DOWN)
+                fullyVisible=mark.height>0&&mark.getGlobalVisibleRect(visible)&&visible.height()==mark.height
+            }
+            if(!fullyVisible){instrumentation.waitForIdleSync();Thread.sleep(100)}
+        }
+        assertTrue("Brand symbol must be laid out and fully visible",fullyVisible)
+        windowNodes{it.firstOrNull()?.packageName?.toString()==context.packageName}
+        assertEquals(0,executions);assertEquals(0,imports)
+        capture("vomar-brand-${theme.lowercase()}")
+    }
+    fun testVomarBrandLight(){verifyBrand("Light")}
+    fun testVomarBrandDark(){verifyBrand("Dark")}
     fun testCurrentDeviceIsGreenAndExcludedFromUpdate(){
         val native=fixture(listOf(record(1,"0.6.1"),record(2)))
         assertTrue(nodes().any{it.contentDescription?.toString()?.contains("Up to date")==true});assertTrue(nodes().any{it.contentDescription?.toString()?.contains("Update available · BT")==true})

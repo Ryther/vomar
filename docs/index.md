@@ -1,5 +1,7 @@
 # Vomar documentation
 
+![Vomar — Independent open-source firmware](images/vomar-banner.png)
+
 Vomar is an independent firmware and updater project for compatible Vimar 30805
 dimmers. A coordinated distribution contains firmware, Android, desktop GUI/CLI
 and a Zigbee2MQTT converter. Firmware 1.0.0 remains a qualification candidate;

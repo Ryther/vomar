@@ -11,6 +11,7 @@ MinVersion=10.0.17763
 OutputBaseFilename=vomar-desktop-{#Version}-windows-x64-setup
 Compression=lzma2
 SolidCompression=yes
+SetupIconFile={#BrandIcon}
 UninstallDisplayIcon={app}\Vomar.exe
 [Files]
 Source: "{#Runtime}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

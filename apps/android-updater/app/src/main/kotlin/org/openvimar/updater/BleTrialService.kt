@@ -41,7 +41,7 @@ class BleTrialService:Service() {
         val open=PendingIntent.getActivity(this,61,Intent(this,BleTrialActivity::class.java),PendingIntent.FLAG_IMMUTABLE)
         val stop=PendingIntent.getService(this,62,Intent(this,BleTrialService::class.java).setAction(STOP),PendingIntent.FLAG_IMMUTABLE)
         val notification=Notification.Builder(this,"ble-trial").setSmallIcon(android.R.drawable.stat_sys_upload)
-            .setContentTitle(if(pairing)"Vomar: Zigbee pairing" else "Vimar: Bluetooth update")
+            .setContentTitle(if(pairing)"Vomar: Zigbee pairing" else "Vomar: Bluetooth update")
             .setContentText(if(pairing)"Open to review the selected dimmer and pairing request." else "Open to see progress. Stop preserves the saved transfer state.")
             .setContentIntent(open).setOngoing(true).addAction(Notification.Action.Builder(null,"Stop",stop).build()).build()
         if(Build.VERSION.SDK_INT>=29)startForeground(6,notification,ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)else startForeground(6,notification)

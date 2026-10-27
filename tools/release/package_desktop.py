@@ -66,15 +66,33 @@ def build(output,version):
     if platform.system()=='Darwin' and platform.machine() not in ('arm64','aarch64'):
         raise ValueError('macOS builds require Apple Silicon (arm64)')
     if not __import__('re').fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',version):raise ValueError('Distribution SemVer required')
+    from .branding import synchronize,SIZES
+    if synchronize(check=True):raise ValueError('Stale brand assets; run python -m tools.release.branding --sync')
     output=output.absolute();output.mkdir(parents=True,exist_ok=False)
     probe=probe_tools(output);licenses=notices(output)
     env={**os.environ,'VOMAR_PROBE_ROOT':str(probe),'VOMAR_NOTICES_ROOT':str(licenses),'MACOSX_DEPLOYMENT_TARGET':'14.4'}
+    brand=ROOT/'assets/branding'
+    if platform.system()=='Windows':env['VOMAR_NATIVE_ICON']=str(brand/'vomar.ico')
+    elif platform.system()=='Darwin':
+        iconset=output/'Vomar.iconset';iconset.mkdir()
+        for size in (16,32,128,256,512):
+            for scale in (1,2):
+                pixels=size*scale
+                original=brand/('vomar-icon.png' if pixels==1024 else f'png-sizes/vomar-icon-{pixels}.png')
+                shutil.copy2(original,iconset/f'icon_{size}x{size}{"@2x" if scale==2 else ""}.png')
+        native_icon=output/'Vomar.icns'
+        run('iconutil','--convert','icns','--output',native_icon,iconset)
+        env['VOMAR_NATIVE_ICON']=str(native_icon)
     spec=ROOT/'apps/desktop-updater/packaging/vomar.spec'
     run(sys.executable,'-m','PyInstaller','--clean','--noconfirm','--distpath',output/'dist','--workpath',output/'work',spec,cwd=ROOT,env=env)
     system=platform.system();arch='arm64' if platform.machine() in ('arm64','aarch64') else 'x64'
     bundle=output/'dist'/('Vomar.app' if system=='Darwin' else 'Vomar')
     if system=='Linux':
         shutil.copy2(ROOT/'apps/desktop-updater/packaging/linux/install.sh',bundle/'install.sh');shutil.copy2(ROOT/'apps/desktop-updater/packaging/linux/uninstall.sh',bundle/'uninstall.sh')
+        for size in SIZES:
+            icon=bundle/f'icons/{size}x{size}/apps/org.openvimar.updater.desktop.png'
+            icon.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copy2(brand/f'png-sizes/vomar-icon-{size}.png',icon)
         (bundle/'.vomar-runtime').write_text(version+'\n')
         artifact=output/f'vomar-desktop-{version}-linux-{arch}.tar.gz'
         with tarfile.open(artifact,'w:gz') as t:t.add(bundle,arcname='Vomar')
@@ -86,7 +104,7 @@ def build(output,version):
                 if p.is_file():z.write(p,'Vomar/'+str(p.relative_to(bundle)))
         catalog=json.loads((ROOT/'tools/release/runtime-tools.json').read_text());item=catalog['inno']['assets']['innosetup-7.1.0-x64.exe'];installer=output/'inno.exe';fetch(item,installer)
         run(installer,'/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER','/DIR='+str(output/'inno'))
-        run(output/'inno/ISCC.exe','/DVersion='+version,'/DRuntime='+str(bundle),'/O'+str(output),ROOT/'apps/desktop-updater/packaging/windows/vomar.iss')
+        run(output/'inno/ISCC.exe','/DVersion='+version,'/DRuntime='+str(bundle),'/DBrandIcon='+str(brand/'vomar.ico'),'/O'+str(output),ROOT/'apps/desktop-updater/packaging/windows/vomar.iss')
     elif system=='Darwin':
         run('codesign','--force','--deep','--sign','-',bundle)
         stage=output/'dmg';stage.mkdir();shutil.copytree(bundle,stage/'Vomar.app',symlinks=True);(stage/'Applications').symlink_to('/Applications',target_is_directory=True)

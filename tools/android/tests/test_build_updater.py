@@ -13,7 +13,7 @@ spec.loader.exec_module(m)
 # Exact package/SDK lines captured from pinned aapt2 35.0.0 during failed regeneration:
 # experiments/android-updater/20261022T150311Z/aapt2-badging.txt
 CAPTURED_BADGING = "package: name='org.openvimar.updater' versionCode='1' versionName='0.1.0' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'\nminSdkVersion:'26'\ntargetSdkVersion:'35'\n"
-CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='30'").replace("versionName='0.1.0'", "versionName='1.1.0'")
+CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='31'").replace("versionName='0.1.0'", "versionName='1.1.1'")
 
 def test_first_install_fixtures_generate_outside_repository_without_pythonpath(tmp_path):
     output = tmp_path / 'fixtures'

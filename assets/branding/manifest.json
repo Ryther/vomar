@@ -1,0 +1,100 @@
+{
+  "project": "Vomar",
+  "concept": "01",
+  "assets": [
+    {
+      "file": "png-sizes/vomar-icon-128.png",
+      "bytes": 10536,
+      "sha256": "8ff083b4454121b076d1c7db1d1e0a110beb249e8437185a6a65bea36ba148a2",
+      "width": 128,
+      "height": 128,
+      "mode": "RGBA"
+    },
+    {
+      "file": "png-sizes/vomar-icon-16.png",
+      "bytes": 685,
+      "sha256": "e00f68f2dd9b9a172e46c3489d3ef77662750307e09e3327705da409ee0d6232",
+      "width": 16,
+      "height": 16,
+      "mode": "RGBA"
+    },
+    {
+      "file": "png-sizes/vomar-icon-24.png",
+      "bytes": 1118,
+      "sha256": "2d43bf6730ba05ae066cd5957ebdaf1f6656dddf18714df128465d66e908016e",
+      "width": 24,
+      "height": 24,
+      "mode": "RGBA"
+    },
+    {
+      "file": "png-sizes/vomar-icon-256.png",
+      "bytes": 30783,
+      "sha256": "5a203c4a8fcb2530bf41c51b87b01d7ce2a86109e50a826c15a4c53fc593ef46",
+      "width": 256,
+      "height": 256,
+      "mode": "RGBA"
+    },
+    {
+      "file": "png-sizes/vomar-icon-32.png",
+      "bytes": 1641,
+      "sha256": "2567f5f98c09a81952ab7eb466aab4134829ad98ccd8b97eb3c6294a261bdd15",
+      "width": 32,
+      "height": 32,
+      "mode": "RGBA"
+    },
+    {
+      "file": "png-sizes/vomar-icon-48.png",
+      "bytes": 2708,
+      "sha256": "34567767239df2abf1deb6bf2000f1ce1d65c4c566976001f0b32ddd5de39b63",
+      "width": 48,
+      "height": 48,
+      "mode": "RGBA"
+    },
+    {
+      "file": "png-sizes/vomar-icon-512.png",
+      "bytes": 97904,
+      "sha256": "684fe013ceab633bfcd5842595c3860d6194dd6269ffe13d197f100738fbe58e",
+      "width": 512,
+      "height": 512,
+      "mode": "RGBA"
+    },
+    {
+      "file": "png-sizes/vomar-icon-64.png",
+      "bytes": 4058,
+      "sha256": "80b3e9117a7c81943bfcae69cb7483d5341c50337624bc2fe9d0045b54398431",
+      "width": 64,
+      "height": 64,
+      "mode": "RGBA"
+    },
+    {
+      "file": "vomar-banner.png",
+      "bytes": 581129,
+      "sha256": "b19cac78305ba8fbfc66e449b3ffa9567d6edc9cc6f3b7d7837cb65f4ffceae8",
+      "width": 1600,
+      "height": 400,
+      "mode": "RGBA"
+    },
+    {
+      "file": "vomar-icon.png",
+      "bytes": 314835,
+      "sha256": "d8ff2e3393e5e002bb90eecb30a0132d81914208b6a32ba587bf09f0ef4995e4",
+      "width": 1024,
+      "height": 1024,
+      "mode": "RGBA"
+    },
+    {
+      "file": "vomar.ico",
+      "bytes": 53314,
+      "sha256": "dcd5d7d1f480f813cb859fbd935b2bfcfb4aa8aa0577bc954959c2fd06b2518b",
+      "sizes": [
+        16,
+        24,
+        32,
+        48,
+        64,
+        128,
+        256
+      ]
+    }
+  ]
+}

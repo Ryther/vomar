@@ -1,5 +1,10 @@
 # Desktop application
 
+The GUI uses the Vomar amber V/open-switch icon in its header and system identity.
+Native packages include the corresponding Windows executable/installer icon,
+macOS application icon and Linux launcher icons. The per-user Linux uninstaller
+removes its matching icon copies and preserves customized replacements.
+
 Native packages provide `Vomar` (GUI) and `vomar-cli` (CLI), sharing the same Python
 engine. End users need no Python, Nordic SDK, Gradle or development container.
 Each supported platform is built separately; a Linux test does not qualify

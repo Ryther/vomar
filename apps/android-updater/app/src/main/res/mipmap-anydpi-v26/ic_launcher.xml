@@ -1,0 +1,4 @@
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/vomar_icon_background" />
+    <foreground android:drawable="@drawable/vomar_launcher_foreground" />
+</adaptive-icon>

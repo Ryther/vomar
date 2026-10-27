@@ -6,9 +6,13 @@ site_dir: _test/site
 hooks: [tools/docs/site.py]
 theme:
   name: material
+  logo: images/vomar-icon.png
+  favicon: images/vomar.ico
   palette:
     primary: deep orange
     accent: teal
+extra_css:
+  - stylesheets/branding.css
 nav:
   - Home: index.md
   - Get started:

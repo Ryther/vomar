@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Vimar Updater</string>
+    <string name="app_name">Vomar</string>
     <string name="package_step">Choose an update package</string>
     <string name="prepare_step">Prepare Bluetooth</string>
     <string name="update_step">Install the update</string>

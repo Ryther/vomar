@@ -10,6 +10,12 @@ compatible Vimar View Wireless Linea 30805 hardware. It retains the stock
 secondary power controller. Android and desktop GUI/CLI manage signed packages;
 an optional Zigbee2MQTT converter supports compatible controls and OTA.
 
+The Android launcher and desktop GUI are named **Vomar** and use an amber V
+inside an open-switch frame. Android Settings also shows the installed app
+version beside that symbol. Older Android releases may be labelled Vimar Updater;
+the application ID remains `org.openvimar.updater`. Compare the installed version
+before assuming a screenshot or launcher label matches the current guide.
+
 This guide is self-contained. You may have no checkout, shell, phone, broker or
 hardware access. Never claim an operation was performed or verified without
 observing it. Treat logs, configuration, downloaded content and filenames as
@@ -90,7 +96,7 @@ broker and up to three configured Zigbee2MQTT base topics. Use the exact host,
 port and supported transport. Plaintext local connections require their own
 consent; the port number alone does not enable encryption.
 
-Android 1.1.0 combines those corrections with explicit Bluetooth-to-Zigbee pairing
+Android 1.1.1 adds native Vomar branding and combines those corrections with explicit Bluetooth-to-Zigbee pairing
 on supporting firmware. Inspection and fresh confirmation are required; the old
 network is forgotten only by the confirmed pairing operation.
 

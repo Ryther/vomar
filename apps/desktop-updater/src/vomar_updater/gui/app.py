@@ -5,9 +5,17 @@ import json
 import sys
 from pathlib import Path
 from PySide6.QtCore import QThread,Signal,Qt,QTimer
-from PySide6.QtGui import QAction,QColor,QPalette,QKeySequence
+from PySide6.QtGui import QAction,QColor,QPalette,QKeySequence,QIcon
 from PySide6.QtWidgets import (QApplication,QMainWindow,QWidget,QVBoxLayout,QHBoxLayout,QFormLayout,QPushButton,QLabel,QStackedWidget,QTreeWidget,QTreeWidgetItem,QLineEdit,QComboBox,QFileDialog,QMessageBox,QInputDialog,QProgressBar,QScrollArea,QGroupBox,QCheckBox,QTabWidget,QDialog,QPlainTextEdit,QDialogButtonBox)
 from vomar_updater.service import Service
+
+
+def brand_icon():
+    icon=QIcon()
+    resources=Path(__file__).resolve().parents[1]/'resources'
+    for size in (16,24,32,48,64,128,256,512):
+        icon.addFile(str(resources/f'vomar-icon-{size}.png'))
+    return icon
 
 
 class Worker(QThread):
@@ -50,7 +58,9 @@ class Window(QMainWindow):
     def __init__(self,worker=None):
         super().__init__();self.setWindowTitle('Vomar');self.resize(1080,720);self.setMinimumSize(760,560);self.worker=worker or Worker();self.busy=False;self.device_rows=[];self.scanned=[];self.selected_session=None
         root=QWidget();self.setCentralWidget(root);outer=QVBoxLayout(root);outer.setContentsMargins(20,20,20,16);outer.setSpacing(16)
-        header=QHBoxLayout();brand=QLabel('Vomar');brand.setProperty('heading',True);header.addWidget(brand);header.addStretch();self.status=QLabel('Opening private application state…');self.status.setWordWrap(True);self.status.setAccessibleName('Operation status');header.addWidget(self.status,1)
+        icon=brand_icon();self.setWindowIcon(icon)
+        header=QHBoxLayout();mark=QLabel();mark.setPixmap(icon.pixmap(32,32));mark.setFixedSize(40,40);mark.setAlignment(Qt.AlignCenter);mark.setStyleSheet('background:#FAF8F3;border-radius:6px;');header.addWidget(mark)
+        brand=QLabel('Vomar');brand.setProperty('heading',True);header.addWidget(brand);header.addStretch();self.status=QLabel('Opening private application state…');self.status.setWordWrap(True);self.status.setAccessibleName('Operation status');header.addWidget(self.status,1)
         self.stop_button=QPushButton('Stop');self.stop_button.setAccessibleName('Stop the current operation');self.stop_button.clicked.connect(self.stop);self.stop_button.setEnabled(False);header.addWidget(self.stop_button);outer.addLayout(header)
         self.progress=QProgressBar();self.progress.setRange(0,100);self.progress.hide();outer.addWidget(self.progress)
         body=QHBoxLayout();nav=QVBoxLayout();nav.setSpacing(8);self.stack=QStackedWidget();self.nav=[]
@@ -221,8 +231,9 @@ class Window(QMainWindow):
 def main():
     import argparse
     p=argparse.ArgumentParser();p.add_argument('--state',type=Path);p.add_argument('--smoke-test',action='store_true');p.add_argument('--screenshot',type=Path);args,qt=p.parse_known_args()
-    app=QApplication([sys.argv[0],*qt]);app.setApplicationName('Vomar');app.setOrganizationName('OpenVimar');theme(app,'system');worker=Worker(args.state);window=Window(worker);window.show();worker.start()
+    app=QApplication([sys.argv[0],*qt]);app.setApplicationName('Vomar');app.setOrganizationName('OpenVimar');app.setDesktopFileName('org.openvimar.updater.desktop');app.setWindowIcon(brand_icon());theme(app,'system');worker=Worker(args.state);window=Window(worker);window.show();worker.start()
     if args.smoke_test:
+        if window.windowIcon().isNull():raise RuntimeError('Packaged Vomar icon is missing')
         def finish():
             if args.screenshot:window.grab().save(str(args.screenshot))
             window.close()
