@@ -17,7 +17,9 @@ from typing import Any
 JsonObject = dict[str, Any]
 Fetch = Callable[[str, JsonObject], JsonObject]
 METRICS = "ncloc,files,coverage,line_coverage,duplicated_lines_density,bugs,vulnerabilities,code_smells,security_hotspots,reliability_rating,security_rating,sqale_rating,alert_status"
-FILE_METRICS = "ncloc,coverage,line_coverage,duplicated_lines_density"
+NEW_COVERAGE_METRICS = "new_coverage,new_line_coverage,new_lines_to_cover,new_uncovered_lines,new_conditions_to_cover,new_uncovered_conditions"
+METRICS += "," + NEW_COVERAGE_METRICS
+FILE_METRICS = "ncloc,coverage,line_coverage,duplicated_lines_density," + NEW_COVERAGE_METRICS
 
 
 def _pages(fetch: Fetch, endpoint: str, params: JsonObject, field: str, size: int) -> list[JsonObject]:
@@ -73,7 +75,10 @@ def export_analysis(
     for name, value in (("gate.json", gate), ("measures.json", measures), ("issues.json", issues), ("files.json", files), ("hotspots.json", hotspots)):
         _write_json(directory, name, value)
     status = gate["projectStatus"]["status"]
-    lines = ["# Sonar analysis report", "", f"Project: `{project}`", f"Scope: {'PR #' + pull_request if pull_request else 'overall branch'}", f"Quality gate: **{status}**", f"Open issues: **{len(issues)}**", f"Security hotspots: **{len(hotspots)}**", "", "The JSON files retain full API records, including issue flows and file measures.", "", "## Open issues", ""]
+    lines = ["# Sonar analysis report", "", f"Project: `{project}`", f"Scope: {'PR #' + pull_request if pull_request else 'overall branch'}", f"Quality gate: **{status}**", f"Open issues: **{len(issues)}**", f"Security hotspots: **{len(hotspots)}**", "", "The JSON files retain full API records, including issue flows and file measures.", "", "## Quality gate conditions", ""]
+    for condition in gate["projectStatus"].get("conditions", []):
+        lines.append(f"- `{condition.get('metricKey', '')}`: **{condition.get('status', '')}** · actual {condition.get('actualValue', 'unknown')} · threshold {condition.get('comparator', '')} {condition.get('errorThreshold', 'unknown')}")
+    lines.extend(["", "## Open issues", ""])
     for issue in issues:
         location = issue.get("component", "").partition(":")[2]
         line = issue.get("line")
@@ -125,8 +130,6 @@ def export_candidate(fetch: Fetch, project: str, directory: Path, pull_request: 
 
     before = current()
     gate = fetch('/api/qualitygates/project_status', {'analysisId': task['analysisId']})
-    if gate['projectStatus']['status'] != 'OK':
-        raise ValueError('Candidate analysis quality gate failed')
     def bound_fetch(path, params):
         return gate if path == '/api/qualitygates/project_status' else fetch(path, params)
     result = export_analysis(bound_fetch, project, directory, pull_request=pull_request)
@@ -139,6 +142,8 @@ def export_candidate(fetch: Fetch, project: str, directory: Path, pull_request: 
         'firmwareC': 'separate mandatory CodeQL required check',
         'fullReleaseAnalysis': False,
     })
+    if gate['projectStatus']['status'] != 'OK':
+        raise ValueError('Candidate analysis quality gate failed')
     return result
 
 

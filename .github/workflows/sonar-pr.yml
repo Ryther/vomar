@@ -76,8 +76,12 @@ jobs:
           CANDIDATE_SHA: ${{ inputs.sha }}
         run: |
           test -s sonar-report/task/report-task.txt
-          PYTHONPATH=trusted python -m tools.release.sonar_report --project Ryther_vomar --pull-request "$PR_NUMBER" --sha "$CANDIDATE_SHA" --task-file sonar-report/task/report-task.txt
-          cat sonar-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          export_status=0
+          PYTHONPATH=trusted python -m tools.release.sonar_report --project Ryther_vomar --pull-request "$PR_NUMBER" --sha "$CANDIDATE_SHA" --task-file sonar-report/task/report-task.txt || export_status=$?
+          if test -s sonar-report/report.md; then
+            cat sonar-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+          test "$export_status" = 0
           test "$SCAN_OUTCOME" = success
       - id: report
         if: always()
