@@ -69,7 +69,7 @@ def export_analysis(
     measures = fetch("/api/measures/component", {"component": project, "metricKeys": METRICS, **scope})
     issues = _pages(fetch, "/api/issues/search", {"componentKeys": project, "resolved": "false", **scope}, "issues", page_size)
     files = _pages(fetch, "/api/measures/component_tree", {"component": project, "metricKeys": FILE_METRICS, "qualifiers": "FIL", **scope}, "components", page_size)
-    hotspots = _pages(fetch, "/api/hotspots/search", {"projectKey": project, **scope}, "hotspots", page_size)
+    hotspots = _pages(fetch, "/api/hotspots/search", {"project": project, **scope}, "hotspots", page_size)
     for name, value in (("gate.json", gate), ("measures.json", measures), ("issues.json", issues), ("files.json", files), ("hotspots.json", hotspots)):
         _write_json(directory, name, value)
     status = gate["projectStatus"]["status"]

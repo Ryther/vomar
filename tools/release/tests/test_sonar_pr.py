@@ -41,11 +41,17 @@ def test_export_retains_all_paginated_findings_and_missing_pages_fail(tmp_path):
         if path.endswith('/issues/search'):
             item = {**issue, 'key': str(params['p'])}
             return {'paging': {'pageIndex': params['p'], 'pageSize': 1, 'total': 2}, 'issues': [item]}
+        if path.endswith('/hotspots/search'):
+            assert params == {'project': 'project', 'pullRequest': '8', 'p': 1, 'ps': 1}
+            return {'paging': {'pageIndex': 1, 'pageSize': 1, 'total': 1},
+                    'hotspots': [{'key': 'hotspot-one', 'status': 'TO_REVIEW'}]}
         field = 'components' if path.endswith('component_tree') else 'hotspots'
         return {'paging': {'pageIndex': 1, 'pageSize': 1, 'total': 0}, field: []}
     result = report.export_analysis(fetch, 'project', tmp_path, pull_request='8', page_size=1)
     assert [i['key'] for i in result['issues']] == ['1', '2']
     assert json.loads((tmp_path/'issues.json').read_text())[1]['flows'] == issue['flows']
+    assert json.loads((tmp_path/'hotspots.json').read_text()) == [
+        {'key': 'hotspot-one', 'status': 'TO_REVIEW'}]
     assert (tmp_path/'report.md').is_file()
     def missing(path, params):
         value = fetch(path, params)
