@@ -1126,6 +1126,8 @@
 
 !/tools/dev/tests/test_docs_site.py
 !/tools/dev/container_check.py
+!/tools/dev/local_container.py
+!/tools/dev/tests/test_local_container.py
 !/tools/dev/tests/test_container_check.py
 
 !/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/ZigbeeDeviceMetadata.kt

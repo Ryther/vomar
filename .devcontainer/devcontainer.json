@@ -49,8 +49,13 @@
   },
   "postStartCommand": "python tools/dev/container_check.py",
   "runArgs": [
-    "--device=${localEnv:VOMAR_USB_DEVICE:/dev/null}",
+    "--volume=${localEnv:VOMAR_USB_DEVICE:vomar-no-host-usb}:/dev/bus/usb",
+    "--device-cgroup-rule=c 189:* rmw",
     "--group-add=plugdev",
-    "--volume=${localEnv:VOMAR_DBUS_SOURCE:vomar-no-host-dbus}:/run/dbus:ro"
-  ]
+    "--volume=${localEnv:VOMAR_DBUS_SOURCE:vomar-no-host-dbus}:/run/dbus:ro",
+    "--device=${localEnv:VOMAR_KVM_DEVICE:/dev/null}",
+    "--group-add=${localEnv:VOMAR_KVM_GID:65534}"
+  ],
+  "workspaceFolder": "${localWorkspaceFolder}",
+  "workspaceMount": "source=${localWorkspaceFolder},target=${localWorkspaceFolder},type=bind"
 }
