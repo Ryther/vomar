@@ -42,9 +42,13 @@ struct dimmer_config dimmer_config_defaults(void)
 struct dimmer_config dimmer_config_vimar_defaults(void)
 {
     struct dimmer_config config = dimmer_config_defaults();
-    config.long_press_ms = 500;
+    config.long_press_ms = 300;
     config.level_step_period_ms = 50;
     config.level_step = 3;
+    config.led_on = (struct dimmer_led_profile) { .r = 255, .g = 254, .b = 250, .intensity = 10 };
+    config.led_off = (struct dimmer_led_profile) { .r = 255, .g = 110, .b = 84, .intensity = 25 };
+    config.led_on_intensity_mode = DIMMER_LED_INTENSITY_FOLLOW_LEVEL;
+    config.led_on_min_intensity = 10;
     return config;
 }
 

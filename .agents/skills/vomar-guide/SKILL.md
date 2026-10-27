@@ -93,6 +93,12 @@ Saved/retained broker readings may be stale; Android marks historical readings
 establish current eligibility. Device organization and a manually maintained
 UID/IEEE/MAC registry are not prerequisites for a manual compatible update.
 
+New Vimar firmware defaults use a 300 ms long press, 50 ms dimming steps of
+3/254, a warm standby LED (RGB 255/110/84 at 25%) and an ON LED (RGB
+255/254/250) that follows the accepted light level from 10% to 100%. Existing
+saved settings survive an upgrade; these defaults apply when no saved
+configuration exists. Power restoration uses the previous state.
+
 ## Review a device operation
 
 For an existing compatible custom target, use the explicit Bluetooth discovery

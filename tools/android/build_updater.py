@@ -15,7 +15,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[2]
 APP = ROOT / 'apps/android-updater'
 SDK = Path(os.environ.get('ANDROID_HOME', ROOT / 'work/android-sdk'))
-TOOLS = SDK / 'build-tools/35.0.0'
+TOOLS = SDK / 'build-tools/36.0.0'
 _OWNER = (APP / 'app/build.gradle.kts').read_text()
 APP_VERSION = re.search(r'versionName="([0-9]+\.[0-9]+\.[0-9]+)"', _OWNER)[1]
 APP_VERSION_CODE = int(re.search(r'versionCode=([0-9]+)', _OWNER)[1])
@@ -46,9 +46,9 @@ def audit_entries(apk, public, fixture, anchor_path='res/raw/firmware_public.der
         if anchor_path not in names or z.read(anchor_path) != public: raise ValueError('Release trust anchor mismatch')
         for name in names:
             data=z.read(name)
-            # Published coroutines 1.10.2 ships one JVM class with a .bin name.
+            # Published coroutines 1.11.0 ships one JVM class with a .bin name.
             approved_runtime_bin=(name=='DebugProbesKt.bin' and hashlib.sha256(data).hexdigest()==
-                                  'cd3da36122413f84be484c77cde4a77729f9e8f81a285408d073300c8385ca3a')
+                                  '065bd792b8527764f33147188302af5bf9e2a8da40fde0830dc111ad26dae40e')
             if (name.endswith(('.pem','.p12','.pfx','.jks','.keystore','.bin','.zip','.dat','.hex','.apk','.dump','.key')) and not approved_runtime_bin) or 'test-fixture' in name.lower():
                 raise ValueError('Unexpected sensitive/firmware archive entry: '+name)
             if name.endswith('.der') and name!=anchor_path: raise ValueError('Unexpected DER key in APK')
@@ -139,7 +139,7 @@ def build(output):
     report=release_status()
     report.update(tests={'core':test_totals(APP/'core/build/test-results/test'),'app':test_totals(APP/'app/build/test-results/testDebugUnitTest')},apk=str(apk.relative_to(ROOT)),sha256=digest,software_checks='passed',tasks=tasks,
                   entry_count=len(entries),trust_anchor_sha256=hashlib.sha256(public).hexdigest(),
-                  toolchain={'sdk':35,'build_tools':'35.0.0','gradle':'8.11.1','agp':'8.10.1','kotlin':'2.2.20'},
+                  toolchain={'sdk':37,'sdk_minor':0,'build_tools':'36.0.0','gradle':'9.6.0','agp':'9.4.1','kotlin':'2.4.21'},
                   notices_sha256=hashlib.sha256((ROOT/'THIRD_PARTY_NOTICES.md').read_bytes()).hexdigest())
     (output/'report.json').write_text(json.dumps(report,indent=2)+'\n')
     return report

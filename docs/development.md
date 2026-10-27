@@ -6,9 +6,9 @@ research work use the same container. Install additional tools there as needed;
 there is no hardware/research profile to switch to.
 
 The Ubuntu image pins Python 3.13.12, Node 24 and assistant packages; npm verifies
-package integrity. Java 21 runs Kotlin; Java 17 remains the target. Git and the
-OpenSSH client, Docker CLI/Buildx, GitHub CLI, Codex, OpenCode, Claude and the
-Linux GUI runtime are available. Startup checks Docker, gh and `ssh -V` without
+package integrity. Java 21 runs Gradle 9.6.0, AGP 9.4.1 and Kotlin 2.4.21;
+Java 17 remains the bytecode target. Git and the OpenSSH client, Docker CLI/Buildx,
+GitHub CLI, Codex, OpenCode, Claude and the Linux GUI runtime are available. Startup checks Docker, gh and `ssh -V` without
 logging in, contacting an assistant or opening hardware.
 
 Docker and gh use official Dev Container Features pinned by OCI digest. The
@@ -59,7 +59,7 @@ python tools/dev/bootstrap.py research
 ```
 
 Android setup downloads minimal command tools with a pinned checksum. Accept SDK
-licenses interactively, then install android-35 and build-tools 35.0.0 as printed
+licenses interactively, then install android-37.0 and build-tools 36.0.0 as printed
 by the helper. Firmware setup uses the 55-project frozen public west manifest,
 a separate Python environment and only the ARM Zephyr SDK toolchain. Research
 setup installs gdb-multiarch, binwalk and wireshark-common; install a reviewed

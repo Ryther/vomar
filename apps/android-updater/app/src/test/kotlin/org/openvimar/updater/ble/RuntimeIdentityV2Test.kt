@@ -1,10 +1,10 @@
 package org.openvimar.updater.ble
 
-import io.runtime.mcumgr.McuMgrScheme
-import io.runtime.mcumgr.McuMgrTransport
-import io.runtime.mcumgr.McuMgrCallback
-import io.runtime.mcumgr.response.McuMgrResponse
-import io.runtime.mcumgr.util.CBOR
+import no.nordicsemi.android.mcumgr.McuMgrScheme
+import no.nordicsemi.android.mcumgr.McuMgrTransport
+import no.nordicsemi.android.mcumgr.McuMgrCallback
+import no.nordicsemi.android.mcumgr.response.McuMgrResponse
+import no.nordicsemi.android.mcumgr.util.CBOR
 import org.junit.Assert.*
 import org.junit.Test
 import org.openvimar.updater.core.LoaderContract
@@ -41,6 +41,7 @@ class RuntimeIdentityV2Test {
             override fun <T:McuMgrResponse> send(bytes:ByteArray,timeout:Long,type:Class<T>):T=error("Synchronous send unused")
             override fun <T:McuMgrResponse> send(bytes:ByteArray,timeout:Long,type:Class<T>,callback:McuMgrCallback<T>){packets+=bytes}
             override fun connect(callback:McuMgrTransport.ConnectionCallback?){}
+            override fun changeMode(name:String,callback:McuMgrTransport.ModeChangeCallback?):Boolean=error("Implicit peer or mode change is not permitted")
             override fun release(){}
             override fun addObserver(observer:McuMgrTransport.ConnectionObserver){}
             override fun removeObserver(observer:McuMgrTransport.ConnectionObserver){}
@@ -48,11 +49,11 @@ class RuntimeIdentityV2Test {
         val manager=RuntimeIdentityManager(transport)
         manager.readV2(object:McuMgrCallback<RuntimeIdentityV2Response>{
             override fun onResponse(response:RuntimeIdentityV2Response){}
-            override fun onError(error:io.runtime.mcumgr.exception.McuMgrException){}
+            override fun onError(error:no.nordicsemi.android.mcumgr.exception.McuMgrException){}
         })
         manager.read(object:McuMgrCallback<RuntimeIdentityResponse>{
             override fun onResponse(response:RuntimeIdentityResponse){}
-            override fun onError(error:io.runtime.mcumgr.exception.McuMgrException){}
+            override fun onError(error:no.nordicsemi.android.mcumgr.exception.McuMgrException){}
         })
         assertEquals(listOf(1,0),packets.map{it[7].toInt()})
         for(packet in packets){assertEquals(0,packet[0].toInt() and 7);assertEquals(0x80,packet[4].toInt() and 255);assertEquals(0x40,packet[5].toInt());assertTrue(StrictSmpCbor.decode(packet.copyOfRange(8,packet.size)).isEmpty())}
