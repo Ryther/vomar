@@ -1,8 +1,8 @@
 """Collect actual host C execution coverage from the existing Python native suites.
 
-The compiler wrapper copies .gcno before disposable test directories vanish;
-profile data is written outside those directories. No device/toolchain execution
-or physical qualification follows from this report.
+The compiler wrapper preserves generated harness sources and copies .gcno before
+disposable test directories vanish; profile data is written outside those
+directories. No device/toolchain execution or physical qualification follows.
 """
 import argparse
 import json
@@ -24,12 +24,37 @@ def matching_notes(data,profile):
  raise ValueError('Executed profile has no matching compiler map')
 
 WRAPPER='''#!/usr/bin/env python3
-import glob,os,shutil,subprocess,sys,time,uuid
+import glob,os,shutil,subprocess,sys,tempfile,time,uuid
 from pathlib import Path
 args=sys.argv[1:]
 if any(x in args for x in ('--version','-dumpversion','-dumpmachine','-print-search-dirs')):raise SystemExit(subprocess.call([os.environ['VOMAR_REAL_GCC'],*args]))
 profile=Path(os.environ['VOMAR_C_PROFILE'])/uuid.uuid4().hex;profile.mkdir();started=time.time()
 sources=[a for a in args if a.endswith(('.c','.S')) and not a.startswith('-')]
+root=Path(os.environ.get('VOMAR_C_SOURCE_ROOT',os.getcwd())).resolve()
+temporary=Path(tempfile.gettempdir()).resolve();snapshots={}
+def preserve_directory(directory):
+ original=Path(directory).resolve()
+ if original.is_relative_to(root) or not original.is_relative_to(temporary) or original==temporary or not original.is_dir():return original
+ if profile.is_relative_to(original):raise ValueError('Coverage snapshot cannot contain its output directory')
+ if original not in snapshots:
+  target=profile/'sources'/str(len(snapshots));shutil.copytree(original,target,symlinks=True)
+  snapshots[original]=target
+ return snapshots[original]
+preserved={}
+for source in sources:
+ original=Path(source).resolve()
+ preserved[source]=str(preserve_directory(original.parent)/original.name)
+rewritten=[];index=0
+while index<len(args):
+ arg=args[index]
+ if arg in ('-I','-iquote','-isystem','-include'):
+  value=args[index+1]
+  if arg=='-include':value=str(preserve_directory(Path(value).parent)/Path(value).name)
+  else:value=str(preserve_directory(value))
+  rewritten.extend([arg,value]);index+=2;continue
+ if arg.startswith('-I') and len(arg)>2:arg='-I'+str(preserve_directory(arg[2:]))
+ rewritten.append(arg);index+=1
+args=rewritten
 common=['--coverage','-fprofile-abs-path','-fprofile-dir='+str(profile)]
 extra=[]
 if len(sources)>1 and '-c' not in args and '-fsyntax-only' not in args:
@@ -39,10 +64,12 @@ if len(sources)>1 and '-c' not in args and '-fsyntax-only' not in args:
   index=flags.index('-o');del flags[index:index+2]
  for i,source in enumerate(sources):
   obj=directory/('unit'+str(i)+'.o')
-  r=subprocess.run([os.environ['VOMAR_REAL_GCC'],*common,*flags,'-c',source,'-o',str(obj)])
+  r=subprocess.run([os.environ['VOMAR_REAL_GCC'],*common,*flags,'-c',preserved[source],'-o',str(obj)])
   if r.returncode:raise SystemExit(r.returncode)
   objects[source]=str(obj)
  args=[objects.get(a,a) for a in args];extra=list(directory.glob('*.gcno'))
+else:
+ args=[preserved.get(a,a) for a in args]
 result=subprocess.run([os.environ['VOMAR_REAL_GCC'],*common,*args])
 if result.returncode==0:
  out=Path(args[args.index('-o')+1]).absolute() if '-o' in args else Path.cwd()/'a.out'
@@ -53,7 +80,7 @@ raise SystemExit(result.returncode)
 '''
 def main():
  p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);a=p.parse_args();output=a.output.resolve();profile=output/'profiles';profile.mkdir(parents=True,exist_ok=True);bin_dir=output/'bin';bin_dir.mkdir(exist_ok=True);wrapper=bin_dir/'gcc';wrapper.write_text(WRAPPER);wrapper.chmod(0o755);(bin_dir/'cc').write_text(WRAPPER);(bin_dir/'cc').chmod(0o755)
- env={**os.environ,'VOMAR_REAL_GCC':shutil.which('gcc'),'VOMAR_C_PROFILE':str(profile),'PATH':str(bin_dir)+os.pathsep+os.environ['PATH']}
+ env={**os.environ,'VOMAR_REAL_GCC':shutil.which('gcc'),'VOMAR_C_PROFILE':str(profile),'VOMAR_C_SOURCE_ROOT':str(ROOT),'PATH':str(bin_dir)+os.pathsep+os.environ['PATH']}
  subprocess.run([sys.executable,'-m','pytest','tools/firmware/tests','tools/hardware/tests','tools/android/tests','-q'],cwd=ROOT,env=env,check=True)
  data=list(profile.rglob('*.gcda'))
  if not data:raise ValueError('No actual native execution coverage was recorded')
