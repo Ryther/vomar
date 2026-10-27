@@ -91,6 +91,10 @@ int main(void) {
 #include <assert.h>
 #include <stdint.h>
 #include "zigbee_custom_codec.h"
+#include <string.h>
+#define ZB_ZCL_ATTR_TYPE_U32 0x23
+#define ZB_ZCL_HI_MAX_PAYLOAD_SIZE 66U
+#define BUILD_ASSERT(condition, ...) _Static_assert(condition, #condition)
 typedef uint8_t zb_bufid_t;
 typedef uint8_t zb_uint8_t;
 typedef uint16_t zb_uint16_t;
@@ -106,12 +110,13 @@ typedef void zb_addr_u;
 static uint8_t bytes[64];
 static unsigned length;
 static unsigned completions;
-static struct { uint8_t led_runtime_r,led_runtime_g,led_runtime_b,led_runtime_intensity,led_runtime_effect,led_override_active,applied_output_on,applied_output_level,transition_active; } context={9,8,7,65,1,1,1,123,1};
+static struct { uint8_t led_runtime_r,led_runtime_g,led_runtime_b,led_runtime_intensity,led_runtime_effect,led_override_active,applied_output_on,applied_output_level,transition_active,last_boot_reason; uint32_t last_reset_flags,boot_sequence; } context={9,8,7,65,1,1,1,123,1,2,0xaabbccdd,0x12345678};
 #define ZB_ZCL_START_PACKET(buffer) bytes
 #define ZB_ZCL_CONSTRUCT_GENERAL_COMMAND_REQ_FRAME_CONTROL_A(...) ((void)0)
 #define ZB_ZCL_CONSTRUCT_COMMAND_HEADER(...) ((void)0)
 #define ZB_ZCL_PACKET_PUT_DATA8(command,value) (*(command)++=(value))
 #define ZB_ZCL_PACKET_PUT_DATA16_VAL(command,value) do { *(command)++=(value)&255; *(command)++=(value)>>8; } while(0)
+#define ZB_ZCL_PACKET_PUT_DATA32_VAL(command,value) do { uint32_t v=(value); for(unsigned j=0;j<4;j++){*(command)++=v;v>>=8;} } while(0)
 static void led_runtime_report_sent(zb_bufid_t buffer) { (void)buffer; }
 static void zb_buf_free(zb_bufid_t buffer) { (void)buffer; }
 static void snapshot_complete(bool success) { assert(!success); ++completions; }
@@ -123,7 +128,7 @@ static int zb_zcl_finish_and_send_packet(zb_bufid_t b,uint8_t *end,const zb_addr
         harness += match.group(0) + r"""
 int main(void) {
  send_led_runtime_report(1);
- assert(length==36 && completions==0);
+ assert(length==54 && completions==0);
  const uint8_t values[]={9,8,7,65,1,1};
  for(unsigned i=0;i<6;i++) {
   assert(bytes[i*4]==i && bytes[i*4+1]==5);
@@ -136,6 +141,8 @@ int main(void) {
   assert(bytes[26+i*4]==(i==1?0x20:0x10));
   assert(bytes[27+i*4]==output[i]);
  }
+ const uint8_t boot[]={0x0a,0x07,0x20,2,0x0b,0x07,0x23,0xdd,0xcc,0xbb,0xaa,0x0c,0x07,0x23,0x78,0x56,0x34,0x12};
+ assert(!memcmp(bytes+36,boot,sizeof(boot)));
  return 0;
 }
 """

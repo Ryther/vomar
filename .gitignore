@@ -868,6 +868,7 @@
 !/tools/firmware/tests/test_zigbee_led_runtime.py
 !/tools/firmware/tests/test_zigbee_ota.py
 !/tools/firmware/tests/test_zigbee_report_policy.py
+!/tools/firmware/tests/test_zigbee_protection_reports.py
 !/tools/firmware/tests/test_zigbee_reset_guard.py
 !/tools/firmware/tests/test_zigbee_runtime_contract.py
 !/tools/firmware/tests/vimar_buttons_test.c

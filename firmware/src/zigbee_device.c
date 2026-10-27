@@ -572,6 +572,8 @@ static void led_runtime_report_sent(zb_bufid_t buffer)
 
 static void send_led_runtime_report(zb_bufid_t buffer)
 {
+    BUILD_ASSERT(57U <= ZB_ZCL_HI_MAX_PAYLOAD_SIZE,
+        "LED/boot snapshot must fit extended-address ZCL payload");
     zb_uint16_t coordinator = ZB_NWK_COORDINATOR_ADDR;
     zb_uint8_t *command = ZB_ZCL_START_PACKET(buffer);
     ZB_ZCL_CONSTRUCT_GENERAL_COMMAND_REQ_FRAME_CONTROL_A(command,
@@ -606,6 +608,17 @@ static void send_led_runtime_report(zb_bufid_t buffer)
     ZB_ZCL_PACKET_PUT_DATA16_VAL(command, VIMAR_ATTR_TRANSITION_ACTIVE);
     ZB_ZCL_PACKET_PUT_DATA8(command, ZB_ZCL_ATTR_TYPE_BOOL);
     ZB_ZCL_PACKET_PUT_DATA8(command, context.transition_active);
+    /* Move boot fields from the protection report into the existing LED
+     * frame:57+52 bytes replaces39+70, with the same packet count. */
+    ZB_ZCL_PACKET_PUT_DATA16_VAL(command,VIMAR_ATTR_LAST_BOOT_REASON);
+    ZB_ZCL_PACKET_PUT_DATA8(command,ZB_ZCL_ATTR_TYPE_U8);
+    ZB_ZCL_PACKET_PUT_DATA8(command,context.last_boot_reason);
+    ZB_ZCL_PACKET_PUT_DATA16_VAL(command,VIMAR_ATTR_LAST_RESET_FLAGS);
+    ZB_ZCL_PACKET_PUT_DATA8(command,ZB_ZCL_ATTR_TYPE_U32);
+    ZB_ZCL_PACKET_PUT_DATA32_VAL(command,context.last_reset_flags);
+    ZB_ZCL_PACKET_PUT_DATA16_VAL(command,VIMAR_ATTR_BOOT_SEQUENCE);
+    ZB_ZCL_PACKET_PUT_DATA8(command,ZB_ZCL_ATTR_TYPE_U32);
+    ZB_ZCL_PACKET_PUT_DATA32_VAL(command,context.boot_sequence);
     zb_ret_t error = zb_zcl_finish_and_send_packet(buffer, command,
         (const zb_addr_u *)(const void *)&coordinator,
         ZB_APS_ADDR_MODE_16_ENDP_PRESENT, VIMAR_ZIGBEE_ENDPOINT,
@@ -620,11 +633,13 @@ static void send_led_runtime_report(zb_bufid_t buffer)
 static void protection_report_sent(zb_bufid_t buffer)
 {
  zb_zcl_command_send_status_t *status=ZB_BUF_GET_PARAM(buffer,zb_zcl_command_send_status_t);
- vimar_fault_diag_report(0x80000000u|((uint32_t)VIMAR_CUSTOM_CLUSTER_ID<<8)|ZB_ZCL_CMD_REPORT_ATTRIB,70,status->status);
+ vimar_fault_diag_report(0x80000000u|((uint32_t)VIMAR_CUSTOM_CLUSTER_ID<<8)|ZB_ZCL_CMD_REPORT_ATTRIB,52,status->status);
  bool success=status->status==RET_OK;zb_buf_free(buffer);snapshot_complete(success);
 }
 static void send_protection_report(zb_bufid_t buffer)
 {
+ BUILD_ASSERT(52U <= ZB_ZCL_HI_MAX_PAYLOAD_SIZE,
+     "Protection snapshot must fit extended-address ZCL payload");
  zb_uint16_t coordinator=ZB_NWK_COORDINATOR_ADDR;
  zb_uint8_t *command=ZB_ZCL_START_PACKET(buffer);
  ZB_ZCL_CONSTRUCT_GENERAL_COMMAND_REQ_FRAME_CONTROL_A(command,ZB_ZCL_FRAME_DIRECTION_TO_CLI,ZB_ZCL_NOT_MANUFACTURER_SPECIFIC,ZB_ZCL_DISABLE_DEFAULT_RESPONSE);
@@ -659,15 +674,6 @@ static void send_protection_report(zb_bufid_t buffer)
  ZB_ZCL_PACKET_PUT_DATA16_VAL(command,VIMAR_ATTR_P031_MONITOR_UPTIME);
  ZB_ZCL_PACKET_PUT_DATA8(command,ZB_ZCL_ATTR_TYPE_U32);
  ZB_ZCL_PACKET_PUT_DATA32_VAL(command,context.p031_monitor_uptime_s);
- ZB_ZCL_PACKET_PUT_DATA16_VAL(command,VIMAR_ATTR_LAST_BOOT_REASON);
- ZB_ZCL_PACKET_PUT_DATA8(command,ZB_ZCL_ATTR_TYPE_U8);
- ZB_ZCL_PACKET_PUT_DATA8(command,context.last_boot_reason);
- ZB_ZCL_PACKET_PUT_DATA16_VAL(command,VIMAR_ATTR_LAST_RESET_FLAGS);
- ZB_ZCL_PACKET_PUT_DATA8(command,ZB_ZCL_ATTR_TYPE_U32);
- ZB_ZCL_PACKET_PUT_DATA32_VAL(command,context.last_reset_flags);
- ZB_ZCL_PACKET_PUT_DATA16_VAL(command,VIMAR_ATTR_BOOT_SEQUENCE);
- ZB_ZCL_PACKET_PUT_DATA8(command,ZB_ZCL_ATTR_TYPE_U32);
- ZB_ZCL_PACKET_PUT_DATA32_VAL(command,context.boot_sequence);
  zb_ret_t error=zb_zcl_finish_and_send_packet(buffer,command,(const zb_addr_u *)(const void *)&coordinator,
  ZB_APS_ADDR_MODE_16_ENDP_PRESENT,VIMAR_ZIGBEE_ENDPOINT,VIMAR_ZIGBEE_ENDPOINT,ZB_AF_HA_PROFILE_ID,VIMAR_CUSTOM_CLUSTER_ID,protection_report_sent);
  if(error!=RET_OK){zb_buf_free(buffer);snapshot_complete(false);}
