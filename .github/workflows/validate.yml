@@ -39,11 +39,12 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with: {node-version: '24.22.1'}
       - run: npm ci --prefix .devcontainer/assistants --omit=dev --ignore-scripts
-      - name: Build and reopen the complete public profile
+      - name: Build and reopen the single development configuration
         run: .devcontainer/assistants/node_modules/.bin/devcontainer up --workspace-folder .
       - name: Check the mounted daemon and bundled tools inside the container
         run: |
           .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . python tools/dev/container_check.py
+          .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . python -c 'from pathlib import Path; from tempfile import TemporaryFile; TemporaryFile(dir=Path.home()/".codex").close()'
           .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . codex --version
           .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . opencode --version
           .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . claude --version
@@ -114,8 +115,27 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
-      - run: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:assembleRelease :app:writeRuntimeInventory
-      - name: Collect actual JVM coverage
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-dev.lock
+      - run: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:lint :app:assembleRelease :app:writeRuntimeInventory
+      - name: Enable the disposable emulator's KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise synthetic Android UI and collect device coverage
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          avd-name: vomar-ci
+          force-avd-creation: true
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :app:connectedDebugAndroidTest :app:jacocoDebugReport -Pandroid.testInstrumentationRunnerArguments.class=org.openvimar.updater.InitialInstallUiTest,org.openvimar.updater.InitialInstallAndroidAdapterTest
+      - name: Collect actual JVM and synthetic device coverage
         run: |
           mkdir -p reports
           cp apps/android-updater/app/build/reports/dependencies/android-runtime.json reports/android-runtime.json

@@ -99,5 +99,11 @@ def test_original_restore_quiescence_is_bound_to_protected_backup_and_never_rese
 
 
 @pytest.mark.parametrize('scenario',['prepare-acl-lower','prepare-acl-upper','prepare-no-acl','prepare-acl-empty','prepare-acl-capture','prepare-acl-watchdog','prepare-acl-persistent','prepare-acl-uncaught','prepare-acl-cancel','prepare-acl-empty-vectors','prepare-acl-read-denied','prepare-acl-wrong-pc','prepare-acl-wrong-msp','prepare-acl-even-vector','prepare-acl-fault'])
-def test_programming_prepares_volatile_flash_state_only_after_mutation_request(programming,scenario):
-    subprocess.run([*programming,scenario],check=True)
+def test_programming_prepares_volatile_flash_state_only_after_mutation_request(programming,tmp_path,scenario):
+    args=[]
+    if scenario=='prepare-acl-watchdog':
+        raw,key,_,_=common_fixture(candidate=True,watchdog_handoff='paused-reset-before-main-v1')
+        source=tmp_path/'candidate.zip';source.write_bytes(raw)
+        public=tmp_path/'public.der';public.write_bytes(key)
+        args=[str(source),str(public)]
+    subprocess.run([*programming,scenario,*args],check=True)

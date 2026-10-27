@@ -8,7 +8,7 @@ android {
     // Kotlin internal ABI names differ between debug/release modules.
     testBuildType=providers.gradleProperty("vimarTestBuildType").orElse("debug").get().also { require(it in setOf("debug","release")) }
     namespace="org.openvimar.updater"; compileSdk=35
-    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=27; versionName="1.0.7"; testInstrumentationRunner="android.test.InstrumentationTestRunner" }
+    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=27; versionName="1.0.7"; testInstrumentationRunner="org.openvimar.updater.CoverageInstrumentationTestRunner" }
     compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget="17" }
 }
@@ -22,14 +22,30 @@ val publicNotices = tasks.register<Sync>("generatePublicNotices") {
     rename { "third_party_notices.txt" }
 }
 android.sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/vomar-notices"))
+// Run the same independently modeled SWD scenarios against the actual app
+// classes in this JVM, so JaCoCo observes production execution.
+android.sourceSets.getByName("test").java.srcDir("../../../tools/android/first_install_contract/programming-tests")
 tasks.named("preBuild").configure { dependsOn(publicNotices) }
+
+tasks.withType<Test>().configureEach {
+    dependsOn(":core:generateFirstInstallTestFixtures")
+    inputs.dir(project(":core").layout.buildDirectory.dir("generated/first-install-test-fixtures"))
+    systemProperty("vomar.firstInstallFixtures", project(":core").layout.buildDirectory.dir("generated/first-install-test-fixtures").get().asFile.absolutePath)
+}
 
 
 jacoco { toolVersion = "0.8.14" }
 android.buildTypes.getByName("debug").enableUnitTestCoverage = true
+android.buildTypes.getByName("debug").enableAndroidTestCoverage = true
+android.testCoverage.jacocoVersion = "0.8.14"
 val jacocoDebugReport = tasks.register<JacocoReport>("jacocoDebugReport") {
     dependsOn("testDebugUnitTest")
-    executionData(fileTree(layout.buildDirectory) { include("outputs/unit_test_code_coverage/debugUnitTest/*.exec") })
+    // Connected tests are an explicit CI/operator action. Reporting never
+    // starts an emulator or connects to a target as a side effect.
+    executionData(fileTree(layout.buildDirectory) {
+        include("outputs/unit_test_code_coverage/debugUnitTest/*.exec")
+        include("outputs/code_coverage/debugAndroidTest/connected/**/*.ec")
+    })
     classDirectories.setFrom(fileTree(layout.buildDirectory.dir("tmp/kotlin-classes/debug")) { exclude("**/R.class", "**/R$*.class", "**/BuildConfig.class") })
     sourceDirectories.setFrom(files("src/main/kotlin"))
     reports { xml.required.set(true); html.required.set(true) }

@@ -30,4 +30,23 @@ class InstallProgressTest {
   present=false;now=500_000_000;assertTrue(runCatching{guard.check()}.isFailure)
   present=true;assertTrue(runCatching{guard.check()}.isFailure)
  }
+ @Test fun invalidWorkAndUnknownStagesCannotProduceAnEstimate(){
+  for(stages in listOf(emptyMap(),mapOf("Read" to 0),mapOf("Read" to -1),linkedMapOf("Read" to 2,"Write" to -1))){
+   assertThrows(IllegalArgumentException::class.java){OperationProgressTracker(stages)}
+  }
+  val tracker=OperationProgressTracker(mapOf("Read" to 1))
+  for((done,size) in listOf(0 to 0,-1 to 100,101 to 100)){
+   assertThrows(IllegalArgumentException::class.java){tracker.update("Read",done,size)}
+  }
+  assertThrows(IllegalArgumentException::class.java){tracker.update("Unreviewed stage",1,100)}
+ }
+ @Test fun stalledOrImplausiblySlowMeasurementsDoNotCreateACountdown(){
+  var now=0L;val tracker=OperationProgressTracker(mapOf("Read" to 1)){now}
+  assertNull(tracker.update("Read",0,100).remainingMillis)
+  now=3000;assertNull(tracker.update("Read",0,100).remainingMillis)
+  now=8L*24*60*60*1000
+  val tooSlow=tracker.update("Read",1,100)
+  assertNull(tooSlow.remainingMillis);assertEquals(10,tooSlow.permille)
+  assertEquals(0L,tracker.update("Read",100,100).remainingMillis)
+ }
 }

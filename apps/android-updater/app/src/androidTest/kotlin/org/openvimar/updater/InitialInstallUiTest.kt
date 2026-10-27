@@ -239,6 +239,63 @@ class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivi
         instrumentation.waitForIdleSync()
         assertTrue(nodes(screen.window.decorView).filterIsInstance<android.widget.ProgressBar>().none{it.isShown})
     }
+    fun testProgressStagesFallbacksEstimateBoundariesAndCompletionAreRenderedFromObservedWork(){
+        val screen=activity;instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync{
+            (field("observing").get(screen) as? kotlinx.coroutines.Job)?.cancel()
+            val now=System.nanoTime()/1_000_000
+            val base=InitialInstallSnapshot(InitialInstallPhase.INSTALLING,progressDone=1,progressTotal=4,
+                progressLabel="Checking pages",progressMeasuredAtMillis=now)
+            fun show(snapshot:InitialInstallSnapshot,stage:Int?,overall:Int?,label:String?,estimate:String?){
+                field("snapshot").set(screen,snapshot)
+                InitialInstallActivity::class.java.getDeclaredMethod("render").apply{isAccessible=true}.invoke(screen)
+                val views=nodes(screen.window.decorView)
+                val current=views.filterIsInstance<android.widget.ProgressBar>().single{it.tag=="initial.progress"}
+                val total=views.filterIsInstance<android.widget.ProgressBar>().single{it.tag=="initial.overall.progress"}
+                assertEquals(stage!=null,current.visibility==View.VISIBLE)
+                assertEquals(overall!=null,total.visibility==View.VISIBLE)
+                stage?.let{assertEquals(it,current.progress);assertEquals("${snapshot.progressLabel} · ${it/10}%",current.contentDescription.toString())}
+                overall?.let{assertEquals(it,total.progress);assertEquals("$label · ${it/10}%",total.contentDescription.toString())}
+                val remaining=field("remainingText").get(screen) as TextView
+                assertEquals(estimate!=null,remaining.visibility==View.VISIBLE)
+                estimate?.let{assertEquals(it,remaining.text.toString())}
+            }
+            show(base,250,250,"Overall installation","Estimating remaining time…")
+            show(base.copy(stageDone=3,stageTotal=4,overallProgressPermille=180,etaMillis=59999),750,180,"Overall installation","Less than a minute remaining")
+            show(base.copy(phase=InitialInstallPhase.CAPTURING,etaMillis=60000),250,250,"Overall backup","About 1 min remaining")
+            show(base.copy(resume=true,etaMillis=3599999),250,250,"Overall repair","About 60 min remaining")
+            show(base.copy(phase=InitialInstallPhase.STARTING,etaMillis=3600000),250,250,"Overall verification","About 1 h 0 min remaining")
+            show(base.copy(etaMillis=3660000),250,250,"Overall installation","About 1 h 1 min remaining")
+            show(base.copy(etaMillis=0),250,250,"Overall installation","Estimating remaining time…")
+            show(base.copy(etaMillis=120000,progressMeasuredAtMillis=null),250,250,"Overall installation","Estimating remaining time…")
+            show(base.copy(etaMillis=120000,progressMeasuredAtMillis=now+60000),250,250,"Overall installation","Estimating remaining time…")
+            show(base.copy(stageDone=9,stageTotal=4,overallProgressPermille=2000),1000,999,"Overall installation","Estimating remaining time…")
+            show(base.copy(stageDone=-1,stageTotal=4,overallProgressPermille=-100),0,0,"Overall installation","Estimating remaining time…")
+            show(base.copy(phase=InitialInstallPhase.VERIFIED_HALTED),null,1000,"Overall installation",null)
+            show(base.copy(phase=InitialInstallPhase.STARTED),null,1000,"Overall verification",null)
+            show(base.copy(phase=InitialInstallPhase.AWAITING_REVIEW),null,null,null,null)
+            show(base.copy(progressTotal=0),null,null,null,null)
+        }
+        // Injected presentation cannot create a backend receipt or admission.
+        val service=field("service").get(screen) as? org.openvimar.updater.installer.InitialInstallService
+        assertEquals(InitialInstallPhase.IDLE,service?.state?.value?.phase?:InitialInstallPhase.IDLE)
+    }
+    fun testProgressTickerStopsWhenTheScreenIsPaused(){
+        val screen=activity;instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync{
+            val handler=field("progressHandler").get(screen) as android.os.Handler
+            val tick=field("progressTick").get(screen) as Runnable
+            instrumentation.callActivityOnPause(screen)
+            assertFalse(field("foreground").getBoolean(screen))
+            assertFalse(handler.hasCallbacks(tick))
+            tick.run()
+            assertFalse("A paused screen must not requeue its countdown",handler.hasCallbacks(tick))
+            instrumentation.callActivityOnResume(screen)
+            assertTrue(field("foreground").getBoolean(screen))
+            tick.run()
+            assertTrue(handler.hasCallbacks(tick))
+        }
+    }
     fun testIdleScreenRemainsScrollableWithVisibleSystemInsets(){
         setActivityInitialTouchMode(true);instrumentation.setInTouchMode(true)
         val screen=activity

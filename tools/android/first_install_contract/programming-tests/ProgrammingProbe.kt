@@ -12,7 +12,13 @@ import java.security.spec.X509EncodedKeySpec
 
 fun main(args:Array<String>) {
     when(args[0]) {
-        "prepare-acl-lower","prepare-acl-upper","prepare-no-acl","prepare-acl-empty","prepare-acl-capture","prepare-acl-watchdog","prepare-acl-persistent","prepare-acl-uncaught","prepare-acl-cancel","prepare-acl-empty-vectors","prepare-acl-read-denied","prepare-acl-wrong-pc","prepare-acl-wrong-msp","prepare-acl-even-vector","prepare-acl-fault" -> programmingPreparationProbe(args[0])
+        "prepare-acl-lower","prepare-acl-upper","prepare-no-acl","prepare-acl-empty","prepare-acl-capture","prepare-acl-watchdog","prepare-acl-persistent","prepare-acl-uncaught","prepare-acl-cancel","prepare-acl-empty-vectors","prepare-acl-read-denied","prepare-acl-wrong-pc","prepare-acl-wrong-msp","prepare-acl-even-vector","prepare-acl-fault" -> {
+            val candidate=if(args[0]=="prepare-acl-watchdog") {
+                val key=KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(Files.readAllBytes(Path.of(args[2]))))
+                CandidateRelease.inspect(Files.readAllBytes(Path.of(args[1])),key,"9.0.0")
+            } else null
+            programmingPreparationProbe(args[0],candidate)
+        }
         "restore-mode1","restore-paused-watchdog","restore-running-watchdog","restore-bad-uicr","restore-wrong-uid","restore-acl","restore-acl-watchdog" -> originalRestoreLeaseProbe(args[0])
         "resume-mode1","resume-mode2","resume-cancel","resume-bad-uicr","resume-mode-ack-loss","resume-unconfirmed" -> resumeLeaseProbe(args)
         "lease-erase-ready-deadline" -> {

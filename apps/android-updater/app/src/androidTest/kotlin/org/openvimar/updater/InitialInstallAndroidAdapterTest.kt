@@ -11,6 +11,18 @@ import java.time.Instant
 /** Synthetic private files only. Never enumerates/opens USB or starts SWD. */
 @Suppress("DEPRECATION")
 class InitialInstallAndroidAdapterTest:InstrumentationTestCase() {
+    fun testUsbOwnerReleasesItsLeaseWhenAndroidServiceAcquisitionFails(){
+        val context=object:ContextWrapper(instrumentation.targetContext){
+            override fun getSystemService(name:String):Any? {
+                check(name==android.content.Context.USB_SERVICE)
+                throw java.io.IOException("Synthetic unavailable USB service")
+            }
+        }
+        val outcome=runCatching{AndroidDkInstallUsbOwner.open(context,"synthetic-absent-probe","synthetic-open",{false})}
+        assertTrue(outcome.exceptionOrNull() is java.io.IOException)
+        val next=checkNotNull(DkUsbOperationGate.acquire("after synthetic failure"))
+        try{next.checkCurrent()}finally{next.close()}
+    }
     private fun context()=object:ContextWrapper(instrumentation.targetContext){
         private val folder=File(super.getFilesDir(),"first-install-test-${System.nanoTime()}").apply{mkdirs()}
         override fun getFilesDir()=folder
