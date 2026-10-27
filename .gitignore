@@ -1186,4 +1186,4 @@
 !/firmware/src/connection_capability.h
 !/firmware/src/connection_capability.c
 !/tools/firmware/tests/test_connection_zigbee_adapter.py
-
+!/apps/android-updater/app/src/test/kotlin/org/openvimar/updater/ble/ZigbeePairingManagerTest.kt

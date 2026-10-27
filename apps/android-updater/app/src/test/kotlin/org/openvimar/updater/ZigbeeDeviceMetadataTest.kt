@@ -146,4 +146,41 @@ class ZigbeeDeviceLinkingTest {
         val merged=ZigbeeDeviceMetadata.reconcile(listOf(newer,older),older,addNew=false,savedSnapshot=true).single()
         assertEquals(FirmwareKind.CUSTOM,merged.firmwareKind);assertEquals("1.2.0",merged.installedVersion);assertEquals(200L,merged.observedAt)
     }
+
+    @Test fun malformedIncomingIeeeNeverImportsOrRewritesAnExistingRecord() {
+        for(address in listOf(null,"invalid","0x00112233","0xgg11223344556677")) {
+            val incoming=reported.copy(ieee=address)
+            assertEquals(listOf(original),ZigbeeDeviceMetadata.reconcile(listOf(original),incoming,addNew=true))
+            assertEquals(listOf(original),ZigbeeDeviceMetadata.reconcileAll(listOf(original),listOf(incoming),addNew=true,inventoryComplete=false))
+        }
+    }
+    @Test fun anUnrelatedRecordIdCannotBeReusedByAnExplicitImport() {
+        val unrelated=original.copy(id=reported.id,uid=emptyList())
+        assertEquals(listOf(unrelated),ZigbeeDeviceMetadata.reconcile(listOf(unrelated),reported,addNew=true))
+    }
+    @Test fun aMalformedStoredIeeeDoesNotRebindThroughItsTruncatedUid() {
+        val corrupted=original.copy(ieee="invalid")
+        assertEquals(listOf(corrupted),ZigbeeDeviceMetadata.reconcile(listOf(corrupted),reported,addNew=false))
+    }
+    @Test fun conflictingFullUidInAnExplicitIeeeRouteRemainsUnchanged() {
+        val contradictory=reported.copy(uid=listOf("87654379","11223344"))
+        val incoming=reported.copy(uid=original.uid)
+        assertEquals(listOf(contradictory),ZigbeeDeviceMetadata.reconcile(listOf(contradictory),incoming,addNew=true))
+    }
+    @Test fun authenticatedMetadataFillsMissingUidAndAddressWithoutReplacingLocalName() {
+        val local=reported.copy(id="saved-zigbee",name="My local name",room="",uid=emptyList(),address=null)
+        val incoming=reported.copy(uid=original.uid,address=original.address,networkId=" ")
+        val linked=ZigbeeDeviceMetadata.reconcile(listOf(local),incoming,addNew=false).single()
+        assertEquals(local.id,linked.id);assertEquals(local.name,linked.name)
+        assertEquals(original.uid,linked.uid);assertEquals(original.address,linked.address)
+        assertEquals("topic",linked.networkId)
+    }
+    @Test fun canonicalManualUidRecordRetainsItsRouteAndBorrowsMissingRoomFromItsDuplicate() {
+        val manual=original.copy(id="manual-uid",address=null,name="My name")
+        val duplicate=reported.copy(room="Upstairs",address="saved-ble-address")
+        val linked=ZigbeeDeviceMetadata.reconcile(listOf(manual,duplicate),reported,addNew=false).single()
+        assertEquals(manual.id,linked.id);assertEquals(manual.uid,linked.uid);assertEquals("My name",linked.name)
+        assertEquals("Upstairs",linked.room);assertEquals("saved-ble-address",linked.address)
+    }
+
 }
