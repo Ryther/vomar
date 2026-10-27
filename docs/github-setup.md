@@ -111,6 +111,14 @@ disposable Community instance without any reusable project credential; firmware
 C remains mandatory in CodeQL and in full protected main/release Sonar analysis.
 Missing tokens, coverage, extraction or scan reports must fail.
 
+SonarCloud can provision a project during its first analysis when the token's
+user has **Create Projects** permission and the scan has no branch/PR parameters,
+including parameters inferred by CI. An initial 404 alone does not establish
+that manual creation is required. Verify the first trusted-main analysis before
+requesting manual setup; a first PR scan may not provision the project. Project
+creation also does not establish the GitHub binding or the intended settings.
+See [Sonar's provisioning conditions](https://community.sonarsource.com/t/new-project-creation-v2-apis/132494/5).
+
 Enter secrets in GitHub's environment/repository **Secrets** UI, or pass their
 contents to authenticated `gh secret set` through standard input. Do not put
 values in command arguments, Git, screenshots or audit reports. From the current
