@@ -40,10 +40,11 @@ def test_deleted_harness_keeps_product_and_inline_header_coverage(tmp_path,separ
         expected='inline_value()+value()!=12' if separate_unit else 'inline_value()!=7'
         stubs=Path(directory)/'stubs';stubs.mkdir()
         (stubs/'generated.h').write_text('static inline int generated_value(void){return 5;}\n')
+        (stubs/'forced.h').write_text('#define FORCED_VALUE 3\n')
         (Path(directory)/'adjacent.h').write_text('static inline int adjacent_value(void){return 7;}\n')
         if separate_unit:unit.write_text('#include "generated.h"\nint value(void){return generated_value();}\n')
-        harness.write_text('#include "inline.h"\n#include "adjacent.h"\n'+extra+'int main(void){return '+expected+' || adjacent_value()!=7;}\n')
-        command=[str(wrapper),'-I',str(product),'-I'+str(stubs),str(harness)]
+        harness.write_text('#include "inline.h"\n#include "adjacent.h"\n'+extra+'int main(void){return '+expected+' || adjacent_value()!=7 || FORCED_VALUE!=3;}\n')
+        command=[str(wrapper),'-I',str(product),'-I'+str(stubs),'-include','forced.h',str(harness)]
         if separate_unit:command.append(str(unit))
         subprocess.run([*command,'-o',str(tmp_path/'run')],env=env,check=True,capture_output=True)
         subprocess.run([str(tmp_path/'run')],check=True)

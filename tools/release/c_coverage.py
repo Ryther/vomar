@@ -49,7 +49,8 @@ while index<len(args):
  arg=args[index]
  if arg in ('-I','-iquote','-isystem','-include'):
   value=args[index+1]
-  if arg=='-include':value=str(preserve_directory(Path(value).parent)/Path(value).name)
+  if arg=='-include':
+   if Path(value).is_file():value=str(preserve_directory(Path(value).parent)/Path(value).name)
   else:value=str(preserve_directory(value))
   rewritten.extend([arg,value]);index+=2;continue
  if arg.startswith('-I') and len(arg)>2:arg='-I'+str(preserve_directory(arg[2:]))
