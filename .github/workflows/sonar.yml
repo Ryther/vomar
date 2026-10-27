@@ -36,13 +36,16 @@ jobs:
           prepare('reports','candidate',os.environ['CANDIDATE_SHA'])
           PY
       - run: python trusted/tools/dev/bootstrap.py firmware
+      - name: Install protected scanner settings
+        # Explicit relative settings paths use the launch directory. Install
+        # protected settings at the selected root without following a symlink.
+        run: cp --remove-destination -- trusted/sonar-project.properties candidate/sonar-project.properties
       - name: Scan source using only protected settings
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9
         env: {SONAR_TOKEN: '${{ secrets.SONAR_TOKEN }}'}
         with:
           projectBaseDir: candidate
           args: >-
-            -Dproject.settings=../trusted/sonar-project.properties
             -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }}
             -Dsonar.python.coverage.reportPaths=../reports/python-coverage.xml
             -Dsonar.javascript.lcov.reportPaths=../reports/lcov.info

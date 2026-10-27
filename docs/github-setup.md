@@ -123,6 +123,13 @@ Configure public SonarQube Cloud project **`Ryther_vomar`**, organization
 instead of creating a duplicate. Disable automatic analysis when using CI scans,
 set an explicit quality gate and confirm the project's actual plan/analyzers
 support Kotlin, Python, JavaScript, firmware C and pull request analysis.
+The trusted main scan installs the protected `sonar-project.properties` in the
+candidate analysis root before using `projectBaseDir`. It replaces a candidate
+symlink rather than following it. An explicit relative `project.settings` path
+is resolved from the scanner launch directory, rather than the selected project
+root. Install the protected file at the actual root instead of relying on that
+path being rebased by `projectBaseDir`.
+
 Initialize and verify a real `main` baseline. Fork/Dependabot analysis uses a
 disposable Community instance without any reusable project credential; firmware
 C remains mandatory in CodeQL and in full protected main/release Sonar analysis.
