@@ -43,6 +43,7 @@ internal class SavedConnectionsUi(
     private fun id()=UUID.randomUUID().toString()
     private fun dp(n:Int)=NativeUi.dp(activity,n)
     private fun current()=profileId?.let{runCatching{network.profile(it)}.getOrNull()}
+    private fun enabled()=profileId!=null && network.activeProfileId==profileId
     private fun online()=network.state.value.connected && network.activeProfileId==profileId
     private fun column()=LinearLayout(activity).apply{orientation=LinearLayout.VERTICAL}
     private fun add(view:View,container:LinearLayout=parent!!,gap:Int=8):View {container.addView(view,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(gap)});return view}
@@ -111,11 +112,11 @@ internal class SavedConnectionsUi(
         failure=null;pendingRemoval=null;screen=next;draw()
     }
     private fun list() {
-        text("Saved on this phone")
+        text("Connect once to reconnect automatically when the app opens. Disconnect to turn this off.")
         val profiles=try{network.loadProfiles()}catch(_:Exception){text("Saved connections could not be read. Your data has not been changed.",secondary=false);return}
         if(profiles.isEmpty()){text("No saved connections",true,false);text("Save your broker and Zigbee2MQTT topics on this phone.");action("Add connection"){add()}}
         profiles.forEach { p->
-            editableRow(p.label,"${if(network.state.value.connected&&network.activeProfileId==p.id)"Connected" else "Not connected"} · ${p.networks.size} ${if(p.networks.size==1)"topic" else "topics"}","profile:${p.id}","connection",!network.connectionInUse(p),
+            editableRow(p.label,"${if(network.activeProfileId==p.id) { if(network.state.value.connected)"Connected" else if(network.state.value.reconnecting)"Reconnecting" else "Connection error" } else "Not connected"} · ${p.networks.size} ${if(p.networks.size==1)"topic" else "topics"}","profile:${p.id}","connection",!network.connectionInUse(p),
                 open={showDetail(p.id)},edit={profileId=p.id;draft=p;dirty=false;go("edit")},
                 remove={operate{network.removeProfile(p.id)}})
         }
@@ -126,7 +127,7 @@ internal class SavedConnectionsUi(
         val p=current() ?: run{screen="list";draw();return}
         val error=connectionErrors[p.id]!=null || network.activeProfileId==p.id&&network.state.value.connectionError
         if(online())connectionErrors.remove(p.id)
-        headerState(if(online())"Connected" else if(error)"Connection error" else "Not connected",activity.getColor(if(online())R.color.ui_current else if(error)R.color.ui_available else R.color.ui_error))
+        headerState(if(online())"Connected" else if(enabled()&&network.state.value.reconnecting)"Reconnecting" else if(error)"Connection error" else "Not connected",activity.getColor(if(online())R.color.ui_current else if(error)R.color.ui_available else R.color.ui_error))
         section("Broker address");text(p.serverUri)
         section("Credentials")
         val saved=network.hasCredentials(p)
@@ -138,14 +139,18 @@ internal class SavedConnectionsUi(
         row("Zigbee topics (${p.networks.size})",p.networks.joinToString(" · "){it.label}){draft=null;go("topics")}
         val held=network.connectionInUse(p)
         if(held)text("Wait for the current update to finish.")
-        val connectButton=NativeUi.button(activity,if(online())"Disconnect" else "Connect",filled=!online()){
-            if(!busy){if(online())operate{network.disconnect()}else connect(p)}
+        val connectButton=NativeUi.button(activity,if(enabled())"Disconnect" else "Connect",filled=!enabled()){
+            if(!busy){if(enabled())operate{network.disconnect();connectionErrors.remove(p.id)}else connect(p)}
         }.apply{isEnabled=!held&&!busy;tag="connection.connect"}
+        if(enabled()) {
+            text(network.state.value.status,secondary=false)
+            if(!online()&&!network.state.value.reconnecting)action("Retry connection",enabled=!held){connect(p)}
+        }
         controls.add(connectButton);dock(connectButton)
     }
     private fun connect(p:BrokerProfile) {
         connectionErrors.remove(p.id)
-        val other=network.loadProfiles().firstOrNull{it.id==network.activeProfileId&&it.id!=p.id&&network.state.value.connected}
+        val other=network.loadProfiles().firstOrNull{it.id==network.activeProfileId&&it.id!=p.id}
         if(other!=null)AlertDialog.Builder(activity).setTitle("Switch to ${p.label}?").setMessage("${other.label} will disconnect. Its settings stay saved.").setNegativeButton("Cancel",null).setPositiveButton("Switch and connect"){_,_->operate(connecting=true){network.connect(p)}}.show()
         else operate(connecting=true){network.connect(p)}
     }
@@ -162,7 +167,7 @@ internal class SavedConnectionsUi(
     private fun edit() {
         val original=current();val d=draft ?: original ?: return
         var submit:Button?=null
-        fun label(){val changes=runCatching{connectionTransportChanged(original,draft!!)}.getOrDefault(true);submit?.text=if(online()&&changes)"Save and reconnect" else "Save connection";submit?.isEnabled=!busy&&draft!!.networks.isNotEmpty()&&(!network.connectionInUse(original)||!changes)}
+        fun label(){val changes=runCatching{connectionTransportChanged(original,draft!!)}.getOrDefault(true);submit?.text=if(enabled()&&changes)"Save and reconnect" else "Save connection";submit?.isEnabled=!busy&&draft!!.networks.isNotEmpty()&&(!network.connectionInUse(original)||!changes)}
         availabilityRefresh={label()}
         field("Connection name (required)",d.label){draft=draft!!.copy(label=it);label()}
         field("Broker address (required)",d.serverUri,NativeUi.Input.ADDRESS){draft=draft!!.copy(serverUri=it);label()}.tag="network.address"
@@ -180,9 +185,9 @@ internal class SavedConnectionsUi(
             if(original!=null && original.serverUri!=candidate.validated().serverUri){
                 AlertDialog.Builder(activity).setTitle("Credentials for the new broker").setMessage("Save this address without the previous credentials, then use Change credentials before connecting. Saved devices keep their previous topic association.").setNegativeButton("Keep editing",null).setPositiveButton("Save without credentials"){_,_->
                     val rebound=candidate.copy(networks=candidate.networks.map{it.copy(id=id())})
-                    operate { network.saveProfile(rebound,clearCredentials=true,disconnectAfterSave=online());profileId=rebound.id;draft=null;dirty=false;screen="detail" }
+                    operate { network.saveProfile(rebound,clearCredentials=true,disconnectAfterSave=enabled());profileId=rebound.id;draft=null;dirty=false;screen="detail" }
                 }.show()
-            } else operate {network.saveProfile(candidate,reconnect=online()&&connectionTransportChanged(original,candidate));profileId=candidate.id;draft=null;dirty=false;screen="detail"}
+            } else operate {network.saveProfile(candidate,reconnect=enabled()&&connectionTransportChanged(original,candidate));profileId=candidate.id;draft=null;dirty=false;screen="detail"}
         }
         label()
     }
@@ -191,7 +196,7 @@ internal class SavedConnectionsUi(
         p.networks.forEach{n->editableRow(n.label,n.baseTopic,"topic:${n.id}","topic",!network.connectionInUse(current())&&(draft!=null||p.networks.size>1),
             open={topicId=n.id;go("topic")},edit={topicId=n.id;go("topic")},remove={
                 val next=p.copy(networks=p.networks.filterNot{it.id==n.id})
-                if(draft!=null){draft=next;dirty=true;go("topics")}else operate{network.saveProfile(next,reconnect=online());dirty=false;screen="topics"}
+                if(draft!=null){draft=next;dirty=true;go("topics")}else operate{network.saveProfile(next,reconnect=enabled());dirty=false;screen="topics"}
             })}
         if(p.networks.isEmpty()){text("No topics yet");action("Add topic"){add()}}
         if(p.networks.size==3)text("Up to 3 topics per connection.")
@@ -201,7 +206,7 @@ internal class SavedConnectionsUi(
         val old=p.networks.firstOrNull{it.id==topicId}
         var name=topicName;var base=topicBase
         var submit:Button?=null
-        fun update(){val transport=old==null || old.baseTopic!=base.trim();submit?.text=if(online()&&draft==null&&transport)"Save and reconnect" else "Save topic";submit?.isEnabled=!busy&&(!network.connectionInUse(current())||!transport)}
+        fun update(){val transport=old==null || old.baseTopic!=base.trim();submit?.text=if(enabled()&&draft==null&&transport)"Save and reconnect" else "Save topic";submit?.isEnabled=!busy&&(!network.connectionInUse(current())||!transport)}
         availabilityRefresh={update()}
         field("Topic name (required)",name){name=it;topicName=it;update()}
         field("MQTT base topic (required)",base,NativeUi.Input.IDENTIFIER){base=it;topicBase=it;update()}
@@ -213,8 +218,8 @@ internal class SavedConnectionsUi(
             val candidate=p.copy(networks=if(old==null)p.networks+updated else p.networks.map{if(it.id==old.id)updated else it})
             val issues=candidate.validationIssues().filterNot{it.field==BrokerValidationField.BROKER || it.field==BrokerValidationField.CONSENT}
             if(issues.isNotEmpty()){showIssues(issues);return@formActions}
-            fun save(){if(draft!=null){draft=candidate;dirty=true;go("topics")}else operate{network.saveProfile(candidate,reconnect=online()&&connectionTransportChanged(p,candidate));dirty=false;screen="topics"}}
-            if(baseChanged)AlertDialog.Builder(activity).setTitle("Change MQTT base topic?").setMessage("Saved devices keep their previous source. Import devices from the new topic separately.").setNegativeButton("Keep editing",null).setPositiveButton(if(online())"Save and reconnect" else "Save topic"){_,_->save()}.show() else save()
+            fun save(){if(draft!=null){draft=candidate;dirty=true;go("topics")}else operate{network.saveProfile(candidate,reconnect=enabled()&&connectionTransportChanged(p,candidate));dirty=false;screen="topics"}}
+            if(baseChanged)AlertDialog.Builder(activity).setTitle("Change MQTT base topic?").setMessage("Saved devices keep their previous source. Import devices from the new topic separately.").setNegativeButton("Keep editing",null).setPositiveButton(if(enabled())"Save and reconnect" else "Save topic"){_,_->save()}.show() else save()
         }
         update()
     }
@@ -238,12 +243,12 @@ internal class SavedConnectionsUi(
         add(NativeUi.disclosure(activity,"Sign-in options","Hide sign-in options",options).apply{gravity=Gravity.CENTER},gap=24);add(options,gap=12)
         val held=network.connectionInUse(p)
         if(held)text("Wait for the current update to finish.")
-        val save=formActions(if(online())"Save and reconnect" else "Save credentials",false,{discard{dirty=false;go("detail")}}){
+        val save=formActions(if(enabled())"Save and reconnect" else "Save credentials",false,{discard{dirty=false;go("detail")}}){
             val username=user.text.toString().ifEmpty{null};val password=if(empty.isChecked)charArrayOf() else pass.text.toString().takeIf{it.isNotEmpty()}?.toCharArray()
             val anonymous=clear.isChecked;val replaceUsername=changeUsername;user.text.clear();pass.text.clear()
-            operate{try{network.editCredentials(p.id,replaceUsername,username,password,anonymous,online());dirty=false;screen="detail"}finally{password?.fill('\u0000')}}
+            operate{try{network.editCredentials(p.id,replaceUsername,username,password,anonymous,enabled());dirty=false;screen="detail"}finally{password?.fill('\u0000')}}
         }
-        fun update(){dirty=changeUsername||pass.text.isNotEmpty()||clear.isChecked||empty.isChecked;save.text=if(online())"Save and reconnect" else "Save credentials";save.isEnabled=dirty&&(!unavailable||pass.text.isNotEmpty()||clear.isChecked||empty.isChecked)&&!network.connectionInUse(p)&&!busy;user.isEnabled=!clear.isChecked;empty.isEnabled=!clear.isChecked;pass.isEnabled=!clear.isChecked&&!empty.isChecked}
+        fun update(){dirty=changeUsername||pass.text.isNotEmpty()||clear.isChecked||empty.isChecked;save.text=if(enabled())"Save and reconnect" else "Save credentials";save.isEnabled=dirty&&(!unavailable||pass.text.isNotEmpty()||clear.isChecked||empty.isChecked)&&!network.connectionInUse(p)&&!busy;user.isEnabled=!clear.isChecked;empty.isEnabled=!clear.isChecked;pass.isEnabled=!clear.isChecked&&!empty.isChecked}
         val watcher=object:TextWatcher{override fun beforeTextChanged(s:CharSequence?,start:Int,count:Int,after:Int){};override fun afterTextChanged(s:Editable?){update()};override fun onTextChanged(s:CharSequence?,start:Int,before:Int,count:Int){}}
         user.addTextChangedListener(watcher);pass.addTextChangedListener(watcher)
         change.setOnClickListener{changeUsername=true;user.visibility=View.VISIBLE;userLabel.visibility=View.VISIBLE;userHelp.visibility=View.VISIBLE;usernameSummary.visibility=View.GONE;update();user.requestFocus()}

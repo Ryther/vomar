@@ -10,6 +10,27 @@ class SavedConnectionPersistenceTest:AndroidTestCase() {
         override fun getApplicationContext():Context=this
         override fun getSharedPreferences(name:String,mode:Int)=super.getSharedPreferences("saved-connection-test-$name",mode)
     }
+    fun testOnlyExplicitActivationSurvivesRecreationAndDisconnectOrRemovalClearsIt(){
+        val ctx=isolated();val prefs=ctx.getSharedPreferences("mqtt-secrets-v1",0)
+        prefs.edit().clear().commit();ctx.getSharedPreferences("mqtt-profile-v1",0).edit().clear().commit()
+        try {
+            val profile=BrokerProfile("automatic","ssl://broker.invalid",listOf(ZigbeeNetwork("auto-topic","Home","alpha")))
+            val other=BrokerProfile("inactive","ssl://other.invalid",listOf(ZigbeeNetwork("inactive-topic","Other","beta")))
+            val store=BrokerProfileStore(ctx)
+            store.save(profile);store.save(other)
+            assertNull(BrokerProfileStore(ctx).activatedId())
+            store.activate(profile.id)
+            assertEquals(profile.id,BrokerProfileStore(ctx).activatedId())
+            store.save(profile.copy(label="Renamed"))
+            assertEquals(profile.id,BrokerProfileStore(ctx).activatedId())
+            store.activate(null)
+            assertNull(BrokerProfileStore(ctx).activatedId())
+            store.activate(other.id);store.remove(profile.id)
+            assertEquals(other.id,BrokerProfileStore(ctx).activatedId())
+            store.remove(other.id)
+            assertNull(BrokerProfileStore(ctx).activatedId())
+        } finally {prefs.edit().clear().commit()}
+    }
     fun testLegacyMigrationAndMetadataRenameKeepTheEncryptedCredentials(){
         val ctx=isolated()
         val prefs=ctx.getSharedPreferences("mqtt-secrets-v1",0);val legacy=ctx.getSharedPreferences("mqtt-profile-v1",0)

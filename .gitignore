@@ -188,6 +188,13 @@
 !/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/MainActivity.kt
 !/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/MqttFailurePresentation.kt
 !/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/MqttNetworkBackend.kt
+
+# Persistent connection lifecycle and synthetic reconnect regressions.
+!/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/MqttReconnectLoop.kt
+!/apps/android-updater/app/src/test/kotlin/org/openvimar/updater/MqttReconnectLoopTest.kt
+!/apps/android-updater/app/src/androidTest/kotlin/org/openvimar/updater/AutomaticNetworkConnectionTest.kt
+!/apps/android-updater/app/src/androidTest/kotlin/org/openvimar/updater/AutomaticConnectionUiTest.kt
+
 !/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/MqttNetworkSettings.kt
 !/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/NativeFleetUi.kt
 !/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/NativeUi.kt
