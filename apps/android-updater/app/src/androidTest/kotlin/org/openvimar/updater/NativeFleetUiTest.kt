@@ -655,4 +655,143 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         assertEquals(saved.uid,runtime.records.devices.single().uid);assertEquals(0,executions)
     }
     fun testEmptyInventoryStartsWithBluetoothEnrolment(){fixture(emptyList());assertTrue(texts().contains("Add your first dimmer"));click("Add device");assertTrue(texts().contains("Search Bluetooth"));assertTrue(texts().any{it.contains("5 seconds")});assertEquals(0,imports);capture("add-empty-dark")}
+    private fun dialogAction(label:String) {
+        val views=windowNodes {it.any {node->node.className?.toString()=="android.widget.Button"&&node.text?.toString()?.equals(label,true)==true}}
+        val button=views.first {it.className?.toString()=="android.widget.Button"&&it.text?.toString()?.equals(label,true)==true}
+        assertTrue(button.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK));instrumentation.waitForIdleSync()
+    }
+    private fun dialogText(label:String,value:String) {
+        val field=windowNodes {it.any {node->node.contentDescription?.toString()==label&&node.isEnabled}}
+            .first {it.contentDescription?.toString()==label&&it.isEnabled}
+        assertTrue(field.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT,android.os.Bundle().apply {
+            putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,value)
+        }));instrumentation.waitForIdleSync()
+    }
+    private fun awaitFleet(message:String,condition:()->Boolean) {
+        val end=System.currentTimeMillis()+10000
+        while(System.currentTimeMillis()<end) {
+            var ready=false;instrumentation.runOnMainSync {ready=condition()}
+            if(ready)return
+            Thread.sleep(50)
+        }
+        instrumentation.runOnMainSync {assertTrue(message,condition())}
+    }
+    private fun openDevice(name:String) {
+        val label=nodes().filterIsInstance<TextView>().first {it.text.toString()==name}
+        instrumentation.runOnMainSync {(label.parent as View).performClick()};instrumentation.waitForIdleSync()
+    }
+    /** Existing owner metadata seam only: no connect/refresh/transport method runs. */
+    private fun syntheticInventory(records:(String)->List<DeviceRecord>,journey:(String,kotlinx.coroutines.flow.MutableStateFlow<NetworkBackendState>)->Unit) {
+        val network=AndroidNetworkOwner.get(activity);val id=java.util.UUID.randomUUID().toString()
+        val profile=BrokerProfile(id,"ssl://ui-inventory.invalid",listOf(ZigbeeNetwork("$id-topic","Synthetic home","synthetic/zigbee")),label="Synthetic inventory")
+        val active=network.javaClass.getDeclaredField("activeProfileId").apply {isAccessible=true}
+        @Suppress("UNCHECKED_CAST")
+        val flow=network.javaClass.getDeclaredField("mutable").apply {isAccessible=true}.get(network) as kotlinx.coroutines.flow.MutableStateFlow<NetworkBackendState>
+        val priorId=active.get(network);val priorState=flow.value
+        val settings=BrokerProfileStore(activity);val priorActivation=settings.activatedId()
+        // Fail on leaked singleton ownership rather than cancelling/restarting
+        // another fixture's connection while installing display-only metadata.
+        assertNull("Inventory fixture requires an inactive owner",priorId)
+        assertNull("Inventory fixture must not inherit saved activation",priorActivation)
+        assertFalse(priorState.connected);assertFalse(priorState.reconnecting)
+        assertNull("Inventory fixture must not replace an existing bridge",network.javaClass.getDeclaredField("active").apply {isAccessible=true}.get(network))
+        runBlocking {network.saveProfile(profile)}
+        try {
+            active.set(network,id)
+            flow.value=NetworkBackendState(connected=true,devices=records("$id-topic"),inventoryReceived=false)
+            journey("$id-topic",flow)
+        } finally {
+            instrumentation.runOnMainSync {ui?.close()}
+            runBlocking {network.removeProfile(id)}
+            settings.activate(priorActivation);active.set(network,priorId);flow.value=priorState
+        }
+    }
+    fun testExportedInventoryCancelThenImportPreservesOriginalAndFiltersUnsupportedRows() {
+        val original=record(1,null).copy(id="original:12345678:00000001",name="Dimmer · 0001")
+        val native=fixture(listOf(original))
+        val json="""[
+            {"ieee_address":"0xF4CE367800000001","friendly_name":"Imported hall","software_build_id":"1.1.1","definition":{"vendor":"OpenVimar","model":"30805-custom"}},
+            {"ieee_address":"0x0011223344556688","friendly_name":"","definition":{"vendor":"Vimar","model":"30805"}},
+            {"ieee_address":"0x0011223344556699","friendly_name":"Unsupported lamp","definition":{"vendor":"Other","model":"unrelated"}},
+            {"ieee_address":"invalid","definition":{"vendor":"Vimar","model":"30805"}},42
+        ]"""
+        instrumentation.runOnMainSync {native.acceptZigbeeList(json)}
+        val first=windowNodes {it.any {n->n.text?.toString()=="Imported hall"}}
+        assertFalse(first.any {it.text?.toString()=="Unsupported lamp"})
+        assertTrue(first.first {it.text?.toString()=="Imported hall"}.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+        dialogAction("Cancel");assertEquals(listOf(original),native.store.devices)
+        instrumentation.runOnMainSync {native.acceptZigbeeList(json)}
+        for(label in listOf("Imported hall","0x0011223344556688")) {
+            val item=windowNodes {it.any {n->n.text?.toString()==label}}.first {it.text?.toString()==label}
+            assertTrue(item.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+        }
+        dialogAction("Import selected");awaitFleet("Only the two supported selections should be imported") {native.store.devices.size==2}
+        val linked=native.store.devices.single {it.id==original.id}
+        assertEquals(original.uid,linked.uid);assertEquals(original.address,linked.address);assertEquals(original.room,linked.room)
+        assertEquals("Imported hall",linked.name);assertEquals("1.1.1",linked.installedVersion);assertTrue(linked.followZigbeeName)
+        val stock=native.store.devices.single {it.ieee=="0x0011223344556688"}
+        assertEquals(FirmwareKind.STOCK,stock.firmwareKind);assertEquals(stock.ieee,stock.name);assertNull(stock.installedVersion)
+        assertNull(stock.networkId);assertTrue(stock.uid.isEmpty());assertEquals(0,executions);assertEquals(0,imports)
+    }
+    fun testExplicitLiveImportLinksTheOriginalAndAddsOnlyCheckedConfiguredTopics() {
+        val original=record(1,null).copy(id="original:12345678:00000001",name="Dimmer · 0001")
+        syntheticInventory({topic->listOf(
+            DeviceRecord("incoming-original","Live hall",networkId=topic,ieee="0xf4ce367800000001",installedVersion="1.1.1",firmwareKind=FirmwareKind.CUSTOM),
+            DeviceRecord("incoming-stock","Stock dimmer",networkId=topic,ieee="0x0011223344556688",firmwareKind=FirmwareKind.STOCK),
+            DeviceRecord("unconfigured","Other source",networkId="unconfigured-topic",ieee="0x0011223344556699",firmwareKind=FirmwareKind.CUSTOM)
+        )}) {topic,_->
+            val native=fixture(listOf(original));instrumentation.runOnMainSync {native.navigate("zigbee-import")};instrumentation.waitForIdleSync()
+            val checks=nodes().filterIsInstance<CheckBox>()
+            val unavailable=checks.single {it.contentDescription.toString().startsWith("Other source.")}
+            assertFalse(unavailable.isEnabled)
+            for(name in listOf("Live hall","Stock dimmer"))instrumentation.runOnMainSync {
+                checks.single {it.contentDescription.toString().startsWith("$name.")}.performClick()
+            }
+            click("Add selected (2)");awaitFleet("Explicit import should consolidate the original and add the selected stock record") {native.store.devices.size==2}
+            val linked=native.store.devices.single {it.id==original.id}
+            assertEquals(topic,linked.networkId);assertEquals(original.uid,linked.uid);assertEquals(original.address,linked.address)
+            assertEquals(original.room,linked.room);assertEquals("Live hall",linked.name)
+            assertEquals(FirmwareKind.STOCK,native.store.devices.single {it.id!=original.id}.firmwareKind)
+            assertFalse(native.store.devices.any {it.ieee=="0x0011223344556699"})
+            assertEquals(0,executions);assertEquals(0,imports)
+        }
+    }
+    fun testLocalDeviceRenameCancelValidationAndTrimKeepIdentityWithoutZigbeeControls() {
+        val original=record(1);val native=fixture(listOf(original));openDevice(original.name);click("Edit name and room")
+        val dialog=windowNodes {it.any {n->n.contentDescription?.toString()=="Device name"}}
+        assertFalse(dialog.any {it.text?.toString()=="Use Zigbee name"})
+        dialogText("Device name","Discarded local name");dialogText("Room","Discarded room");dialogAction("Cancel")
+        assertEquals(original,native.store.devices.single());click("Edit name and room")
+        dialogText("Device name","   ");dialogAction("Save")
+        val invalid=windowNodes {it.any {n->n.contentDescription?.toString()=="Device name"}}
+        assertEquals("Enter a device name",invalid.first {it.contentDescription?.toString()=="Device name"}.error?.toString())
+        assertEquals(original,native.store.devices.single())
+        dialogText("Device name","  Portable lamp  ");dialogText("Room","  Guest room  ");dialogAction("Save")
+        awaitFleet("The trimmed local labels must be saved") {native.store.devices.single().name=="Portable lamp"}
+        val saved=native.store.devices.single()
+        assertEquals("Guest room",saved.room);assertEquals(original.id,saved.id);assertEquals(original.uid,saved.uid)
+        assertEquals(original.address,saved.address);assertFalse(saved.followZigbeeName);assertEquals(0,executions)
+    }
+    fun testFollowingALiveZigbeeNameUpdatesMetadataAndKeepsDeviceSelection() {
+        syntheticInventory({topic->listOf(DeviceRecord("reported","Live network name",networkId=topic,ieee="0xf4ce367800000001",installedVersion="1.1.1",firmwareKind=FirmwareKind.CUSTOM))}) {topic,flow->
+            val original=record(1,null).copy(name="Owner nickname",networkId=topic,ieee="0xf4ce367800000001",followZigbeeName=false)
+            val native=fixture(listOf(original));openDevice(original.name);click("Edit name and room")
+            val editable=windowNodes {it.any {n->n.contentDescription?.toString()=="Device name"&&n.isEnabled}}
+            assertEquals("Owner nickname",editable.single {it.contentDescription?.toString()=="Device name"}.text.toString())
+            val checkbox=editable.first {it.text?.toString()=="Use Zigbee name"}
+            assertFalse(checkbox.isChecked);assertTrue(checkbox.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+            val checked=windowNodes {it.any {n->n.text?.toString()=="Use Zigbee name"&&n.isChecked}}
+            // Android may omit a disabled editor from accessibility. Require
+            // the previously editable control to stop exposing edit authority.
+            assertFalse("Following must expose no editable name control",checked.any {it.contentDescription?.toString()=="Device name"&&it.isEnabled})
+            dialogAction("Save");awaitFleet("Enabling following must use the connected inventory name") {native.store.devices.single().name=="Live network name"}
+            assertTrue(native.store.devices.single().followZigbeeName)
+            instrumentation.runOnMainSync {nodes().filterIsInstance<CheckBox>().single().performClick()}
+            flow.value=flow.value.copy(devices=flow.value.devices.map {it.copy(name="Renamed in Zigbee",observedAt=System.currentTimeMillis())},inventoryReceived=true)
+            awaitFleet("A later inventory name must refresh the same record") {native.store.devices.single().name=="Renamed in Zigbee"}
+            assertEquals(original.id,native.store.devices.single().id);assertEquals(original.room,native.store.devices.single().room)
+            assertEquals(original.uid,native.store.devices.single().uid);assertEquals(original.address,native.store.devices.single().address)
+            assertTrue(nodes().filterIsInstance<CheckBox>().single().isChecked);assertEquals(0,executions);assertEquals(0,imports)
+        }
+    }
 }

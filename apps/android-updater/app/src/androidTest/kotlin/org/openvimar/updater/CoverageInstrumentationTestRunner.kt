@@ -28,8 +28,13 @@ class CoverageInstrumentationTestRunner : InstrumentationTestRunner() {
             val data = getAgent.returnType.getMethod("getExecutionData", Boolean::class.javaPrimitiveType)
                 .invoke(getAgent.invoke(null), false) as ByteArray
             check(data.isNotEmpty()) { "JaCoCo produced no execution data" }
+            // Android creates the app-owned external root through Context.
+            // A focused journey may never request screenshots/external files;
+            // coverage must not depend on another test preparing that root.
+            targetContext.getExternalFilesDir(null)
             val destination = coveragePath?.let(::File) ?: File(targetContext.filesDir, "coverage.ec")
-            destination.parentFile?.mkdirs()
+            val parent = requireNotNull(destination.absoluteFile.parentFile)
+            check(parent.isDirectory || parent.mkdirs()) { "Coverage directory unavailable: $parent" }
             destination.writeBytes(data)
             results.putString("coverageFilePath", destination.absolutePath)
         }
