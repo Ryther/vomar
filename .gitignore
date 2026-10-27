@@ -1129,6 +1129,8 @@
 !/docs/installation.md
 !/docs/troubleshooting.md
 
+!/apps/android-updater/app/src/androidTest/AndroidManifest.xml
+
 # Account state and acquired/generated artifacts always remain private.
 /_test*/
 /_tmp*/
