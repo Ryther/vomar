@@ -95,4 +95,32 @@ class InitialInstallAndroidAdapterTest:InstrumentationTestCase() {
             catch(_:IllegalArgumentException){}
         }finally{context.filesDir.deleteRecursively()}
     }
+    fun testStartIntentAndAcknowledgementSurviveAndroidReopen(){
+        val context=context()
+        try{
+            val store=AndroidInitialInstallPersistence(context);val bytes=archive();val original=OriginalArchive.verify(bytes)
+            val request="ef1faf4b-cd24-42c7-8508-8d51b4f10ad5";store.saveOriginal(request,bytes)
+            val material=OriginalArchive.exportAndReopen(original,store.privateExport(original.archiveSha256)).deriveOriginal()
+            fun hash(value:ByteArray)=java.security.MessageDigest.getInstance("SHA-256").digest(value).joinToString(""){"%02x".format(it.toInt() and 255)}
+            val fixed="11".repeat(32);val binding=InstallBinding(original.identity,original.archiveSha256,fixed,fixed,hash(material.anchor()),hash(material.table()),fixed,fixed)
+            store.saveExportReceipt(material,binding)
+            val journal=FileInstallJournal(store.journalDirectory)
+            assertTrue(journal.begin(InstallJournalRecord(binding,1,InstallPhase.PREPARED,null,false,false)))
+            journal.save(InstallJournalRecord(binding,2,InstallPhase.VERIFIED,null,true,true))
+            store.recordStart(binding,request,false)
+            val reopened=AndroidInitialInstallPersistence(context)
+            assertTrue(reopened.reopenRetained(binding.id).startUncertain)
+            assertEquals(binding.id,reopened.resumeOptions(original.identity).single().bindingId)
+            try{reopened.recordStart(binding,"ab1faf4b-cd24-42c7-8508-8d51b4f10ad5",true);fail("A different request must not acknowledge the start")}
+            catch(_:IllegalArgumentException){}
+            assertTrue(AndroidInitialInstallPersistence(context).reopenRetained(binding.id).startUncertain)
+            reopened.recordStart(binding,request,true)
+            val completed=AndroidInitialInstallPersistence(context)
+            assertFalse(completed.reopenRetained(binding.id).startUncertain)
+            assertTrue(completed.resumeOptions(original.identity).isEmpty())
+            assertTrue(completed.originalBytes(original.archiveSha256).contentEquals(bytes))
+            try{completed.assertCanCapture(original.identity);fail("Completed start must not permit replacing the original")}
+            catch(_:IllegalArgumentException){}
+        }finally{context.filesDir.deleteRecursively()}
+    }
 }
