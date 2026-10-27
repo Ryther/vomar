@@ -1,6 +1,6 @@
 # Choose Zigbee pairing or Bluetooth
 
-This connection selector is implemented on the feature branch and needs matching
+This connection selector needs matching
 MAIN, recovery and Android components. It is not a claim that a published package
 or installed 1.0.0 firmware supports it. Host checks and native compilation do not
 qualify the physical buttons, radio, LED colour order or power-cut behavior.

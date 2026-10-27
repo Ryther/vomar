@@ -90,6 +90,10 @@ broker and up to three configured Zigbee2MQTT base topics. Use the exact host,
 port and supported transport. Plaintext local connections require their own
 consent; the port number alone does not enable encryption.
 
+Android 1.1.0 combines those corrections with explicit Bluetooth-to-Zigbee pairing
+on supporting firmware. Inspection and fresh confirmation are required; the old
+network is forgotten only by the confirmed pairing operation.
+
 Android 1.0.9 adds the device-association and row-touch corrections below.
 Install the matching signed upgrade over the existing app to retain its state.
 A first-installed dimmer's Devices record can also acquire its

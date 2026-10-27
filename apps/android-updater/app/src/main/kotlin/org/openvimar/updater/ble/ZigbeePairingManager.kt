@@ -1,7 +1,7 @@
 package org.openvimar.updater.ble
 
-import io.runtime.mcumgr.*
-import io.runtime.mcumgr.response.McuMgrResponse
+import no.nordicsemi.android.mcumgr.*
+import no.nordicsemi.android.mcumgr.response.McuMgrResponse
 import org.openvimar.updater.core.*
 
 /** Authenticated group0x8043: capability discovery never requests a transition. */

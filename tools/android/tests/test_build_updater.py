@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import subprocess
 from pathlib import Path
 import zipfile
 import pytest
@@ -12,7 +13,18 @@ spec.loader.exec_module(m)
 # Exact package/SDK lines captured from pinned aapt2 35.0.0 during failed regeneration:
 # experiments/android-updater/20261022T150311Z/aapt2-badging.txt
 CAPTURED_BADGING = "package: name='org.openvimar.updater' versionCode='1' versionName='0.1.0' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'\nminSdkVersion:'26'\ntargetSdkVersion:'35'\n"
-CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='29'").replace("versionName='0.1.0'", "versionName='1.0.9'")
+CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='30'").replace("versionName='0.1.0'", "versionName='1.1.0'")
+
+def test_first_install_fixtures_generate_outside_repository_without_pythonpath(tmp_path):
+    output = tmp_path / 'fixtures'
+    generator = m.ROOT / 'tools/android/generate_first_install_test_fixtures.py'
+    result = subprocess.run([sys.executable, '-I', str(generator), '--output', str(output)],
+                            cwd=tmp_path, capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert {p.name for p in output.iterdir()} == {
+        'candidate.zip', 'candidate-public.der', 'watchdog.zip', 'watchdog-public.der',
+        'original.zip', 'original-erased-tail.zip',
+    }
 
 def test_patchReleaseAcceptedAndPreviousApkRejected():
     patched = CURRENT_BADGING
@@ -35,7 +47,7 @@ def test_patchReleaseAcceptedAndPreviousApkRejected():
     with pytest.raises(ValueError):
         m.audit_manifest(prior_ui, 'android:allowBackup=false')
 
-    for version,code in [('1.0.4',24),('1.0.5',25),('1.0.6',26),('1.0.7',27),('1.0.8',28)]:
+    for version,code in [('1.0.4',24),('1.0.5',25),('1.0.6',26),('1.0.7',27),('1.0.8',28),('1.0.9',29)]:
         stale = CAPTURED_BADGING.replace("versionCode='1'", f"versionCode='{code}'").replace("versionName='0.1.0'", f"versionName='{version}'")
         with pytest.raises(ValueError, match='version'):
             m.audit_manifest(stale, 'android:allowBackup=false')

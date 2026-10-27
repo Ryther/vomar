@@ -1,4 +1,15 @@
-# Vimar Updater Android 1.0.9
+# Vimar Updater Android 1.1.0
+
+App 1.1.0 (versionCode 30) combines the device-association and automatic broker
+reconnection corrections with explicit Zigbee pairing from Bluetooth. Pairing
+requires compatible signed MAIN and recovery, fresh inspection and confirmation;
+it forgets the previous Zigbee network and opens a two-minute window. See
+[connection modes](connection-modes.md). It never replays a pairing request or
+firmware operation after reconnection. Upgrade with the existing signing identity
+without uninstalling or clearing data. Software checks do not qualify physical
+phone, radio or DK operations.
+
+## Device association introduced in 1.0.9
 
 App 1.0.9 (versionCode 29) consolidates first-install, Bluetooth and Zigbee
 organisational records, preserves retained originals, and fixes touches on the
