@@ -58,7 +58,7 @@ branch `main`, with no tag policy or administrator bypass:
 | --- | --- | --- | --- |
 | `release-proposal` | Automatic | `RELEASE_PROPOSAL_TOKEN` | None |
 | `release-signing` | Maintainer required | `FIRMWARE_SIGNING_KEY_PEM`, `ANDROID_SIGNING_KEYSTORE_BASE64`, `ANDROID_SIGNING_PASSWORD` | `FIRMWARE_QUALIFICATION_JSON` |
-| `release-publication` | Maintainer required | `RELEASE_PUBLICATION_TOKEN`, `SONAR_TOKEN` | `FIRMWARE_QUALIFICATION_JSON`, `NATIVE_QUALIFICATION_JSON`, `DEPENDENCY_REVIEW_JSON` |
+| `release-publication` | Maintainer required | `VOMAR_RELEASE_PUBLICATION_TOKEN`, `SONAR_TOKEN` | `FIRMWARE_QUALIFICATION_JSON`, `NATIVE_QUALIFICATION_JSON`, `DEPENDENCY_REVIEW_JSON` |
 | `sonar-analysis` | Automatic | `SONAR_TOKEN` | None |
 | `github-pages` | Automatic | None | None |
 
@@ -81,10 +81,16 @@ Create separate fine-grained tokens restricted to `Ryther/vomar`:
 
 - `RELEASE_PROPOSAL_TOKEN`: Contents, Pull requests and Issues read/write. Store
   it only in `release-proposal`. It lets Release Please proposals trigger CI.
-- `RELEASE_PUBLICATION_TOKEN`: Contents read/write and Checks read, with Metadata
+- `VOMAR_RELEASE_PUBLICATION_TOKEN`: Contents read/write, with Metadata
   read. Store it only in `release-publication`. It reads exact candidate checks
   and manages draft assets/tags and publication. It does not need repository
   administration or workflow editing permissions.
+
+Check inspection uses the workflow's built-in `GITHUB_TOKEN`, passed as
+`GH_CHECKS_TOKEN` with explicit Checks read permission; the owner creates no
+additional secret for it. Without that optional reader credential, the publisher
+reads public check runs anonymously. A failed read or missing required result
+still blocks publication. The publication PAT is never sent to the Checks API.
 
 Create project-scoped Sonar credentials for the following distinct uses:
 
