@@ -3,8 +3,73 @@ import importlib
 import itertools
 import json
 from pathlib import Path
+import runpy
+import xml.etree.ElementTree as ET
 
 import pytest
+
+
+@pytest.fixture
+def repository_python_report(tmp_path):
+    import coverage
+    repository=tmp_path/'repository';repository.mkdir()
+    files=('tools/release/manifest.py','apps/desktop-updater/src/vomar_updater/runtime.py')
+    for filename in files:
+        path=repository/filename;path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text('enabled=True\nif enabled:\n    value=7\nelse:\n    value=3\n')
+    report=tmp_path/'python-coverage.xml'
+    measured=coverage.Coverage(source=[str(repository)],branch=True,config_file=False,data_file=None)
+    measured.start()
+    try:
+        for filename in files:runpy.run_path(str(repository/filename))
+    finally:measured.stop()
+    measured.xml_report(outfile=str(report))
+    return repository,report
+
+
+def test_repository_python_coverage_survives_legacy_preparation_without_changing_measures(repository_python_report,tmp_path):
+    prepare=importlib.import_module('tools.release.prepare_pr_analysis')
+    repository,report=repository_python_report
+    original=ET.parse(report)
+    measures=ET.tostring(original.find('./packages'))
+    prepare.normalize_python_coverage(report,repository)
+    normalized=ET.parse(report)
+    assert normalized.findall('./sources/source')==[]
+    assert ET.tostring(normalized.find('./packages'))==measures
+    reports=tmp_path/'reports';reports.mkdir();report.rename(reports/report.name)
+    sha='a'*40
+    (reports/'component-versions.json').write_text(json.dumps({'commit':sha}))
+    (reports/'lcov.info').write_text('SF:integrations/zigbee2mqtt/index.js\nDA:1,1\nend_of_record\n')
+    for name in ('core-jacoco.xml','app-jacoco.xml'):(reports/name).write_text('<report><package name="synthetic"/></report>')
+    prepare.prepare(reports,repository,sha)
+    prepared=ET.parse(reports/report.name)
+    assert prepared.findall('./sources/source')==[]
+    assert ET.tostring(prepared.find('./packages'))==measures
+    files={item.get('filename') for item in prepared.findall('.//class')}
+    assert files=={'tools/release/manifest.py','apps/desktop-updater/src/vomar_updater/runtime.py'}
+    for item in prepared.findall('.//class'):
+        assert (repository/item.get('filename')).is_file()
+        assert any(int(line.get('hits'))>0 for line in item.findall('./lines/line'))
+        assert any(line.get('condition-coverage')=='50% (1/2)' for line in item.findall('./lines/line'))
+
+
+@pytest.mark.parametrize('filename',['/tmp/outside.py','../outside.py','tools/../outside.py','C:/outside.py',r'tools\outside.py','tools/missing.py'])
+def test_repository_python_coverage_refuses_unsafe_or_missing_paths(repository_python_report,filename):
+    prepare=importlib.import_module('tools.release.prepare_pr_analysis')
+    repository,report=repository_python_report
+    tree=ET.parse(report);tree.find('.//class').set('filename',filename);tree.write(report)
+    original=report.read_bytes()
+    with pytest.raises(ValueError,match='coverage'):prepare.normalize_python_coverage(report,repository)
+    assert report.read_bytes()==original
+
+
+def test_repository_python_coverage_requires_exact_measured_repository(repository_python_report):
+    prepare=importlib.import_module('tools.release.prepare_pr_analysis')
+    repository,report=repository_python_report
+    tree=ET.parse(report);tree.find('./sources/source').text=str(repository/'apps');tree.write(report)
+    original=report.read_bytes()
+    with pytest.raises(ValueError,match='coverage'):prepare.normalize_python_coverage(report,repository)
+    assert report.read_bytes()==original
 
 
 def test_only_expected_successful_scan_with_reports_can_pass():
