@@ -141,6 +141,7 @@ jobs:
             -Pandroid.testInstrumentationRunnerArguments.class=org.openvimar.updater.CiUiSuite &&
             python -m tools.release.android_ui
             --results apps/android-updater/app/build/outputs/androidTest-results/connected/debug
+            --coverage-dir apps/android-updater/app/build/outputs/code_coverage/debugAndroidTest/connected
             --output _test/android-ui-diagnostics/verification.json ||
             { mkdir -p _test/android-ui-diagnostics;
             adb -s emulator-5554 shell dumpsys window > _test/android-ui-diagnostics/window.txt;

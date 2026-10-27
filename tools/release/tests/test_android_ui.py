@@ -65,14 +65,30 @@ def test_missing_or_malformed_results_fail(tmp_path):
 def test_cli_writes_evidence_only_after_all_expected_classes_execute(tmp_path, monkeypatch, capsys):
     results = tmp_path / 'results'
     output = tmp_path / 'verified.json'
+    coverage = tmp_path / 'coverage'
+    coverage.mkdir()
+    (coverage / 'device.ec').write_bytes(b'synthetic device execution data')
     report(results, android_ui.EXPECTED_CLASSES)
-    monkeypatch.setattr(sys, 'argv', ['android_ui', '--results', str(results), '--output', str(output)])
+    monkeypatch.setattr(sys, 'argv', ['android_ui', '--results', str(results), '--coverage-dir', str(coverage), '--output', str(output)])
     android_ui.main()
     assert json.loads(output.read_text())['executed'] == len(android_ui.EXPECTED_CLASSES)
     assert 'Verified 7 Android tests across 7 classes' in capsys.readouterr().out
     rejected = tmp_path / 'incomplete.json'
     report(results, android_ui.EXPECTED_CLASSES[:1])
-    monkeypatch.setattr(sys, 'argv', ['android_ui', '--results', str(results), '--output', str(rejected)])
+    monkeypatch.setattr(sys, 'argv', ['android_ui', '--results', str(results), '--coverage-dir', str(coverage), '--output', str(rejected)])
     with pytest.raises(ValueError, match='did not execute'):
         android_ui.main()
     assert not rejected.exists()
+
+
+def test_device_coverage_must_exist_and_be_nonempty(tmp_path):
+    with pytest.raises(ValueError, match='coverage'):
+        android_ui.verify_coverage(tmp_path)
+    execution = tmp_path / 'device.ec'
+    execution.write_bytes(b'')
+    with pytest.raises(ValueError, match='coverage'):
+        android_ui.verify_coverage(tmp_path)
+    execution.write_bytes(b'synthetic device execution data')
+    result = android_ui.verify_coverage(tmp_path)
+    assert result[0]['file'] == 'device.ec'
+    assert result[0]['size'] == execution.stat().st_size

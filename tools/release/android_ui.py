@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -51,12 +52,22 @@ def verify_results(directory: Path, expected_classes=EXPECTED_CLASSES):
             'skipped': sum(c['skipped'] for c in counts.values()), 'classes': counts}
 
 
+def verify_coverage(directory: Path):
+    files = sorted(directory.rglob('*.ec'))
+    if not files or any(path.stat().st_size == 0 for path in files):
+        raise ValueError('Missing or empty Android device coverage')
+    return [{'file': str(path.relative_to(directory)), 'size': path.stat().st_size,
+             'sha256': hashlib.sha256(path.read_bytes()).hexdigest()} for path in files]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--results', required=True, type=Path)
+    parser.add_argument('--coverage-dir', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
     args = parser.parse_args()
     result = verify_results(args.results)
+    result['deviceCoverage'] = verify_coverage(args.coverage_dir)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + '\n')
     print(f"Verified {result['executed']} Android tests across {len(result['classes'])} classes")
