@@ -47,11 +47,11 @@ jobs:
           projectBaseDir: candidate
           args: >-
             -Dsonar.scm.revision=${{ github.event.workflow_run.head_sha }}
-            -Dsonar.python.coverage.reportPaths=../reports/python-coverage.xml
-            -Dsonar.javascript.lcov.reportPaths=../reports/lcov.info
-            -Dsonar.coverage.jacoco.xmlReportPaths=../reports/core-jacoco.xml,../reports/app-jacoco.xml
-            -Dsonar.coverageReportPaths=../reports/c-coverage.xml
-            -Dsonar.cfamily.compile-commands=../reports/compile_commands.json
+            -Dsonar.python.coverage.reportPaths=${{ github.workspace }}/reports/python-coverage.xml
+            -Dsonar.javascript.lcov.reportPaths=${{ github.workspace }}/reports/lcov.info
+            -Dsonar.coverage.jacoco.xmlReportPaths=${{ github.workspace }}/reports/core-jacoco.xml,${{ github.workspace }}/reports/app-jacoco.xml
+            -Dsonar.coverageReportPaths=${{ github.workspace }}/reports/c-coverage.xml
+            -Dsonar.cfamily.compile-commands=${{ github.workspace }}/reports/compile_commands.json
       - name: Require exact candidate security analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
