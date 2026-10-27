@@ -138,7 +138,10 @@ jobs:
             apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict
             :app:connectedDebugAndroidTest
             -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
-            -Pandroid.testInstrumentationRunnerArguments.class=org.openvimar.updater.InitialInstallUiTest,org.openvimar.updater.InitialInstallAndroidAdapterTest,org.openvimar.updater.BleTrialUiTest,org.openvimar.updater.AutomaticConnectionUiTest,org.openvimar.updater.NativeFleetUiTest ||
+            -Pandroid.testInstrumentationRunnerArguments.class=org.openvimar.updater.CiUiSuite &&
+            python -m tools.release.android_ui
+            --results apps/android-updater/app/build/outputs/androidTest-results/connected/debug
+            --output _test/android-ui-diagnostics/verification.json ||
             { mkdir -p _test/android-ui-diagnostics;
             adb -s emulator-5554 shell dumpsys window > _test/android-ui-diagnostics/window.txt;
             adb -s emulator-5554 shell dumpsys power > _test/android-ui-diagnostics/power.txt;
