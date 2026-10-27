@@ -129,6 +129,33 @@ def test_windows_pe_inspection_passes_path_as_data(tmp_path, monkeypatch):
     assert package_desktop.verify_windows_version(executable, '1.1.0') == observed
 
 
+def test_windows_pe_inspection_accepts_inno_ascii_space_padding_and_preserves_raw_report(tmp_path, monkeypatch):
+    observed = {'fileVersion':'1.1.0               ', 'productVersion':'1.1.0                                             ', 'fileParts':[1,1,0,0], 'productParts':[1,1,0,0]}
+    monkeypatch.setattr(package_desktop, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=json.dumps(observed)))
+    assert package_desktop.verify_windows_version(tmp_path/'setup.exe', '1.1.0') == observed
+
+
+@pytest.mark.parametrize('field', ['fileVersion', 'productVersion'])
+@pytest.mark.parametrize('value', ['2.0.0   ', ' 1.1.0', '1.1.0\t', '1.1.0\n', '1.1.0\u00a0', '1.1.0 junk ', '1.1.0.0 ', '', None])
+def test_windows_pe_padding_does_not_allow_mismatched_or_malformed_versions(tmp_path, monkeypatch, field, value):
+    observed = {'fileVersion':'1.1.0', 'productVersion':'1.1.0', 'fileParts':[1,1,0,0], 'productParts':[1,1,0,0]}
+    observed[field] = value
+    monkeypatch.setattr(package_desktop, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=json.dumps(observed)))
+    with pytest.raises(ValueError, match='Windows.*version'):
+        package_desktop.verify_windows_version(tmp_path/'setup.exe', '1.1.0')
+
+
+@pytest.mark.parametrize('mutation', ['missing', 'extra', 'fileParts', 'productParts'])
+def test_windows_pe_padding_preserves_exact_fields_and_numeric_versions(tmp_path, monkeypatch, mutation):
+    observed = {'fileVersion':'1.1.0   ', 'productVersion':'1.1.0   ', 'fileParts':[1,1,0,0], 'productParts':[1,1,0,0]}
+    if mutation == 'missing':del observed['fileVersion']
+    elif mutation == 'extra':observed['unexpectedVersion'] = '1.1.0'
+    else:observed[mutation] = [2,0,0,0]
+    monkeypatch.setattr(package_desktop, 'run', lambda *args, **kwargs: subprocess.CompletedProcess(args, 0, stdout=json.dumps(observed)))
+    with pytest.raises(ValueError, match='Windows.*version'):
+        package_desktop.verify_windows_version(tmp_path/'setup.exe', '1.1.0')
+
+
 @pytest.fixture
 def synthetic_native_build(tmp_path, monkeypatch):
     """Replace native compilers/downloads, retaining real package/report writes."""

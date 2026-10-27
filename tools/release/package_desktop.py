@@ -77,7 +77,13 @@ $v = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($env:VOMAR_VERSION_TAR
     result=run('powershell.exe','-NoProfile','-NonInteractive','-Command',script,env={**os.environ,'VOMAR_VERSION_TARGET':str(executable)},capture_output=True,text=True)
     observed=json.loads(result.stdout)
     parts=[int(part) for part in version.split('.')]+[0]
-    if observed!={'fileVersion':version,'productVersion':version,'fileParts':parts,'productParts':parts}:
+    # Inno pads textual version resources with ASCII spaces. Keep the raw
+    # inspection for the report and normalize only that trailing padding.
+    normalized=observed.copy() if isinstance(observed,dict) else observed
+    if isinstance(normalized,dict):
+        for field in ('fileVersion','productVersion'):
+            if isinstance(normalized.get(field),str):normalized[field]=normalized[field].rstrip(' ')
+    if normalized!={'fileVersion':version,'productVersion':version,'fileParts':parts,'productParts':parts}:
         raise ValueError(f'Windows native version mismatch for {executable.name}: {observed!r}')
     return observed
 
