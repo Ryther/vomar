@@ -871,6 +871,22 @@
           }
         ]
       }
+    },
+    {
+      "id": "non-array-artifacts",
+      "accept": false,
+      "manifest": {
+        "schemaVersion": 1,
+        "distributionVersion": "0.1.0",
+        "tag": "v0.1.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "components": {
+          "firmware": "1.0.0",
+          "android": "1.0.0",
+          "desktop": "1.0.0"
+        },
+        "artifacts": {}
+      }
     }
   ]
 }
