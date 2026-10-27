@@ -574,5 +574,84 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
             assertEquals(0,executions);assertFalse(network.state.value.connected)
         }finally{kotlinx.coroutines.runBlocking{network.removeProfile(id)}}
     }
+    fun testDeviceNameVersionAndRowPaddingOpenTheSameDevice(){
+        val native=fixture(listOf(record(1)))
+        for(part in listOf("name","version","padding")){
+            instrumentation.runOnMainSync{native.navigate("devices")};instrumentation.waitForIdleSync()
+            val name=nodes().filterIsInstance<TextView>().first{it.text.toString()==record(1).name}
+            val target=when(part){"name"->name;"version"->nodes().filterIsInstance<TextView>().first{it.text.toString()=="0.6.0"};else->name.parent as View}
+            val bounds=android.graphics.Rect();var visible=false
+            val deadline=System.currentTimeMillis()+15000
+            while(!visible&&System.currentTimeMillis()<deadline){instrumentation.runOnMainSync{visible=target.width>0&&target.height>0&&target.getGlobalVisibleRect(bounds)};if(!visible)Thread.sleep(50)}
+            assertTrue("The $part target must be laid out before a pointer is injected",visible)
+            val position=IntArray(2);var x=0f;var y=0f
+            instrumentation.runOnMainSync{target.getLocationOnScreen(position);x=position[0]+target.width/2f;y=position[1]+if(part=="padding")target.height-2f else target.height/2f}
+            val now=android.os.SystemClock.uptimeMillis()
+            val down=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_DOWN,x,y,0)
+            val up=android.view.MotionEvent.obtain(now,now+60,android.view.MotionEvent.ACTION_UP,x,y,0)
+            // Inject actual pointer events, rather than invoking performClick
+            // on the parent and bypassing intercepted label taps.
+            try{instrumentation.sendPointerSync(down);instrumentation.sendPointerSync(up)}finally{down.recycle();up.recycle()}
+            instrumentation.waitForIdleSync()
+            assertTrue("Tapping $part must open the device",texts().contains("Edit name and room"))
+        }
+        assertEquals(0,executions);assertEquals(0,imports);capture("device-row-tap-details")
+    }
+    fun testOriginalAndZigbeeRecordsMergeWithoutLosingRetainedActivity(){
+        val context=object:ContextWrapper(activity){override fun getSharedPreferences(name:String,mode:Int)=super.getSharedPreferences("device-link-test-$name",mode)}
+        val preferences=context.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE)
+        preferences.edit().clear().putString("devices","""[{"id":"original:12345678:11223344","name":"Dimmer · 3344","uid":["12345678","11223344"],"address":"C0:00:00:00:00:01"},{"id":"zigbee:topic:0xf4ce367811223344","name":"Hall light","networkId":"topic","ieee":"0xf4ce367811223344","followZigbeeName":true}]""")
+            .putString("batches","""[{"id":"retained","digest":"fixture","name":"Previous operation","version":"1.0.0","at":1,"status":"Completed"}]""").commit()
+        val store=FleetStore(context);assertEquals(1,store.devices.size)
+        val linked=store.devices.single();assertEquals("original:12345678:11223344",linked.id)
+        assertEquals(listOf("12345678","11223344"),linked.uid);assertEquals("Hall light",linked.name)
+        assertEquals("C0:00:00:00:00:01",linked.address);assertEquals("topic",linked.networkId)
+        assertEquals("retained",store.batches.single().id)
+        assertEquals(linked,FleetStore(context).devices.single());assertEquals(1,FleetStore(context).batches.size)
+    }
+    fun testDeviceMigrationNeverRewritesPartiallyDecodedPreferences(){
+        val context=object:ContextWrapper(activity){override fun getSharedPreferences(name:String,mode:Int)=super.getSharedPreferences("device-link-corrupt-test-$name",mode)}
+        val preferences=context.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE)
+        val valid="""[{"id":"original:12345678:11223344","name":"Dimmer · 3344","uid":["12345678","11223344"]},{"id":"zigbee:topic:0xf4ce367811223344","name":"Hall light","networkId":"topic","ieee":"0xf4ce367811223344"}]"""
+        for(badDevices in listOf(true,false)){
+            val devices=if(badDevices)valid.dropLast(1)+",{}]" else valid
+            val batches=if(badDevices)"[]" else "[{}]"
+            preferences.edit().clear().putString("devices",devices).putString("batches",batches).commit()
+            val store=FleetStore(context)
+            assertFalse(store.mergeZigbee(DeviceRecord("zigbee:topic:0xf4ce367811223344","New name",networkId="topic",ieee="0xf4ce367811223344"),addNew=true))
+            assertEquals(devices,preferences.getString("devices",null));assertEquals(batches,preferences.getString("batches",null))
+        }
+    }
+    fun testLegacyIdOnlyZigbeeImportJoinsTheOriginalRecord(){
+        val context=object:ContextWrapper(activity){override fun getSharedPreferences(name:String,mode:Int)=super.getSharedPreferences("device-link-legacy-test-$name",mode)}
+        context.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE).edit().clear().putString("devices","""[{"id":"original:12345678:11223344","name":"Dimmer · 3344","uid":["12345678","11223344"]},{"id":"zigbee:0xf4ce367811223344","name":"Legacy hall light"}]""").commit()
+        val store=FleetStore(context);assertEquals(1,store.devices.size)
+        val merged=store.devices.single();assertEquals("original:12345678:11223344",merged.id)
+        assertEquals("0xf4ce367811223344",merged.ieee);assertEquals("Legacy hall light",merged.name)
+        assertFalse(merged.followZigbeeName);assertNull(merged.networkId)
+        assertEquals(merged,FleetStore(context).devices.single())
+    }
+    fun testFollowingZigbeeNameCanBeChangedToACustomName(){
+        val saved=record(1).copy(networkId="topic",ieee="0xf4ce367800000001",followZigbeeName=true)
+        val native=fixture(listOf(saved))
+        val name=nodes().filterIsInstance<TextView>().first{it.text.toString()==saved.name}
+        instrumentation.runOnMainSync{(name.parent as View).performClick()};instrumentation.waitForIdleSync()
+        click("Edit name and room")
+        var dialog=windowNodes{it.any{n->n.text?.toString()=="Use Zigbee name"}}
+        val follows=requireNotNull(dialog.firstOrNull{it.text?.toString()=="Use Zigbee name"}){"Missing Zigbee name checkbox"};assertTrue(follows.isChecked)
+        // Android may omit a disabled editor from the accessibility tree.
+        dialog.firstOrNull{it.contentDescription?.toString()=="Device name"}?.let{assertFalse(it.isEnabled)}
+        follows.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+        dialog=windowNodes{it.any{n->n.contentDescription?.toString()=="Device name"&&n.isEnabled}}
+        val input=requireNotNull(dialog.firstOrNull{it.contentDescription?.toString()=="Device name"}){"Missing editable device name"};assertTrue(input.isEnabled)
+        input.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT,android.os.Bundle().apply{putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"My hallway")})
+        capture("zigbee-name-editor")
+        dialog=windowNodes{it.any{n->n.text?.toString()?.equals("Save",ignoreCase=true)==true}}
+        requireNotNull(dialog.firstOrNull{it.text?.toString()?.equals("Save",ignoreCase=true)==true}){"Missing Save button"}.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
+        instrumentation.waitForIdleSync()
+        val runtime=NativeFleetUi::class.java.getDeclaredField("runtime").apply{isAccessible=true}.get(native) as FleetRuntime
+        assertEquals("My hallway",runtime.records.devices.single().name);assertFalse(runtime.records.devices.single().followZigbeeName)
+        assertEquals(saved.uid,runtime.records.devices.single().uid);assertEquals(0,executions)
+    }
     fun testEmptyInventoryStartsWithBluetoothEnrolment(){fixture(emptyList());assertTrue(texts().contains("Add your first dimmer"));click("Add device");assertTrue(texts().contains("Search Bluetooth"));assertTrue(texts().any{it.contains("5 seconds")});assertEquals(0,imports);capture("add-empty-dark")}
 }

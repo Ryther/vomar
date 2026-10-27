@@ -5,7 +5,8 @@ import java.net.URI
 /** Optional organisation only. These records never grant transport or update authority. */
 internal data class DeviceRecord(val id: String, val name: String, val room: String = "", val address: String? = null, val uid: List<String> = emptyList(),
     val networkId:String?=null,val ieee:String?=null,val installedVersion:String?=null,val firmwareKind:FirmwareKind=FirmwareKind.UNKNOWN,
-    val capabilities:Set<String> = emptySet(),val observedAt:Long?=null,val observationSource:String?=null) {
+    val capabilities:Set<String> = emptySet(),val observedAt:Long?=null,val observationSource:String?=null,
+    val followZigbeeName:Boolean=false) {
     companion object {
         fun from(pkg: PackageSummary) = DeviceRecord(pkg.uid.joinToString(":"), pkg.name, address=pkg.address, uid=pkg.uid)
     }

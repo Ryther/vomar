@@ -1,4 +1,56 @@
-# Vimar Updater Android 1.0.7
+# Vimar Updater Android 1.0.9
+
+App 1.0.9 (versionCode 29) consolidates first-install, Bluetooth and Zigbee
+organisational records, preserves retained originals, and fixes touches on the
+name/version text in device rows. **Edit name and room → Use Zigbee name**
+controls name synchronisation. It also includes the automatic broker connection
+and subscription-restoration behavior described below. The local signed APK is
+under `experiments/android-updater/releases/1.0.9/`; install it over the existing
+app without uninstalling or clearing data. Native emulator checks and software
+tests do not qualify physical phone, radio or DK operations.
+
+## One dimmer across Bluetooth and Zigbee
+
+After first installation, the dimmer appears in **Devices** using the UID of
+its retained original. To attach its Zigbee connection, open **Settings →
+Zigbee2MQTT**, connect the saved broker profile and include the dimmer's base
+topic. Incoming inventory and state observations link to an existing UID record
+using Vomar's IEEE convention after every configured topic has reported its inventory.
+If a configured topic is unavailable, explicit import remains available. **Add device → Import from Zigbee** uses the same
+matching logic; it does not create a second record for an already linked dimmer.
+
+The existing record retains its UID, Bluetooth address, room and original-backup
+association. Its generic `Dimmer · …` name follows the Zigbee friendly name.
+In **Edit name and room**, clear **Use Zigbee name** to enter a custom name,
+or select it to resume following the network name. Existing custom names and
+older records without name-source information are preserved until you choose
+to follow Zigbee. Already duplicated original/Zigbee records are consolidated when
+their identities match unambiguously; matching names alone never joins records,
+and another topic cannot silently replace an existing Zigbee connection.
+
+These are organisational associations. A known UID or reported version does
+not replace the live identity and package checks required for an update. A
+Bluetooth address appears only when actually recorded, not inferred from IEEE.
+An exported device list preserves IEEE and cached metadata; its live Zigbee
+topic is attached when a matching connected inventory arrives.
+Tap the name, version or empty central area of a Devices row to open its details;
+the checkbox selects it for a group and the status indicator explains eligibility.
+
+## Release notes
+
+App 1.0.8 (versionCode 28) fixes Android ICU parsing of retained first-install
+start evidence. An unescaped closing JSON brace previously caused **Syntax error
+in regexp pattern near index 140** while saving or reopening a start intent.
+Existing records remain byte-compatible; install the APK over the existing app
+with the same signing identity to preserve originals and journals. An uncertain
+start still requires explicit repair and a separately reviewed start. See
+[interrupted attempts](android-first-install.md#cancellation-and-interrupted-attempts).
+
+The corrected signed APK is delivered locally under
+`experiments/android-updater/releases/1.0.8/`; its build and audit evidence is under
+`experiments/android-updater/builds/1.0.8/start-evidence-fix/`. The focused
+start-evidence regression passed on an API35 software emulator before this
+version-only increment. Physical phone/DK operation remains unqualified.
 
 App 1.0.7 (versionCode 27) optimizes first installation and interrupted repair:
 queued USB/SWD work, 1MHz programming clock, bounded USB presence checks and reuse
@@ -66,8 +118,36 @@ is never shown as installed firmware. Local device names and rooms are retained.
 
 Saved readings are labelled `(saved)` when disconnected or when only cached
 broker data is available. Device details show when the version information was
-received. Opening the app still does not automatically connect, query or update
-devices; receiving MQTT metadata never authorizes a firmware operation.
+received. The current connection behavior is described below; receiving MQTT
+metadata never authorizes a firmware operation.
+
+## Automatic Zigbee2MQTT connection
+
+In Settings → Zigbee2MQTT, save the broker and topics, then choose **Connect**
+once. Android remembers that activated profile and restores its subscriptions
+when the app opens, including after process termination. Saving another profile
+alone does not activate it. One broker can be active, with up to three configured
+Zigbee2MQTT base topics; switching profiles replaces the previous activation.
+Credentials remain in encrypted private storage and the existing unencrypted
+local-network consent still applies.
+
+After transport loss, the app shows **Reconnecting** and retries with delays of
+1, 2, 4, 8, 16 and then 30 seconds. Connection and initial subscriptions have a
+30-second deadline per attempt. Each attempt creates a fresh clean MQTT
+session and restores subscriptions. It never republishes an interrupted command,
+queries a dimmer or resumes a firmware job automatically. Updates and uncertain
+operation reconciliation retain their explicit review requirements. Historical
+broker readings remain historical.
+
+Choose **Disconnect** to disable restoration and cancel retries, even while
+offline. Removing the activated profile also disables restoration. Authentication,
+authorization, certificate and configuration errors stop retries: correct the
+settings with **Save and reconnect**, or choose **Retry connection**. These errors
+never trigger a switch to another saved broker. OS process termination may close
+the connection; this is restoration on app use, not a permanent background service.
+
+Synthetic JVM and native tests cover lifecycle, persistence and subscription-only
+restoration. They do not qualify a physical phone's network/VPN or a household broker.
 
 App 1.0.1 (versionCode 21) delivers the approved saved-connection and device-filter
 changes. Settings → Zigbee2MQTT now supports multiple named saved broker profiles,

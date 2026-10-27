@@ -8,6 +8,25 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class ZigbeeBridgeTest {
+    @Test fun lossDuringInitialSubscriptionsCannotBeOverwrittenByConnected()=runBlocking {
+        val input=Channel<MqttSignal>(Channel.UNLIMITED)
+        val connection=object:MqttConnection {
+            override val events=input.receiveAsFlow()
+            override val connected=true // Even if the adapter property lags, Lost is authoritative.
+            override suspend fun connect(profile:BrokerProfile,credentials:BrokerCredentials?) {}
+            override suspend fun subscribe(filters:List<String>) {input.send(MqttSignal.Lost());yield()}
+            override suspend fun publish(topic:String,payload:ByteArray) {error("No commands")}
+            override suspend fun disconnect() {input.close()}
+            override fun close(){input.close()}
+        }
+        val bridge=ZigbeeBridge(connection,this)
+        var lost=false
+        try {bridge.connect(BrokerProfile("test","ssl://broker.invalid",listOf(ZigbeeNetwork("a","A","alpha"))),null)}
+        catch(_:NetworkLostException){lost=true}
+        finally {bridge.disconnect()}
+        assertTrue("Connection loss during subscribe must fail establishment",lost)
+        assertFalse(bridge.state.value.connected)
+    }
     private fun contract(sample:Int,boot:Int,ready:Boolean,digest:String):String {
         val bytes=ByteArray(43).apply {
             this[0]=1;this[1]=2;this[2]=if(ready)1 else 0
@@ -33,6 +52,15 @@ class ZigbeeBridgeTest {
         val bridge=ZigbeeBridge(conn,scope,requestTimeoutMs=100,proofSampleDelayMs=0)
         bridge.connect(BrokerProfile("test","ssl://broker.example",listOf(ZigbeeNetwork("a","A","alpha"),ZigbeeNetwork("b","B","beta"))),null)
         bridge.consume(MqttMessageEnvelope("alpha/bridge/devices",inventory().toByteArray(),true));return bridge
+    }
+    @Test fun inventoryIsCompleteOnlyAfterEveryConfiguredTopicHasReported()=runBlocking {
+        val conn=FakeConnection();val bridge=bridge(this,conn)
+        assertFalse(bridge.state.value.inventoryReceived)
+        bridge.consume(MqttMessageEnvelope("beta/bridge/devices","[]".toByteArray(),true))
+        assertTrue(bridge.state.value.inventoryReceived)
+        bridge.consume(MqttMessageEnvelope("alpha/bridge/devices","bad JSON".toByteArray(),true))
+        assertFalse(bridge.state.value.inventoryReceived)
+        bridge.disconnect()
     }
     @Test fun onlySupportedInventoryIsImportedAndStockCannotUseCustomBluetoothRoute()=runBlocking {
         val conn=FakeConnection();val bridge=bridge(this,conn)
