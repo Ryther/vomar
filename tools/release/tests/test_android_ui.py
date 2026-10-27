@@ -72,7 +72,7 @@ def test_cli_writes_evidence_only_after_all_expected_classes_execute(tmp_path, m
     monkeypatch.setattr(sys, 'argv', ['android_ui', '--results', str(results), '--coverage-dir', str(coverage), '--output', str(output)])
     android_ui.main()
     assert json.loads(output.read_text())['executed'] == len(android_ui.EXPECTED_CLASSES)
-    assert 'Verified 7 Android tests across 7 classes' in capsys.readouterr().out
+    assert f'Verified {len(android_ui.EXPECTED_CLASSES)} Android tests across {len(android_ui.EXPECTED_CLASSES)} classes' in capsys.readouterr().out
     rejected = tmp_path / 'incomplete.json'
     report(results, android_ui.EXPECTED_CLASSES[:1])
     monkeypatch.setattr(sys, 'argv', ['android_ui', '--results', str(results), '--coverage-dir', str(coverage), '--output', str(rejected)])

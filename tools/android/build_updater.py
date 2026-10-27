@@ -36,6 +36,7 @@ def audit_manifest(badging, xml, version=APP_VERSION, version_code=APP_VERSION_C
     for forbidden in ('application-debuggable',):
         if forbidden in badging: raise ValueError('Forbidden APK manifest property: '+forbidden)
     if not re.search(r'android:allowBackup[^\n]*=false', xml): raise ValueError('Backup must be explicitly disabled')
+    if not re.search(r'android:usesCleartextTraffic[^\n]*=false', xml): raise ValueError('Cleartext platform traffic must be explicitly disabled')
     if f"versionName='{version}'" not in badging or f"versionCode='{version_code}'" not in badging:
         raise ValueError('Unexpected APK version')
 

@@ -96,7 +96,7 @@ broker and up to three configured Zigbee2MQTT base topics. Use the exact host,
 port and supported transport. Plaintext local connections require their own
 consent; the port number alone does not enable encryption.
 
-Android 1.1.1 adds native Vomar branding and combines those corrections with explicit Bluetooth-to-Zigbee pairing
+Android 1.1.2 adds native Vomar branding and combines those corrections with explicit Bluetooth-to-Zigbee pairing
 on supporting firmware. Inspection and fresh confirmation are required; the old
 network is forgotten only by the confirmed pairing operation.
 

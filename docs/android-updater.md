@@ -1,11 +1,11 @@
-# Vomar Android 1.1.1
+# Vomar Android 1.1.2
 
 The Android launcher displays **Vomar** with the amber V/open-switch icon.
 Settings shows the same symbol, application name and installed version. The
 application ID remains `org.openvimar.updater`, so an upgrade with the same signer
 retains the existing application data.
 
-App 1.1.1 (versionCode 31) includes native Vomar branding, device association,
+App 1.1.2 (versionCode 32) includes native Vomar branding, device association,
 automatic broker reconnection and explicit Zigbee pairing from Bluetooth. Pairing
 requires compatible signed MAIN and recovery, fresh inspection and confirmation;
 it forgets the previous Zigbee network and opens a two-minute window. See

@@ -15,6 +15,7 @@ class CiUiSuite : TestSuite() {
             addTestSuite(AutomaticNetworkConnectionTest::class.java)
             addTestSuite(NativeFleetUiTest::class.java)
             addTestSuite(SavedConnectionPersistenceTest::class.java)
+            addTestSuite(MqttCleartextPolicyTest::class.java)
         }
     }
 }

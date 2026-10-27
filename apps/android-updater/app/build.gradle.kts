@@ -13,7 +13,7 @@ android {
     namespace="org.openvimar.updater"
     compileSdk { version = release(37) { minorApiLevel = 0 } }
     buildToolsVersion="36.0.0"
-    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=31; versionName="1.1.1"; testInstrumentationRunner="org.openvimar.updater.CoverageInstrumentationTestRunner" }
+    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=32; versionName="1.1.2"; testInstrumentationRunner="org.openvimar.updater.CoverageInstrumentationTestRunner" }
 
     compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
 }

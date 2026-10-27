@@ -1228,3 +1228,4 @@
 !/docs/stylesheets/branding.css
 !/tools/release/branding.py
 !/tools/release/tests/test_branding.py
+!/apps/android-updater/app/src/androidTest/kotlin/org/openvimar/updater/MqttCleartextPolicyTest.kt

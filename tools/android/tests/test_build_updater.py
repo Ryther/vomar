@@ -13,7 +13,7 @@ spec.loader.exec_module(m)
 # Exact package/SDK lines captured from pinned aapt2 35.0.0 during failed regeneration:
 # experiments/android-updater/20261022T150311Z/aapt2-badging.txt
 CAPTURED_BADGING = "package: name='org.openvimar.updater' versionCode='1' versionName='0.1.0' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'\nminSdkVersion:'26'\ntargetSdkVersion:'35'\n"
-CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='31'").replace("versionName='0.1.0'", "versionName='1.1.1'")
+CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='32'").replace("versionName='0.1.0'", "versionName='1.1.2'")
 
 def test_first_install_fixtures_generate_outside_repository_without_pythonpath(tmp_path):
     output = tmp_path / 'fixtures'
@@ -28,29 +28,29 @@ def test_first_install_fixtures_generate_outside_repository_without_pythonpath(t
 
 def test_patchReleaseAcceptedAndPreviousApkRejected():
     patched = CURRENT_BADGING
-    m.audit_manifest(patched, 'android:allowBackup=false')
+    m.audit_manifest(patched, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
     with pytest.raises(ValueError, match='version'):
-        m.audit_manifest(CAPTURED_BADGING, 'android:allowBackup=false')
+        m.audit_manifest(CAPTURED_BADGING, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
     previous = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='5'").replace("versionName='0.1.0'", "versionName='0.1.4'")
     with pytest.raises(ValueError, match='version'):
-        m.audit_manifest(previous, 'android:allowBackup=false')
+        m.audit_manifest(previous, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
     installed = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='20'").replace("versionName='0.1.0'", "versionName='1.0.0'")
     with pytest.raises(ValueError, match='version'):
-        m.audit_manifest(installed, 'android:allowBackup=false')
+        m.audit_manifest(installed, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
     prior = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='21'").replace("versionName='0.1.0'", "versionName='1.0.1'")
     with pytest.raises(ValueError, match='version'):
-        m.audit_manifest(prior, 'android:allowBackup=false')
+        m.audit_manifest(prior, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
     prior_metadata = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='22'").replace("versionName='0.1.0'", "versionName='1.0.2'")
     with pytest.raises(ValueError, match='version'):
-        m.audit_manifest(prior_metadata, 'android:allowBackup=false')
+        m.audit_manifest(prior_metadata, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
     prior_ui = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='23'").replace("versionName='0.1.0'", "versionName='1.0.3'")
     with pytest.raises(ValueError):
-        m.audit_manifest(prior_ui, 'android:allowBackup=false')
+        m.audit_manifest(prior_ui, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
 
-    for version,code in [('1.0.4',24),('1.0.5',25),('1.0.6',26),('1.0.7',27),('1.0.8',28),('1.0.9',29)]:
+    for version,code in [('1.0.4',24),('1.0.5',25),('1.0.6',26),('1.0.7',27),('1.0.8',28),('1.0.9',29),('1.1.0',30),('1.1.1',31)]:
         stale = CAPTURED_BADGING.replace("versionCode='1'", f"versionCode='{code}'").replace("versionName='0.1.0'", f"versionName='{version}'")
         with pytest.raises(ValueError, match='version'):
-            m.audit_manifest(stale, 'android:allowBackup=false')
+            m.audit_manifest(stale, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
 
 
 def test_apkBuildDoesNotInventCurrentFirmwareQualification():
@@ -59,7 +59,7 @@ def test_apkBuildDoesNotInventCurrentFirmwareQualification():
     assert status['android_instrumentation'] == 'not_run_by_apk_build'
 
 def test_manifestAcceptsPinnedAapt2Badging():
-    m.audit_manifest(CURRENT_BADGING, 'android:allowBackup=false')
+    m.audit_manifest(CURRENT_BADGING, 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
 
 def apk(tmp_path, entries):
     p = tmp_path / 'test.apk'
@@ -108,7 +108,7 @@ def test_fixtureSigningKeyNotTrustedByRelease(tmp_path):
 
 def test_githubAccessIsAllowedButDebugAndBackupRemainForbidden():
     good=CURRENT_BADGING
-    xml='android:allowBackup(0x01010280)=false'
+    xml='android:allowBackup(0x01010280)=false\nandroid:usesCleartextTraffic(0x010104ec)=false'
     m.audit_manifest(good, xml)
     m.audit_manifest(good+"uses-permission: name='android.permission.INTERNET'", xml)
     for bad in ['application-debuggable']:
@@ -169,7 +169,7 @@ def test_manifestRejectsWrongSdk(field, value):
     good=CURRENT_BADGING
     expected = '26' if field == 'minSdkVersion' else '35'
     with pytest.raises(ValueError, match='SDK'):
-        m.audit_manifest(good.replace(f"{field}:'{expected}'", f"{field}:'{value}'"), 'android:allowBackup=false')
+        m.audit_manifest(good.replace(f"{field}:'{expected}'", f"{field}:'{value}'"), 'android:allowBackup=false\nandroid:usesCleartextTraffic=false')
 
 def test_externalOutputRejectedBeforeSideEffects(tmp_path, monkeypatch):
     monkeypatch.setattr(m, 'ROOT', tmp_path / 'repo')
@@ -197,3 +197,9 @@ def test_inputsOutputRejectedBeforeSideEffects(tmp_path, monkeypatch, symlinked)
         m.build(output)
     assert not output.exists()
     assert calls == []
+
+
+@pytest.mark.parametrize('declaration', ['', 'android:usesCleartextTraffic=true'])
+def test_manifest_requires_explicit_platform_cleartext_opt_out(declaration):
+    with pytest.raises(ValueError, match='Cleartext'):
+        m.audit_manifest(CURRENT_BADGING, 'android:allowBackup=false\n'+declaration)

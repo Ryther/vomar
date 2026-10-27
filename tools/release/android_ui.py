@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 EXPECTED_CLASSES = tuple('org.openvimar.updater.' + name for name in (
     'InitialInstallUiTest', 'InitialInstallAndroidAdapterTest', 'BleTrialUiTest',
     'AutomaticConnectionUiTest', 'AutomaticNetworkConnectionTest',
-    'NativeFleetUiTest', 'SavedConnectionPersistenceTest',
+    'NativeFleetUiTest', 'SavedConnectionPersistenceTest', 'MqttCleartextPolicyTest',
 ))
 
 

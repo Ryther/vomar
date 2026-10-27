@@ -70,7 +70,7 @@ An emulator is added by CI for synthetic Android UI coverage, not installed by
 default in the development image.
 
 Android CI selects `CiUiSuite` as one instrumentation class. The pinned test
-engine truncates comma-separated class arguments, so the suite groups the seven
+engine truncates comma-separated class arguments, so the suite groups the eight
 synthetic UI, persistence and connection journeys. JUnit verification requires
 an executed, non-skipped testcase from every expected class before coverage is
 accepted. Emulator tests use synthetic transports and do not qualify devices.
