@@ -13,6 +13,7 @@ data class BleTrialReviewInfo(val id:String,val address:String,val digest:String
     val currentVersion:String?,val identitySummary:String,val legacy:Boolean,val resumable:Boolean,val resetRetryRequired:Boolean,val expectedUid:List<String>?=null)
 /** Process-only presentation. Never accepted as an execution grant or restored from a report. */
 data class BleTrialTargetInfo(val address:String,val identitySummary:String?=null,val currentVersion:String?=null,val version:String?=null)
+data class BlePairingReviewInfo(val id:String,val address:String,val uid:List<String>)
 enum class BleTrialPhase(val label:String) {
     IDLE("Ready to inspect"), INSPECTING("Inspecting dimmer"), REVIEW("Ready for review"),
     PREPARING("Preparing update"), TRANSFERRING("Transferring firmware"), VERIFYING("Verifying firmware"),
@@ -20,7 +21,8 @@ enum class BleTrialPhase(val label:String) {
 }
 data class BleTrialState(val status:String="Choose firmware and inspect the selected device.",
     val busy:Boolean=false,val progressPercent:Int?=null,val review:BleTrialReviewInfo?=null,val acknowledged:Boolean?=null,
-    val target:BleTrialTargetInfo?=null,val phase:BleTrialPhase=BleTrialPhase.IDLE)
+    val target:BleTrialTargetInfo?=null,val phase:BleTrialPhase=BleTrialPhase.IDLE,
+    val pairing:Boolean=false,val pairingReview:BlePairingReviewInfo?=null)
 
 /** The service owns coroutine lifetime. This owner never starts or restores an operation itself. */
 class BleTrialController(private val candidateLoader:suspend()->BleTrialCandidate,
@@ -33,17 +35,20 @@ class BleTrialController(private val candidateLoader:suspend()->BleTrialCandidat
     private val lock=Any()
     private data class Held(val candidate:BleTrialCandidate,val review:BleTrialReview,val info:BleTrialReviewInfo)
     private var held:Held?=null
+    private data class PairingHeld(val review:ZigbeePairingReview,val info:BlePairingReviewInfo)
+    private var pairingHeld:PairingHeld?=null
 
     private fun admit(status:String,phase:BleTrialPhase,inspectionAddress:String?=null):Held?=synchronized(lock){
         check(!mutableState.value.busy){"Another Bluetooth update is active"}
         val previous=held;held=null
+        pairingHeld?.review?.close();pairingHeld=null
         // Display retention is independent of consuming the single-use review above.
         val target=inspectionAddress?.let{BleTrialTargetInfo(it)} ?: mutableState.value.target
         mutableState.value=BleTrialState(status=status,busy=true,target=target,phase=phase)
         previous
     }
     private fun update(change:(BleTrialState)->BleTrialState)=synchronized(lock){mutableState.value=change(mutableState.value)}
-    private fun revoke(){synchronized(lock){held?.review?.close();held=null;mutableState.value=mutableState.value.copy(review=null)}}
+    private fun revoke(){synchronized(lock){held?.review?.close();held=null;pairingHeld?.review?.close();pairingHeld=null;mutableState.value=mutableState.value.copy(review=null,pairingReview=null)}}
     private suspend fun finish(address:String){
         // Do not release admission until the final immutable report has drained.
         // A report never grants authority, including when Android restores it.
@@ -111,6 +116,62 @@ class BleTrialController(private val candidateLoader:suspend()->BleTrialCandidat
         }finally{selected?.review?.close();revoke();finish(selected?.info?.address.orEmpty())}
     }
 
+    suspend fun inspectPairing(address:String,expectedUid:List<String>?=null){
+        admit("Checking Zigbee pairing support…",BleTrialPhase.INSPECTING,address)?.review?.close()
+        update{it.copy(pairing=true)}
+        var pending:ZigbeePairingReview?=null
+        try{
+            lease{check->
+                check()
+                val review=ZigbeePairing.inspect(transportFactory(address,check),address,expectedUid)
+                pending=review;check()
+                val info=BlePairingReviewInfo(UUID.randomUUID().toString(),address,review.identity.uid)
+                synchronized(lock){
+                    pairingHeld=PairingHeld(review,info)
+                    mutableState.value=mutableState.value.copy(pairingReview=info,
+                        phase=BleTrialPhase.REVIEW,status="Review Zigbee pairing. It forgets the current network and searches for two minutes; dimmer settings are kept.")
+                }
+                pending=null
+            }
+        }catch(cancelled:CancellationException){
+            revoke();update{it.copy(phase=BleTrialPhase.PAUSED,status="Pairing inspection stopped. Inspect and review again.")};throw cancelled
+        }catch(failure:Exception){
+            revoke();update{it.copy(phase=BleTrialPhase.PAUSED,status="Pairing unavailable: ${failure.message}")}
+        }finally{pending?.close();finish(address)}
+    }
+
+    suspend fun executePairing(reviewId:String){
+        val selected=synchronized(lock){
+            check(!mutableState.value.busy){"Another Bluetooth operation is active"}
+            val previous=pairingHeld;pairingHeld=null
+            held?.review?.close();held=null
+            mutableState.value=mutableState.value.copy(busy=true,pairing=true,
+                pairingReview=null,review=null,acknowledged=null,phase=BleTrialPhase.PREPARING,
+                status="Checking the reviewed pairing target…")
+            previous
+        }
+        var mayHaveRequested=false
+        try{
+            require(selected!=null&&selected.info.id==reviewId){"Pairing review expired. Inspect and review again"}
+            lease{check->
+                check()
+                val ack=ZigbeePairing.execute(selected.review,transportFactory(selected.info.address,check)){
+                    update{it.copy(status="Zigbee network replacement requested; awaiting acknowledgment.",acknowledged=false)}
+                    reportWriter(state.value,selected.info.address)
+                    check();mayHaveRequested=true
+                }
+                update{it.copy(acknowledged=ack==ResetAck.ACKNOWLEDGED,
+                    phase=BleTrialPhase.AWAITING_RETURN,status=if(ack==ResetAck.ACKNOWLEDGED)
+                        "Pairing request acknowledged. Enable permit join on the coordinator. Watch for blue/violet, then three seconds of rapid yellow when joined."
+                    else "Pairing request outcome is uncertain. Check the dimmer before requesting pairing again; no automatic retry was made.")}
+            }
+        }catch(cancelled:CancellationException){
+            update{it.copy(phase=BleTrialPhase.PAUSED,status=if(mayHaveRequested)"Pairing request outcome is uncertain after Stop. Check the dimmer before retrying." else "Pairing stopped before a request was submitted.")};throw cancelled
+        }catch(failure:Exception){
+            update{it.copy(phase=BleTrialPhase.PAUSED,status=if(mayHaveRequested)"Pairing request outcome is uncertain: ${failure.message}" else "Pairing paused before submission: ${failure.message}")}
+        }finally{selected?.review?.close();revoke();finish(selected?.info?.address.orEmpty())}
+    }
+
     private fun present(event:UpdateEvent){
         update{previous->when(event){
             is UpdateEvent.Progress->previous.copy(progressPercent=(event.acknowledgedOffset*100L/event.total).toInt().coerceIn(0,100),
@@ -143,6 +204,7 @@ class BleTrialController(private val candidateLoader:suspend()->BleTrialCandidat
     fun invalidate():Boolean=synchronized(lock){
         if(mutableState.value.busy)return@synchronized false
         held?.review?.close();held=null
+        pairingHeld?.review?.close();pairingHeld=null
         mutableState.value=BleTrialState(status="Review cleared. Inspect the selected Bluetooth dimmer before updating.")
         true
     }

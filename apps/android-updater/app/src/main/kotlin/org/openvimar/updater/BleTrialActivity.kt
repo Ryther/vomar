@@ -35,6 +35,7 @@ class BleTrialActivity:Activity() {
     private lateinit var run:Button
     private lateinit var stop:Button
     private lateinit var export:Button
+    private lateinit var pairing:Button
     private var picker:BluetoothCandidatePicker?=null
     private var dialog:AlertDialog?=null
     private var importing=false
@@ -46,7 +47,8 @@ class BleTrialActivity:Activity() {
         super.onCreate(savedInstanceState)
         pendingExport=savedInstanceState?.getByteArray("reportSnapshot")
         val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setBackgroundColor(getColor(R.color.ui_surface))}
-        root.addView(NativeUi.taskHeader(this,"Update firmware"){finish()}.apply{setPadding(dp(8),dp(8),dp(20),dp(8))})
+        val pairingOnly=intent.getBooleanExtra("pairingOnly",false)
+        root.addView(NativeUi.taskHeader(this,if(pairingOnly)"Zigbee pairing" else "Update firmware"){finish()}.apply{setPadding(dp(8),dp(8),dp(20),dp(8))})
         // Keep current feedback and Stop available independently of the task scroll.
         // Long errors remain readable by scrolling this bounded status viewport.
         operationName=NativeUi.label(this,"",15,true).apply{
@@ -66,9 +68,12 @@ class BleTrialActivity:Activity() {
         }.apply{addView(feedback)}
         root.addView(feedbackScroll,LinearLayout.LayoutParams(-1,-2).apply{setMargins(dp(20),0,dp(20),dp(4))})
         val body=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(dp(20),dp(4),dp(20),dp(28))}
+        val firmwareBody=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;visibility=if(pairingOnly)View.GONE else View.VISIBLE}
+        body.addView(firmwareBody)
+        var section=firmwareBody
         val scroll=ScrollView(this).apply{isFillViewport=true;defaultFocusHighlightEnabled=false;tag="ble.trial.content";addView(body)}
         root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f))
-        fun add(view:View,gap:Int=12){body.addView(view,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(gap)})}
+        fun add(view:View,gap:Int=12){section.addView(view,LinearLayout.LayoutParams(-1,-2).apply{topMargin=dp(gap)})}
         fun label(text:String,heading:Boolean=false):TextView=NativeUi.label(this,text,if(heading)18 else 15,heading,!heading).also{if(heading)ViewCompat.setAccessibilityHeading(it,true);add(it,if(heading)24 else 8)}
         label("Choose firmware for this device.")
         label("Package",true)
@@ -84,6 +89,14 @@ class BleTrialActivity:Activity() {
         label("Review the selected dimmer before starting. If interrupted, inspect it again to resume saved progress.")
         run=NativeUi.button(this,"Review Bluetooth update",filled=true){review()}.apply{tag="ble.trial.run"};add(run)
         export=NativeUi.button(this,"Export update report"){exportReport()}.apply{tag="ble.trial.export"};add(export)
+        section=body
+        label("Zigbee pairing",true)
+        label("Forget the previous Zigbee network and pair for two minutes. Dimmer settings are kept. Requires supporting firmware; no firmware package is needed.")
+        label("To enable Bluetooth on supporting firmware, hold both buttons for five seconds, release both, then press Down. The LED alternates blue/green.")
+        pairing=NativeUi.button(this,"Inspect for Zigbee pairing",outline=true){
+            if(runtime.controller.state.value.pairingReview==null)search(pairingMode=true)else reviewPairing()
+        }.apply{tag="ble.pairing.review"};add(pairing)
+        firmwareBody.removeView(export);add(export)
         stop=NativeUi.button(this,"Stop update",outline=true){startService(Intent(this,BleTrialService::class.java).setAction(BleTrialService.STOP))}.apply{tag="ble.trial.stop"}
         root.addView(stop,LinearLayout.LayoutParams(-1,-2).apply{setMargins(dp(20),dp(8),dp(20),dp(12))})
         val centered=FrameLayout(this).apply{
@@ -117,7 +130,9 @@ class BleTrialActivity:Activity() {
             if(it.identitySummary!=null)"Inspected firmware ${it.currentVersion ?: "unknown"} → ${it.version}\n${it.identitySummary}"
             else "Compatibility has not been confirmed for this address. Inspect it successfully before reviewing an update."
         } ?: "Inspect this device before reviewing the update."
-        status.text=if(importing)"Checking firmware…" else runtime.message.value ?: state.status
+        status.text=if(importing)"Checking firmware…" else runtime.message.value ?:
+            if(intent.getBooleanExtra("pairingOnly",false)&&state.phase==BleTrialPhase.IDLE)
+                "Enable Bluetooth on this dimmer, then inspect and review Zigbee pairing." else state.status
         progress.visibility=if(state.progressPercent!=null||busy)View.VISIBLE else View.GONE
         progress.isIndeterminate=state.progressPercent==null;progress.progress=state.progressPercent ?: 0
         choose.isEnabled=!busy
@@ -126,6 +141,10 @@ class BleTrialActivity:Activity() {
         stop.visibility=if(state.busy)View.VISIBLE else View.GONE
         export.visibility=if(runtime.reportAvailable)View.VISIBLE else View.GONE
         export.isEnabled=runtime.reportAvailable&&!busy&&!exporting&&pendingExport==null
+        export.text=if(state.pairing)"Export pairing report" else "Export update report"
+        pairing.isEnabled=!busy
+        pairing.text=if(state.pairingReview==null)"Inspect for Zigbee pairing" else "Review Zigbee pairing"
+        stop.text=if(state.pairing)"Stop" else "Stop update"
     }
     private fun matchesSelected(review:BleTrialReviewInfo):Boolean {
         val selected=selectedRecord?:return true
@@ -138,17 +157,34 @@ class BleTrialActivity:Activity() {
         runCatching{startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE),IMPORT)}
             .onFailure{runtime.fail(it.message ?: "Choose a Vomar firmware ZIP")}
     }
-    private fun search(){
-        if(runtime.selection.value==null||runtime.controller.state.value.busy||importing)return
+    private fun search(pairingMode:Boolean=false){
+        if((!pairingMode&&runtime.selection.value==null)||runtime.controller.state.value.busy||importing)return
         if(!permissionsReady()){
             runtime.fail("Allow Bluetooth access, then choose Inspect device again.")
             requestPermissions(PermissionPolicy.required(Build.VERSION.SDK_INT).toTypedArray(),PERMISSIONS);return
         }
-        fun inspect(address:String){if(foreground&&!runtime.controller.state.value.busy)launchService(Intent(this,BleTrialService::class.java).setAction(BleTrialService.INSPECT).putExtra(BleTrialService.ADDRESS,address)
+        fun inspect(address:String){if(foreground&&!runtime.controller.state.value.busy)launchService(Intent(this,BleTrialService::class.java).setAction(if(pairingMode)BleTrialService.INSPECT_PAIRING else BleTrialService.INSPECT).putExtra(BleTrialService.ADDRESS,address)
             .putStringArrayListExtra("expectedUid",selectedRecord?.uid?.takeIf{it.size==2}?.let{ArrayList(it)}))}
         val selected=selectedRecord
         if(selected?.address!=null){inspect(selected.address);return}
         picker?.close();picker=BluetoothCandidatePicker(this).also{it.show(allowLegacy=true){address->inspect(address)}}
+    }
+    private fun reviewPairing(){
+        val held=runtime.controller.state.value.pairingReview ?: return
+        val selected=selectedRecord
+        if(selected!=null&&((selected.address!=null&&!selected.address.equals(held.address,true))||
+            (selected.uid.size==2&&selected.uid!=held.uid))){
+            runtime.fail("Inspect the selected device again before pairing.");return
+        }
+        if(!foreground||runtime.controller.state.value.busy)return
+        dialog?.dismiss()
+        dialog=AlertDialog.Builder(this).setTitle("Replace Zigbee network?")
+            .setMessage("${held.address}\nUID ${held.uid.joinToString(" / ")}\n\nThis forgets the current Zigbee network and searches for two minutes. Dimmer settings and Bluetooth access are kept. Enable permit join on your coordinator before continuing.")
+            .setNegativeButton("Cancel"){_,_->runtime.controller.invalidate()}
+            .setPositiveButton("Start Zigbee pairing"){_,_->
+                if(foreground&&!runtime.controller.state.value.busy)
+                    launchService(Intent(this,BleTrialService::class.java).setAction(BleTrialService.EXECUTE_PAIRING).putExtra(BleTrialService.REVIEW,held.id))
+            }.create().also{it.setOnCancelListener{runtime.controller.invalidate()};it.show()}
     }
     private fun review(){
         val held=runtime.controller.state.value.review ?: return

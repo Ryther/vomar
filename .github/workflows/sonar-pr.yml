@@ -77,24 +77,7 @@ jobs:
         run: |
           test -s sonar-report/task/report-task.txt
           export_status=0
-          PYTHONPATH=trusted python - <<'PY' || export_status=$?
-          import os
-          from pathlib import Path
-          from tools.release.sonar_report import _http_fetch, export_candidate
-
-          fetch = _http_fetch("https://sonarcloud.io", os.environ.get("SONAR_TOKEN", ""))
-
-          def cloud_fetch(path, params):
-              # Adapt the protected base's Community parameter to Cloud only.
-              if path == "/api/hotspots/search" and "project" in params:
-                  params = dict(params)
-                  params["projectKey"] = params.pop("project")
-              return fetch(path, params)
-
-          export_candidate(cloud_fetch, "Ryther_vomar", Path("sonar-report"),
-                           os.environ["PR_NUMBER"], os.environ["CANDIDATE_SHA"],
-                           Path("sonar-report/task/report-task.txt"))
-          PY
+          PYTHONPATH="$GITHUB_WORKSPACE/trusted" python -P -m tools.release.sonar_report --project Ryther_vomar --pull-request "$PR_NUMBER" --sha "$CANDIDATE_SHA" --task-file sonar-report/task/report-task.txt || export_status=$?
           if test -s sonar-report/report.md; then
             cat sonar-report/report.md >> "$GITHUB_STEP_SUMMARY"
           fi

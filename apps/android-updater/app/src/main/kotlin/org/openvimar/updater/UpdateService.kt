@@ -97,7 +97,7 @@ class UpdateService : Service() {
     private fun foreground() {
         val open = android.app.PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), android.app.PendingIntent.FLAG_IMMUTABLE)
         val notification = Notification.Builder(this, "update")
-            .setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("Vimar: dimmer connection")
+            .setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("Vomar: dimmer connection")
             .setContentText("Open the app to see progress or stop the operation.")
             .setContentIntent(open).setOngoing(true).build()
         if (Build.VERSION.SDK_INT >= 29) startForeground(1, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)

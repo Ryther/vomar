@@ -46,9 +46,9 @@ internal class InitialInstallRetainedEvidence(private val root:Path,private val 
     private fun encodeStart(binding:InstallBinding,start:Start)=("{\"bindingId\":\"${binding.id}\",\"phase\":\"${if(start.acknowledged)"ACKNOWLEDGED" else "INTENT"}\",\"requestId\":\"${start.request}\",\"schemaVersion\":1,\"sequence\":${start.sequence}}\n").toByteArray()
     private fun loadStart(binding:InstallBinding):Start?{
         val path=starts.resolve("${binding.id}.json");if(!Files.exists(path,LinkOption.NOFOLLOW_LINKS))return null
-        // Exact canonical fixed record, no coercing JSONObject parser.
+        // Exact canonical fixed record; both braces must be escaped for Android ICU.
         val text=String(read(path),Charsets.UTF_8)
-        val match=requireNotNull(Regex("\\{\"bindingId\":\"([0-9a-f]{64})\",\"phase\":\"(INTENT|ACKNOWLEDGED)\",\"requestId\":\"([0-9a-f-]{36})\",\"schemaVersion\":1,\"sequence\":([1-9][0-9]{0,9})}\\n").matchEntire(text)){"Invalid private start evidence"}
+        val match=requireNotNull(Regex("\\{\"bindingId\":\"([0-9a-f]{64})\",\"phase\":\"(INTENT|ACKNOWLEDGED)\",\"requestId\":\"([0-9a-f-]{36})\",\"schemaVersion\":1,\"sequence\":([1-9][0-9]{0,9})\\}\\n").matchEntire(text)){"Invalid private start evidence"}
         require(match.groupValues[1]==binding.id)
         val value=Start(match.groupValues[4].toInt(),match.groupValues[3],match.groupValues[2]=="ACKNOWLEDGED")
         require(UUID.fromString(value.request).toString()==value.request&&encodeStart(binding,value).contentEquals(text.toByteArray()));return value

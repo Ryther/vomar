@@ -28,14 +28,15 @@ def run_c(source):
 
 class WarmRecoveryStateTests(unittest.TestCase):
     def test_state_flush_precedes_handoff_marker_and_failure_prevents_reboot(self):
-        body = function('firmware/src/platform_io_vimar.c','platform_io_request_recovery',r'int platform_io_request_recovery\(void\)')
+        body = function('firmware/src/platform_io_vimar.c','request_connection',r'static int request_connection\(bool bluetooth\)')
         run_c(r'''
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <errno.h>
 static bool recovering;
-static int last_raw=-32768,io,stage,flush_error,protection_error;
+static int last_raw=-32768,io,stage,flush_error,protection_error,intent_error;
+static bool pairing_mode;
 static bool vimar_power_protection_blocked(void){return false;}
 static int vimar_power_protection_flush(void){assert(stage==2);if(protection_error)return protection_error;stage=3;return 0;}
 #define BOOT_MODE_TYPE_BOOTLOADER 1
@@ -45,14 +46,19 @@ static void zigbee_device_cancel_gestures(void) {}
 int zigbee_device_prepare_recovery(void) { assert(stage==0); if(flush_error)return flush_error; stage=1;return 0; }
 static int research_handoff_prepare(void *p,int raw) { (void)p;assert(stage==1&&raw==-32768);stage=2;return 0; }
 static int bootmode_set(int mode) { (void)mode;assert(stage==3);stage=4;return 0; }
+static int bootmode_clear(void){assert(stage==3);stage=4;return 0;}
+static int connection_intent_request(void){assert(stage==4);if(intent_error)return intent_error;stage=5;return 0;}
 static int set(void *p,int value) { (void)p;(void)value;return 0; }
-static void sys_reboot(int mode) { (void)mode;assert(stage==4);stage=5; }
+static void sys_reboot(int mode) { (void)mode;assert(stage==(pairing_mode?5:4));stage=6; }
 ''' + body + r'''
 int main(void) {
- flush_error=-5;assert(platform_io_request_recovery()==-5);assert(stage==0&&!recovering);
- flush_error=0;protection_error=-6;assert(platform_io_request_recovery()==-6);assert(stage==2&&!recovering);
- stage=0;protection_error=0;assert(platform_io_request_recovery()==0);assert(stage==5&&recovering);
- assert(platform_io_request_recovery()==-EBUSY);
+ flush_error=-5;assert(request_connection(true)==-5);assert(stage==0&&!recovering);
+ flush_error=0;protection_error=-6;assert(request_connection(true)==-6);assert(stage==2&&!recovering);
+ stage=0;protection_error=0;assert(request_connection(true)==0);assert(stage==6&&recovering);
+ assert(request_connection(true)==-EBUSY);
+ recovering=false;stage=0;pairing_mode=true;intent_error=-7;
+ assert(request_connection(false)==-7&&stage==4&&!recovering);
+ stage=0;intent_error=0;assert(request_connection(false)==0&&stage==6&&recovering);
  return 0;
 }
 ''')

@@ -38,7 +38,7 @@ static void test_fault_keeps_the_existing_highest_priority_indication(void)
     const struct led_output base = led_controller_resolve(&controller, true, 254, 0);
     led_controller_set_fault(&controller, true);
     const struct led_output fault = led_controller_resolve(&controller, true, 254, 0);
-    for (enum wireless_status_led_mode mode = WIRELESS_STATUS_LED_NORMAL; mode <= WIRELESS_STATUS_LED_RECOVERY; ++mode) {
+    for (enum wireless_status_led_mode mode = WIRELESS_STATUS_LED_NORMAL; mode <= WIRELESS_STATUS_LED_PAIRED; ++mode) {
         equal_output(wireless_status_led_resolve(mode, true, &base, 0), fault);
         equal_output(wireless_status_led_resolve(mode, true, NULL, 500), fault);
         equal_output(wireless_status_led_resolve(mode, true, &base, UINT64_MAX), fault);
@@ -98,6 +98,15 @@ static void test_missing_profile_unknown_mode_and_large_uptime(void)
 int main(void)
 {
     test_bluetooth_and_recovery_have_distinct_alternating_colours();
+    const struct led_output violet={255,0,255,50,LED_EFFECT_STATIC};
+    const struct led_output green={0,255,0,50,LED_EFFECT_STATIC};
+    const struct led_output blue={0,0,255,50,LED_EFFECT_STATIC};
+    equal_output(wireless_status_led_resolve(WIRELESS_STATUS_LED_SELECTOR,false,NULL,0),violet);
+    equal_output(wireless_status_led_resolve(WIRELESS_STATUS_LED_SELECTOR,false,NULL,500),green);
+    equal_output(wireless_status_led_resolve(WIRELESS_STATUS_LED_PAIRING,false,NULL,0),blue);
+    equal_output(wireless_status_led_resolve(WIRELESS_STATUS_LED_PAIRING,false,NULL,500),violet);
+    equal_output(wireless_status_led_resolve(WIRELESS_STATUS_LED_PAIRED,false,NULL,0),(struct led_output){255,255,0,50,LED_EFFECT_STATIC});
+    equal_output(wireless_status_led_resolve(WIRELESS_STATUS_LED_PAIRED,false,NULL,100),(struct led_output){0,0,0,0,LED_EFFECT_STATIC});
     test_fault_keeps_the_existing_highest_priority_indication();
     test_normal_profiles_and_level_scaling_pass_through();
     test_wireless_overlay_does_not_consume_or_rewrite_override();

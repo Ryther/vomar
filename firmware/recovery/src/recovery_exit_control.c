@@ -90,3 +90,39 @@ int recovery_exit_sdk_reset_prepare(struct recovery_exit_control *c,const struct
  c->exiting=true;
  return 0;
 }
+
+int recovery_exit_pairing_request(struct recovery_exit_control *c,const struct recovery_exit_io *io)
+{
+ if(!c->command_busy||c->partial||c->session||c->exiting)return-EBUSY;
+ int rc=io->verify(io->context);
+ if(!rc)rc=io->flush(io->context);
+ if(rc)return rc;
+ c->exiting=true;c->pairing_pending=true;c->pairing_ready=false;
+ return 0;
+}
+void recovery_exit_pairing_done(struct recovery_exit_control *c,bool output_ok)
+{
+ if(!c->pairing_pending)return;
+ if(!output_ok||c->command_busy){
+  c->pairing_pending=false;c->pairing_ready=false;c->exiting=false;
+ }else c->pairing_ready=true;
+}
+int recovery_exit_pairing_local_request(struct recovery_exit_control *c,const struct recovery_exit_io *io)
+{
+ int rc=recovery_exit_command_begin(c,false,io);
+ if(rc)return rc;
+ rc=recovery_exit_pairing_request(c,io);
+ recovery_exit_command_done(c);
+ if(!rc)recovery_exit_pairing_done(c,true);
+ return rc;
+}
+int recovery_exit_pairing_attempt(struct recovery_exit_control *c,const struct recovery_exit_io *io,int (*request)(void))
+{
+ if(!c->pairing_pending||!c->pairing_ready||!c->exiting||c->partial||c->session||c->command_busy)return-EBUSY;
+ int rc=io->verify(io->context);
+ if(!rc)rc=io->flush(io->context);
+ if(!rc)rc=io->clear_boot(io->context);
+ if(!rc)rc=request();
+ if(rc){recovery_exit_pairing_done(c,false);return rc;}
+ io->reboot(io->context);return 0;
+}

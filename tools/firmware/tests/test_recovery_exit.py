@@ -29,7 +29,7 @@ def test_exit_guard_persists_partial_and_serializes_checkpoint_reboot(tmp_path):
 def test_authenticated_primary_requires_main_vectors_and_exact_role(tmp_path):
     exe = tmp_path / 'recovery_primary_geometry'
     subprocess.run(['cc', '-std=c11', '-Wall', '-Wextra', '-Werror', '-fsanitize=undefined',
-        '-I', str(SOURCE), '-I', str(ROOT / 'firmware/ota'), str(SOURCE / 'recovery_primary.c'),
+        '-I', str(SOURCE), '-I', str(ROOT / 'firmware/src'), '-I', str(ROOT / 'firmware/ota'), str(SOURCE / 'recovery_primary.c'),
         str(Path(__file__).with_name('recovery_primary_geometry_test.c')), '-o', str(exe)], check=True)
     subprocess.run([str(exe)], check=True)
 
@@ -38,7 +38,7 @@ def test_authenticated_primary_requires_main_vectors_and_exact_role(tmp_path):
 def validator(tmp_path_factory):
     library = tmp_path_factory.mktemp('recovery_primary') / 'primary.so'
     subprocess.run(['cc', '-shared', '-fPIC', '-std=c11', '-Wno-deprecated-declarations',
-        '-DOTA_IMAGE_AUTH_ONLY', '-DOTA_IMAGE_HOST', '-I', str(SOURCE),
+        '-DOTA_IMAGE_AUTH_ONLY', '-DOTA_IMAGE_HOST', '-I', str(SOURCE), '-I', str(ROOT / 'firmware/src'),
         '-I', str(ROOT / 'firmware/ota'), str(SOURCE / 'recovery_primary.c'),
         str(ROOT / 'firmware/ota/ota_image.c'), '-lcrypto', '-o', str(library)], check=True)
     dll = ctypes.CDLL(str(library))

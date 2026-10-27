@@ -1,12 +1,16 @@
 """PR scans must fail on missing evidence and retain complete findings."""
 import importlib
 import itertools
+import io
 import json
 import os
-import subprocess
-import xml.etree.ElementTree as ET
 from pathlib import Path
 import runpy
+import subprocess
+import xml.etree.ElementTree as ET
+import urllib.parse
+
+
 
 import pytest
 import yaml
@@ -64,6 +68,34 @@ def test_repository_python_coverage_refuses_unsafe_or_missing_paths(repository_p
     original=report.read_bytes()
     with pytest.raises(ValueError,match='coverage'):prepare.normalize_python_coverage(report,repository)
     assert report.read_bytes()==original
+
+
+@pytest.mark.parametrize('filename,accepted',[
+    ('apps/desktop-updater/packaging/vomar.spec',True),
+    ('apps/desktop-updater/packaging/other.spec',False),
+    ('tools/unrelated.txt',False),
+])
+def test_python_coverage_retains_the_executed_packaging_recipe(tmp_path,filename,accepted):
+    import coverage
+    prepare=importlib.import_module('tools.release.prepare_pr_analysis')
+    repository=tmp_path/'repository';source=repository/filename
+    source.parent.mkdir(parents=True);source.write_text('enabled=True\nif enabled:\n    value=7\nelse:\n    value=3\n')
+    report=tmp_path/'coverage.xml'
+    measured=coverage.Coverage(source=[str(repository)],branch=True,config_file=False,data_file=None)
+    measured.start()
+    try:runpy.run_path(str(source))
+    finally:measured.stop()
+    measured.xml_report(outfile=str(report))
+    original=report.read_bytes();packages=ET.tostring(ET.parse(report).find('./packages'))
+    if not accepted:
+        with pytest.raises(ValueError,match='repository source'):prepare.normalize_python_coverage(report,repository)
+        assert report.read_bytes()==original
+        return
+    prepare.normalize_python_coverage(report,repository)
+    result=ET.parse(report)
+    assert ET.tostring(result.find('./packages'))==packages
+    assert result.find('.//class').get('filename')==filename
+    assert any(int(line.get('hits'))>0 for line in result.findall('.//line'))
 
 
 def test_repository_python_coverage_requires_exact_measured_repository(repository_python_report):
@@ -128,6 +160,28 @@ def test_export_retains_all_paginated_findings_and_missing_pages_fail(tmp_path):
         return value
     with pytest.raises(ValueError, match='pagination'):
         report.export_analysis(missing, 'project', tmp_path/'missing', page_size=1)
+
+
+@pytest.mark.parametrize('host,selector', [('https://sonarcloud.io','projectKey'), ('http://127.0.0.1:9000','project')])
+def test_http_hotspot_scope_uses_the_backend_selector_without_changing_pr_or_pagination(monkeypatch,host,selector):
+    report=importlib.import_module('tools.release.sonar_report')
+    requests=[]
+    def urlopen(request,timeout):
+        assert timeout==30
+        requests.append(request)
+        return io.BytesIO(b'{"hotspots":[],"paging":{"total":0}}')
+    monkeypatch.setattr(report.urllib.request,'urlopen',urlopen)
+    params={selector:'synthetic-project','pullRequest':'8','p':2,'ps':25}
+    assert report._http_fetch(host,'synthetic-token')('/api/hotspots/search',params)['hotspots']==[]
+    parsed=urllib.parse.urlsplit(requests[0].full_url)
+    assert urllib.parse.parse_qs(parsed.query)=={selector:['synthetic-project'],'pullRequest':['8'],'p':['2'],'ps':['25']}
+    assert requests[0].get_header('Authorization')=='Bearer synthetic-token'
+    assert params=={selector:'synthetic-project','pullRequest':'8','p':2,'ps':25}
+
+
+def cloud_workflow():
+    root=Path(__file__).resolve().parents[3]
+    return yaml.safe_load((root/'.github/workflows/sonar-pr.yml').read_text())['jobs']['cloud']
 
 
 def test_community_success_is_scoped_and_quality_failures_cannot_pass():
@@ -431,8 +485,8 @@ def test_report_cli_rejects_community_pr_export(tmp_path, monkeypatch, capsys):
     assert 'PR export requires Cloud backend' in capsys.readouterr().err
 
 
-@pytest.mark.parametrize('hotspot_parameter,export_status', [('project', '0'), ('projectKey', '0'), ('project', '1')])
-def test_cloud_workflow_adapts_only_protected_hotspot_requests(tmp_path, hotspot_parameter, export_status):
+@pytest.mark.parametrize('export_status,scan_outcome', [('0', 'success'), ('1', 'success'), ('0', 'failure'), ('1', 'failure')])
+def test_cloud_workflow_runs_selected_protected_exporter_and_retains_failure_report(tmp_path, export_status, scan_outcome):
     import sys
     workflow = yaml.safe_load((Path(__file__).resolve().parents[3]/
                                '.github/workflows/sonar-pr.yml').read_text())
@@ -445,45 +499,28 @@ def test_cloud_workflow_adapts_only_protected_hotspot_requests(tmp_path, hotspot
     (package/'sonar_report.py').write_text('''
 import json
 import os
+import sys
 from pathlib import Path
-
-def _http_fetch(host, token):
-    assert host == "https://sonarcloud.io" and token == ""
-    def fetch(path, params):
-        if path == "/api/hotspots/search":
-            assert params == {"projectKey": "Ryther_vomar", "pullRequest": "8", "p": 2, "ps": 500}
-        else:
-            assert path == "/api/issues/search"
-            assert params == {"componentKeys": "Ryther_vomar", "resolved": "false", "pullRequest": "8", "p": 1, "ps": 500}
-        with Path("calls.jsonl").open("a") as output:
-            output.write(json.dumps({"path": path, "params": params})+"\\n")
-        return {}
-    return fetch
-
-def export_candidate(fetch, project, directory, pull_request, sha, receipt):
-    assert project == "Ryther_vomar" and pull_request == "8" and sha == "a"*40
-    assert directory == Path("sonar-report") and receipt == Path("sonar-report/task/report-task.txt")
-    assert receipt.read_text() == "projectKey=Ryther_vomar\\nceTaskId=task-A\\n"
-    fetch("/api/hotspots/search", {os.environ["HOTSPOT_PARAMETER"]: project, "pullRequest": pull_request, "p": 2, "ps": 500})
-    fetch("/api/issues/search", {"componentKeys": project, "resolved": "false", "pullRequest": pull_request, "p": 1, "ps": 500})
-    (directory/"report.md").write_text("# Protected exporter report\\n")
-    if os.environ["EXPORT_STATUS"] != "0":
-        raise ValueError("Synthetic protected exporter failure")
+assert sys.argv[1:] == ["--project", "Ryther_vomar", "--pull-request", "8", "--sha", "a"*40, "--task-file", "sonar-report/task/report-task.txt"]
+assert Path("sonar-report/task/report-task.txt").read_text() == "projectKey=Ryther_vomar\\nceTaskId=task-A\\n"
+Path("calls.json").write_text(json.dumps({"source": "selected-protected-exporter", "args": sys.argv[1:]}))
+Path("sonar-report/report.md").write_text("# Protected exporter report\\n")
+raise SystemExit(int(os.environ["EXPORT_STATUS"]))
 ''')
-    candidate = tmp_path/'candidate/tools/release'
-    candidate.mkdir(parents=True)
-    (candidate/'sonar_report.py').write_text('raise AssertionError("Candidate helper must never execute")\n')
+    for directory in ('unselected-helper', 'candidate'):
+        other = tmp_path/directory/'tools/release'
+        other.mkdir(parents=True)
+        (other/'sonar_report.py').write_text('raise AssertionError("Unselected helper must never execute")\n')
     receipt = tmp_path/'sonar-report/task/report-task.txt'
     receipt.parent.mkdir(parents=True)
     receipt.write_text('projectKey=Ryther_vomar\nceTaskId=task-A\n')
     summary = tmp_path/'summary.md'
     result = subprocess.run(['bash', '-e', '-c', step['run']], cwd=tmp_path,
                             env={'PATH': str(Path(sys.executable).parent)+os.pathsep+os.defpath,
+                                 'GITHUB_WORKSPACE': str(tmp_path),
                                  'SONAR_TOKEN': '', 'PR_NUMBER': '8', 'CANDIDATE_SHA': 'a'*40,
-                                 'SCAN_OUTCOME': 'success', 'EXPORT_STATUS': export_status,
-                                 'HOTSPOT_PARAMETER': hotspot_parameter,
+                                 'SCAN_OUTCOME': scan_outcome, 'EXPORT_STATUS': export_status,
                                  'GITHUB_STEP_SUMMARY': str(summary)}, capture_output=True, text=True)
-    calls = [json.loads(line) for line in (tmp_path/'calls.jsonl').read_text().splitlines()]
-    assert [call['path'] for call in calls] == ['/api/hotspots/search', '/api/issues/search']
+    assert json.loads((tmp_path/'calls.json').read_text())['source'] == 'selected-protected-exporter'
     assert summary.read_text() == '# Protected exporter report\n'
-    assert result.returncode == int(export_status)
+    assert result.returncode == (int(export_status) or int(scan_outcome != 'success'))

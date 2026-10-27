@@ -6,6 +6,19 @@ struct led_output wireless_status_led_resolve(enum wireless_status_led_mode mode
     if (fault_active)
         return (struct led_output){255, 0, 0, 100, LED_EFFECT_SLOW_BLINK};
 
+    if (mode == WIRELESS_STATUS_LED_SELECTOR)
+        return elapsed_ms % 1000 < 500
+            ? (struct led_output){255, 0, 255, 50, LED_EFFECT_STATIC}
+            : (struct led_output){0, 255, 0, 50, LED_EFFECT_STATIC};
+    if (mode == WIRELESS_STATUS_LED_PAIRING)
+        return elapsed_ms % 1000 < 500
+            ? (struct led_output){0, 0, 255, 50, LED_EFFECT_STATIC}
+            : (struct led_output){255, 0, 255, 50, LED_EFFECT_STATIC};
+    if (mode == WIRELESS_STATUS_LED_PAIRED)
+        return elapsed_ms % 200 < 100
+            ? (struct led_output){255, 255, 0, 50, LED_EFFECT_STATIC}
+            : (struct led_output){0, 0, 0, 0, LED_EFFECT_STATIC};
+
     if (mode == WIRELESS_STATUS_LED_BLUETOOTH || mode == WIRELESS_STATUS_LED_RECOVERY) {
         /* Two adjacent 500 ms phases, without an intervening OFF phase. */
         if (elapsed_ms % 1000 < 500)

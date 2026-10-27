@@ -15,7 +15,8 @@ object DistributionAssets {
         require(Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)").matches(v)&&tag=="v$v"&&m["tag"]==tag)
         require((m["commit"] as? String)?.matches(Regex("[0-9a-f]{40}"))==true)
         val semver=Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)")
-        val components=m["components"] as? Map<*,*>;require(!components.isNullOrEmpty())
+        val components=m["components"] as? Map<*,*> ?: error("Component versions required")
+        require(components.keys==setOf("firmware","android","desktop","zigbee2mqtt")){"Missing or unknown component owner"}
         require(components.all{(key,value)->key is String&&Regex("[a-z][a-z0-9-]*").matches(key)&&value is String&&semver.matches(value)})
         val rows=m["artifacts"] as? List<*> ?: error("Distribution artifacts required");require(rows.size in required.size..32)
         val roles=mutableSetOf<String>();val names=mutableSetOf<String>();val assets=rows.map{entry->
@@ -25,6 +26,14 @@ object DistributionAssets {
             val size=a["size"] as? Long ?: error("Exact asset size required");val sha=a["sha256"] as? String ?: error("Asset hash required")
             require(role in required+setOf("desktop-windows-setup","source-sbom")&&roles.add(role)&&names.add(name)&&Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}").matches(name)&&size in 1..Int.MAX_VALUE.toLong()&&Regex("[0-9a-f]{64}").matches(sha))
             require((a["componentVersion"] as? String)?.let{semver.matches(it)}==true)
+            val expectedVersion=when {
+                role=="firmware-common"||role=="zigbee-ota"->components["firmware"]
+                role=="android-apk"->components["android"]
+                role.startsWith("desktop-")->components["desktop"]
+                role=="zigbee2mqtt-converter"->components["zigbee2mqtt"]
+                else->v
+            }
+            require(a["componentVersion"]==expectedVersion){"Artifact component version mismatch: $role"}
             if(role=="android-apk")require((a["androidVersionCode"] as? Long) in 1L..Int.MAX_VALUE.toLong()) else require("androidVersionCode" !in a)
             if(role.startsWith("desktop-")) {
                 val parts=role.split('-');require(a["platform"]==parts[1]&&a["architecture"]==if(parts[2]=="setup")"x64" else parts[2])

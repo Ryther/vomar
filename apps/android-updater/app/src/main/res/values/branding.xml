@@ -1,0 +1,5 @@
+<resources>
+    <!-- Keep the supplied graphite frame legible in either application theme. -->
+    <color name="vomar_icon_background">#FAF8F3</color>
+    <item name="vomar_brand_icon" type="id" />
+</resources>

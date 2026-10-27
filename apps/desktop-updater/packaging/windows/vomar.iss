@@ -1,16 +1,21 @@
 [Setup]
 AppId=org.openvimar.updater.desktop
 AppName=Vomar
-AppVersion={#Version}
+AppVersion={#NativeVersion}
+VersionInfoVersion={#NativeVersion}
+VersionInfoTextVersion={#NativeVersion}
+VersionInfoProductVersion={#NativeVersion}
+VersionInfoProductTextVersion={#NativeVersion}
 DefaultDirName={localappdata}\Programs\Vomar
 DefaultGroupName=Vomar
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
-OutputBaseFilename=vomar-desktop-{#Version}-windows-x64-setup
+OutputBaseFilename=vomar-desktop-{#DistributionVersion}-windows-x64-setup
 Compression=lzma2
 SolidCompression=yes
+SetupIconFile={#BrandIcon}
 UninstallDisplayIcon={app}\Vomar.exe
 [Files]
 Source: "{#Runtime}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs

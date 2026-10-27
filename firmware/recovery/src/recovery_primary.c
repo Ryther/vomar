@@ -1,6 +1,7 @@
 #include "recovery_primary.h"
 #include "recovery_main_allowlist.h"
 #include "ota_image.h"
+#include "connection_capability.h"
 #include <errno.h>
 #include <string.h>
 static unsigned le16(const uint8_t *p){return p[0]|(unsigned)p[1]<<8;}
@@ -32,6 +33,18 @@ int recovery_primary_validate(const uint8_t *p,size_t capacity)
 {
  struct ota_image_info image;int rc=authenticate(p,capacity,&image);
  return rc?rc:normal_main(&image);
+}
+int recovery_primary_validate_pairing(const uint8_t *p,size_t capacity)
+{
+ struct ota_image_info image;int rc=authenticate(p,capacity,&image);
+ if(rc)return rc;
+ if(image.authenticated_role!=OTA_IMAGE_ROLE_MAIN||image.authenticated_profile!=2)return-EACCES;
+ const uint8_t capability[]=CONNECTION_PAIRING_CAPABILITY_BYTES;
+ uint32_t size=le32(p+12);
+ if(size>capacity-512)return-EBADMSG;
+ for(size_t i=520;i+sizeof(capability)<=512+size;i++)
+  if(p[i]==capability[0]&&!memcmp(p+i,capability,sizeof(capability)))return 0;
+ return-ENOTSUP;
 }
 static int migration_role(const struct ota_image_info *image)
 {

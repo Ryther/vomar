@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Vimar Updater</string>
+    <string name="app_name">Vomar</string>
     <string name="package_step">Choose an update package</string>
     <string name="prepare_step">Prepare Bluetooth</string>
     <string name="update_step">Install the update</string>
@@ -54,7 +54,7 @@
     <string name="ready_instructions">Stay near the powered dimmer. Use Start Bluetooth recovery in Home Assistant or Zigbee2MQTT. Android pairing code: 824005. Gesture entry depends on the installed firmware.</string>
     <string name="connection_help">Connection instructions</string>
     <string name="hide_connection_help">Hide connection instructions</string>
-    <string name="connection_help_text">The phone connects only to the selected dimmer. Complete pairing in the Android dialog and wait for the result here. Check Bluetooth reads images without installing firmware. Use Resume after an interrupted update. Ordinary Bluetooth sessions on supporting firmware show blue / green and return to Zigbee after 60 seconds idle. Other independent recovery entries show blue / red and remain active. Hold both buttons for 5 seconds to request a safe Zigbee return on supporting firmware.</string>
+    <string name="connection_help_text">The phone connects only to the selected dimmer. Complete pairing in the Android dialog and wait for the result here. Check Bluetooth reads images without installing firmware. Use Resume after an interrupted update. Ordinary Bluetooth sessions on supporting firmware show blue / green and return to Zigbee after 60 seconds idle. Other independent recovery entries show blue / red and remain active. On firmware with the connection selector, hold both buttons for 5 seconds, release both, then press Up for a new Zigbee network or Down for Bluetooth. Zigbee pairing forgets the previous network.</string>
     <string name="more_options">More options</string>
     <string name="fewer_options">Close other options</string>
     <string name="change_package">Change local ZIP…</string>

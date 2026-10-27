@@ -9,9 +9,12 @@ enum wireless_status_led_mode {
     WIRELESS_STATUS_LED_NORMAL,
     WIRELESS_STATUS_LED_BLUETOOTH,
     WIRELESS_STATUS_LED_RECOVERY,
+    WIRELESS_STATUS_LED_SELECTOR,
+    WIRELESS_STATUS_LED_PAIRING,
+    WIRELESS_STATUS_LED_PAIRED,
 };
 
-/* Pure display policy, not yet wired into main or recovery firmware.
+/* Pure display policy shared by main and recovery firmware.
  * fault_active is authoritative and overrides all wireless and user LED modes.
  * normal is the already resolved user profile/override; it is never modified.
  * elapsed_ms is time since wireless-mode entry, supplied by the caller.

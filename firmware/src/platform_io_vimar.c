@@ -7,6 +7,7 @@
 #include "vimar_power_protection.h"
 #include "boot_trace.h"
 #include "zigbee_device.h"
+#include "connection_intent.h"
 #include <errno.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/retained_mem.h>
@@ -87,10 +88,18 @@ void platform_io_tick(uint64_t now)
 {
  if(!ready||recovering)return;
  int u=gpio_pin_get_dt(&up),d=gpio_pin_get_dt(&down);
- if(u<0||d<0){input_valid=false;zigbee_device_cancel_gestures();buttons.blocked=true;buttons.chord=false;return;}
+ if(u<0||d<0){
+  input_valid=false;zigbee_device_cancel_gestures();buttons.blocked=true;
+  buttons.enabled=false;buttons.chord=false;buttons.selecting=false;
+  zigbee_device_connection_selector(false,now);return;
+ }
  input_valid=true;
+ bool was_selecting=buttons.selecting;
  struct vimar_button_sample sample=vimar_buttons_tick(&buttons,now,(u?1:0)|(d?2:0));
  if(sample.cancel)zigbee_device_cancel_gestures();
+ if(sample.selector)zigbee_device_connection_selector(true,now);
+ if(was_selecting&&!buttons.selecting)zigbee_device_connection_selector(false,now);
+ if(sample.pairing){(void)platform_io_request_pairing();return;}
  if(sample.recovery){(void)vimar_boot_trace_request(BOOT_REASON_CHORD);(void)platform_io_request_recovery();return;}
  if(sample.changed&1)zigbee_device_local_edge_at((sample.pressed&1)?2:0,buttons.raw_since);
  if(sample.changed&2)zigbee_device_local_edge_at(1|((sample.pressed&2)?2:0),buttons.raw_since);
@@ -99,7 +108,7 @@ void platform_io_tick(uint64_t now)
 bool platform_io_input_settled(void)
 {return input_valid&&!buttons.blocked&&buttons.raw==buttons.stable;}
 
-int platform_io_request_recovery(void)
+static int request_connection(bool bluetooth)
 {
  if(recovering)return-EBUSY;
  recovering=true;zigbee_device_cancel_gestures();
@@ -114,7 +123,10 @@ int platform_io_request_recovery(void)
  if(!error)error=research_handoff_prepare(&io,last_raw);
 #endif
  if(!error)error=vimar_power_protection_flush();
- if(!error)error=bootmode_set(BOOT_MODE_TYPE_BOOTLOADER);
+ if(!error)error=bluetooth?bootmode_set(BOOT_MODE_TYPE_BOOTLOADER):bootmode_clear();
+ /* Persist the explicit network replacement last, immediately before reboot.
+  * Initialisation/inspection never creates this intent. */
+ if(!error&&!bluetooth)error=connection_intent_request();
  if(error){
 #if defined(CONFIG_VIMAR_P031_PROTECTION)
  (void)vimar_boot_trace_request(BOOT_REASON_NONE);
@@ -122,3 +134,5 @@ int platform_io_request_recovery(void)
  (void)set(NULL,0);recovering=false;LOG_ERR("Recovery request:%d",error);return error;}
  sys_reboot(SYS_REBOOT_COLD);return 0;
 }
+int platform_io_request_recovery(void){return request_connection(true);}
+int platform_io_request_pairing(void){return request_connection(false);}

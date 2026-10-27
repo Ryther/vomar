@@ -12,7 +12,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-feature android:name="android.hardware.bluetooth_le" android:required="true" />
-    <application android:label="@string/app_name" android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="false" android:icon="@android:drawable/ic_menu_upload" android:theme="@style/AppTheme" android:supportsRtl="true">
+    <application android:usesCleartextTraffic="false" android:label="@string/app_name" android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="false" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:supportsRtl="true">
         <activity android:name=".DkUsbDiagnosticsActivity" android:exported="false" />
         <activity android:name=".BleTrialActivity" android:exported="false" />
         <activity android:name=".OriginalRestoreActivity" android:exported="false" />

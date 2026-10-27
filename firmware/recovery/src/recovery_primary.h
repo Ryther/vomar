@@ -8,6 +8,8 @@
  * profile2 identity. Legacy images with no role require one of four exact
  * authenticated digests. An explicit helper role never uses that fallback. */
 int recovery_primary_validate(const uint8_t *,size_t capacity);
+/* Pairing additionally requires its versioned descriptor in signed MAIN payload. */
+int recovery_primary_validate_pairing(const uint8_t *,size_t capacity);
 /* Explicit execution only: signed profile2 MIGRATION, exact signed-region
  * hash, same primary geometry. No normal-exit or legacy-role fallback. */
 int recovery_primary_validate_migration(const uint8_t *,size_t capacity,const uint8_t expected_hash[32]);

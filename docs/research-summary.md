@@ -50,6 +50,32 @@ image hash. These successes are real but apply to their recorded versions and
 routes. They cannot promote 1.0.0 to fleet qualification or qualify the new
 common-loader first-install and generic restore helpers.
 
+## Zigbee report correction in the MAIN 1.0.1 candidate
+
+**CONFIRMED:** a captured MAIN 1.0.0 assertion identifies ZBOSS file 105,
+line 5241. In the matching linked binary, `zb_aps_hdr_parse_retrans` checks
+that a retransmission buffer is at least as long as its saved
+`aps_hdr_off_from_end` offset. The last report breadcrumb records successful
+completion of a 70-byte custom-cluster report; it does not identify which
+retransmission entry subsequently failed.
+
+**CONFIRMED:** the application's protection/boot report encoded 70 ZCL bytes.
+The pinned SDK declares a 66-byte high-level payload bound when both extended
+NWK addresses are present, excluding source-routing and APS-security overhead.
+The linked SDK does not permit ZCL fragmentation for cluster `0xFC00`.
+MAIN 1.0.1 moves three boot attributes into the existing LED report: 57 and
+52 bytes replace 39 and 70 bytes, preserving all 22 attributes, the two report
+frames and their completion/ownership behavior. Native regressions execute the
+actual encoders and callbacks, including allocation, send and completion errors.
+The recovery component remains 1.0.0; this MAIN-only change does not require a
+new Bluetooth recovery migration on a matching installation.
+
+**CONFIRMED:** the standalone DK reproduced the same assertion with the smaller
+reports, after a last breadcrumb for a 7-byte Level report. Report reduction
+alone therefore does not resolve this assertion. The originating retransmission
+entry and its lifetime require further capture; a breadcrumb is not a causal
+trace. Assertions, fault recording and automatic reset behavior remain enabled.
+
 ## Recovered stock interfaces
 
 | Interface | Confirmed nRF-side behavior | Remaining limit |

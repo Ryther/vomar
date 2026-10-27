@@ -1,9 +1,18 @@
 # Desktop application
 
+The GUI uses the Vomar amber V/open-switch icon in its header and system identity.
+Native packages include the corresponding Windows executable/installer icon,
+macOS application icon and Linux launcher icons. The per-user Linux uninstaller
+removes its matching icon copies and preserves customized replacements.
+
 Native packages provide `Vomar` (GUI) and `vomar-cli` (CLI), sharing the same Python
 engine. End users need no Python, Nordic SDK, Gradle or development container.
 Each supported platform is built separately; a Linux test does not qualify
 Windows/macOS drivers or Bluetooth.
+
+The desktop component is version 1.1.0. The CLI, Windows installed application
+and executable metadata, and macOS bundle metadata use that native version.
+Download filenames use the coordinated distribution version, which can differ.
 
 ## Install
 
@@ -83,6 +92,25 @@ does not cancel a remote Zigbee2MQTT operation. One global BLE operation and one
 operation per network limit concurrency. Saved labels never replace identity.
 
 ## CLI and developer rebuild
+
+For an interactive source checkout, install the locked desktop dependencies in
+a separate Python 3.13 environment, then run from the repository root:
+
+```sh
+PYTHONPATH="$PWD/apps/desktop-updater/src" python -m vomar_updater.gui.app --state "$PWD/_test/desktop-manual-state"
+```
+
+The development image includes Qt's X11 runtime dependencies. The default
+Dev Container does not forward a host display. An interactive container needs
+the host X11 socket, the matching `DISPLAY`, and host display authorization;
+setting `DISPLAY` alone is insufficient. With the host socket deliberately
+mounted and the container UID matching the desktop user's UID, run
+`xhost +SI:localuser:"$(id -un)"` in a **host** terminal before launching the GUI.
+Remove that grant afterward with `xhost -SI:localuser:"$(id -un)"` on the host.
+A missing Qt library and a display authorization failure are separate errors.
+For a startup check without a host display, use `xvfb-run -a` with
+`QT_QPA_PLATFORM=xcb` and the GUI's `--smoke-test` option; this does not verify
+interaction on the host desktop or Bluetooth/USB operations.
 
 `vomar --help` lists releases, devices, fleet, MQTT, sessions, diagnostics, backup,
 probe, first-install, repair, start, trial and Zigbee commands. `preview` is

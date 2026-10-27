@@ -18,6 +18,7 @@ python tools/dev/bootstrap.py workspace
 VOMAR_PYTHON=/home/vscode/.cache/vomar/dev-venv/bin/python
 "$VOMAR_PYTHON" -m pytest tools/release/tests tools/dev/tests
 "$VOMAR_PYTHON" -m tools.release.check_workflows
+"$VOMAR_PYTHON" -m tools.release.branding --check
 "$VOMAR_PYTHON" -m mkdocs build --strict
 ```
 

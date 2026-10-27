@@ -1,0 +1,8 @@
+/* Preserve the original graphite frame against the existing orange header. */
+.md-header__button.md-logo img,
+.md-nav__title .md-logo img {
+  box-sizing: content-box;
+  padding: 0.2rem;
+  background: #faf8f3;
+  border-radius: 0.3rem;
+}

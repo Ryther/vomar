@@ -9,6 +9,7 @@ The Ubuntu image pins Python 3.13.12, Node 24 and assistant packages; npm verifi
 package integrity. Java 21 runs Gradle 9.6.0, AGP 9.4.1 and Kotlin 2.4.21;
 Java 17 remains the bytecode target. Git and the OpenSSH client, Docker CLI/Buildx,
 GitHub CLI, Codex, OpenCode, Claude and the Linux GUI runtime are available. Startup checks Docker, gh and `ssh -V` without
+
 logging in, contacting an assistant or opening hardware.
 
 Docker and gh use official Dev Container Features pinned by OCI digest. The
@@ -67,6 +68,12 @@ Ghidra release separately. These steps do not rebuild/switch containers, open
 hardware or import proprietary evidence. Nordic binary-stack licenses apply.
 An emulator is added by CI for synthetic Android UI coverage, not installed by
 default in the development image.
+
+Android CI selects `CiUiSuite` as one instrumentation class. The pinned test
+engine truncates comma-separated class arguments, so the suite groups the eight
+synthetic UI, persistence and connection journeys. JUnit verification requires
+an executed, non-skipped testcase from every expected class before coverage is
+accepted. Emulator tests use synthetic transports and do not qualify devices.
 
 Android Gradle tests generate signed synthetic fixtures with Python using the
 locked `pytest` and `cryptography` packages in `requirements-dev.lock`. Workspace

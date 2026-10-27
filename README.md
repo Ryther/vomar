@@ -1,5 +1,7 @@
 # Vomar
 
+![Vomar — Independent open-source firmware](docs/images/vomar-banner.png)
+
 > **AI-assisted code warning:** This project includes code produced with AI coding
 > agents. Tests and reviews do not establish that it is safe or correct on your
 > hardware. Preserve each device's original backup and use an isolated, explicitly

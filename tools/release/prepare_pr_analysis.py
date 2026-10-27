@@ -62,7 +62,10 @@ def normalize_python_coverage(report, repository):
         if not filename or path.is_absolute() or '..' in path.parts or '\\' in filename or ':' in filename or filename!=path.as_posix():
             raise ValueError('Python coverage filename must be repository-relative')
         source=(repository/filename).resolve()
-        if not source.is_relative_to(repository) or not source.is_file() or source.suffix!='.py':
+        # PyInstaller's source-owned recipe is executable Python measured by
+        # the native metadata tests. Retain its real path and every hit/branch.
+        python_source=source.suffix=='.py' or filename=='apps/desktop-updater/packaging/vomar.spec'
+        if not source.is_relative_to(repository) or not source.is_file() or not python_source:
             raise ValueError('Python coverage filename must identify repository source')
     for source in sources:tree.find('./sources').remove(source)
     tree.write(report,encoding='utf-8',xml_declaration=True)

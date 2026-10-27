@@ -37,7 +37,7 @@ def synthetic_release(tmp_path,monkeypatch):
     monkeypatch.setattr(assemble,'sign_android',sign_android)
     monkeypatch.setattr(assemble,'promote',promote)
     output=tmp_path/'output'
-    def build():return assemble.assemble(inputs,output,'0.1.0',sha,candidate,qualification,tmp_path/'unused-private-key',tmp_path/'unused-keystore',tmp_path/'unused-password',tmp_path/'unused-sdk')
+    def build(version='0.1.0'):return assemble.assemble(inputs,output,version,sha,candidate,qualification,tmp_path/'unused-private-key',tmp_path/'unused-keystore',tmp_path/'unused-password',tmp_path/'unused-sdk')
     return inputs,output,build
 
 
@@ -70,3 +70,30 @@ def test_assembly_rejects_missing_required_dependency_inventory(synthetic_releas
     (inputs/(graph+'.json')).unlink()
     with pytest.raises(FileNotFoundError):build()
     assert not (output/'release-manifest.json').exists()
+
+
+def test_first_distribution_preserves_distinct_native_versions(synthetic_release,tmp_path):
+    inputs,output,build=synthetic_release
+    metadata=json.loads((inputs/'component-versions.json').read_bytes())
+    metadata.update(distributionVersion='2.0.0',android={'version':'1.1.2','versionCode':32},desktop={'version':'1.1.0'})
+    (inputs/'component-versions.json').write_text(json.dumps(metadata))
+    for name in NATIVE_INPUTS:(inputs/name).rename(inputs/name.replace('0.1.0','2.0.0'))
+    with zipfile.ZipFile(tmp_path/'candidate.zip','w') as archive:
+        archive.writestr('manifest.json',json.dumps({'main':{'version':'1.1.1'}}))
+        archive.writestr('main.ota',b'synthetic OTA carrier')
+    manifest=build('2.0.0')
+    assert manifest['distributionVersion']=='2.0.0' and manifest['tag']=='v2.0.0'
+    assert manifest['components']=={'firmware':'1.1.1','android':'1.1.2','desktop':'1.1.0','zigbee2mqtt':'1.0.0'}
+    by_role={a['role']:a for a in manifest['artifacts']}
+    for role in ('firmware-common','zigbee-ota'):assert by_role[role]['componentVersion']=='1.1.1'
+    assert by_role['android-apk']['componentVersion']=='1.1.2'
+    assert by_role['android-apk']['androidVersionCode']==32
+    for role in ('desktop-linux-x64','desktop-windows-x64','desktop-windows-setup','desktop-macos-arm64'):
+        assert by_role[role]['componentVersion']=='1.1.0'
+    assert by_role['zigbee2mqtt-converter']['componentVersion']=='1.0.0'
+    for role in ('licenses','offline-guide','source-sbom'):assert by_role[role]['componentVersion']=='2.0.0'
+    assert len(list(output.iterdir()))==13
+    assert all('2.0.0' in a['filename'] for a in manifest['artifacts'])
+    with zipfile.ZipFile(output/'vomar-firmware-2.0.0.zip') as archive:
+        assert archive.read('main.ota')==(output/'vomar-firmware-2.0.0.ota').read_bytes()==b'synthetic OTA carrier'
+    validate(manifest,output)

@@ -16,6 +16,14 @@ stock-restoration trial. Those results do not qualify the new common first-insta
 generic restore or complete 1.0.0 update routes. See the
 [research and evidence summary](../docs/research-summary.md).
 
+## Connection selector and Zigbee pairing
+
+The feature-branch implementation adds a five-second two-button selector, bounded
+two-minute Zigbee pairing and an explicit authenticated Bluetooth request. See
+[Connection modes](../docs/connection-modes.md) for exact colours, network replacement,
+timeouts and compatibility/qualification limits. It needs matching MAIN/recovery;
+its source presence does not change qualification of the existing 1.0.0 package.
+
 ## Build dependencies
 
 [west.yml](west.yml) pins nRF Connect SDK `v3.4.0` and Nordic Zigbee R23 add-on

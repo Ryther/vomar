@@ -11,6 +11,9 @@ static unsigned image_lock_depth, verify_calls, flush_calls, clear_calls, reboot
 static int verify_error;
 static int store_error;
 static bool migration_image;
+static unsigned pairing_calls;
+static bool pairing_supported=true;
+int connection_intent_request(void){assert(gate.depth==1&&image_lock_depth==1&&clear_calls>0);pairing_calls++;return store_error;}
 static int preflight_error;
 static uint8_t live_hash[32]={1};
 
@@ -38,6 +41,8 @@ int recovery_primary_validate(const uint8_t *data,size_t length)
  assert(data==(const uint8_t *)RECOVERY_PRIMARY_BASE&&length==RECOVERY_PRIMARY_CAPACITY);
  assert(gate.depth==1&&image_lock_depth==1);verify_calls++;return verify_error?verify_error:migration_image?-EACCES:0;
 }
+int recovery_primary_validate_pairing(const uint8_t *data,size_t length)
+{return pairing_supported?recovery_primary_validate(data,length):-ENOTSUP;}
 int recovery_primary_validate_upload(const uint8_t *data,size_t length)
 {
  assert(data==(const uint8_t *)RECOVERY_PRIMARY_BASE&&length==RECOVERY_PRIMARY_CAPACITY);
@@ -231,6 +236,32 @@ int main(int argc,char **argv)
   command_group(MGMT_EVT_OP_CMD_DONE,0x8041,0,0);
   manual_attempt();assert(!reboot_calls&&control.partial);
   store_error=0;complete_retry();manual_attempt();assert(reboot_calls==1);
+ }else if(!strncmp(argv[1],"pairing_",8)){
+  if(!strcmp(argv[1],"pairing_unsupported")){
+   pairing_supported=false;
+   command_group(MGMT_EVT_OP_CMD_RECV,0x8043,0,MGMT_OP_READ);
+   assert(recovery_exit_zephyr_pairing_capable()==-ENOTSUP);
+   command_group(MGMT_EVT_OP_CMD_DONE,0x8043,0,11);
+   command_group(MGMT_EVT_OP_CMD_RECV,0x8043,0,MGMT_OP_WRITE);
+   assert(recovery_exit_zephyr_pairing_request()==-ENOTSUP&&!control.exiting&&!pairing_calls);
+  }else if(!strcmp(argv[1],"pairing_partial")){
+   begin_upload();done_upload(0);
+   command_group(MGMT_EVT_OP_CMD_RECV,0x8043,0,MGMT_OP_WRITE);
+   assert(recovery_exit_zephyr_pairing_request()==-EBUSY&&!pairing_calls&&!reboot_calls);
+  }else{
+   command_group(MGMT_EVT_OP_CMD_RECV,0x8043,0,MGMT_OP_WRITE);
+   assert(!recovery_exit_zephyr_pairing_request()&&control.exiting&&!pairing_calls&&!reboot_calls);
+   if(!strcmp(argv[1],"pairing_disconnect"))recovery_exit_zephyr_disconnected();
+   command_group(MGMT_EVT_OP_CMD_DONE,0x8043,0,!strcmp(argv[1],"pairing_output_error")?5:0);
+   if(!strcmp(argv[1],"pairing_ack")||!strcmp(argv[1],"pairing_ack_disconnect")){
+    if(!strcmp(argv[1],"pairing_ack_disconnect"))recovery_exit_zephyr_disconnected();
+    assert(queued_exit&&!pairing_calls);exit_work.handler(&exit_work);
+    assert(pairing_calls==1&&reboot_calls==1);
+   }else if(!strcmp(argv[1],"pairing_recheck")){
+    verify_error=-EACCES;exit_work.handler(&exit_work);
+    assert(!pairing_calls&&!reboot_calls&&!control.exiting);
+   }else assert(!queued_exit&&!control.exiting&&!pairing_calls&&!reboot_calls);
+  }
  }else assert(!"unknown scenario");
  assert(!gate.depth&&!image_lock_depth);
  printf("PASS %s\n",argv[1]);return 0;

@@ -28,21 +28,30 @@ class BleTrialUiTest:ActivityInstrumentationTestCase2<BleTrialActivity>(BleTrial
  private val address="AA:BB:CC:DD:EE:FF"
  private lateinit var metadata:JsonObject
  private fun hash(role:String)=metadata.getValue(role).jsonObject.getValue("signedRegionSha256").jsonPrimitive.content
- private inner class Radio:BleTransport,MigrationBootTransport {
-  @Volatile var writes=0;@Volatile var resets=0;var uploadGate:CompletableDeferred<Unit>?=null
+ private inner class Radio:BleTransport,MigrationBootTransport,ZigbeePairingTransport {
+  @Volatile var pairingRequests=0;var pairingAck=ResetAck.ACKNOWLEDGED;var pairingGate:CompletableDeferred<Unit>?=null;@Volatile var connections=0;@Volatile var writes=0;@Volatile var resets=0;var uploadGate:CompletableDeferred<Unit>?=null
   var remote=RemoteImages(RemoteImage(metadata.getValue("allowedSourceSignedHashes").jsonArray[0].jsonPrimitive.content,false,true,"0.5.5"),RemoteImage(hash("recovery"),true,true))
-  override suspend fun connect(address:String){}
+  override suspend fun connect(address:String){connections++}
   override suspend fun identityV2()=RuntimeIdentity(2,"VIMAR30805",2,listOf("11223344","55667788"),"",LoaderContract(LoaderContract.COMMON,metadata.getValue("loaderContracts").jsonArray[0].jsonObject.getValue("sha256").jsonPrimitive.content),"12".repeat(32))
   override suspend fun identity()=identityV2()
   override suspend fun images()=remote
   override suspend fun upload(data:ByteArray,onAck:suspend(Int)->Unit){writes++;onAck(data.size/2);uploadGate?.await();onAck(data.size);remote=remote.copy(primary=RemoteImage(hash("main"),false,true))}
   override suspend fun reset():ResetAck{resets++;return ResetAck.ACKNOWLEDGED}
   override suspend fun bootMigration(expectedHash:String)=error("No migration expected in this synthetic native test")
+  override suspend fun pairingCapabilities()=ZigbeePairingCapabilities(1,120,true)
+  override suspend fun startZigbeePairing():ResetAck {pairingRequests++;pairingGate?.await();return pairingAck}
   override suspend fun close(){}
  }
  override fun setUp(){
   super.setUp()
   val context=instrumentation.targetContext
+  // The transport remains synthetic; a fresh AVD still needs the foreground
+  // permission prerequisites checked by the actual activity and service.
+  PermissionPolicy.required(android.os.Build.VERSION.SDK_INT).forEach { permission ->
+   instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} $permission").use { descriptor ->
+    java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
+   }
+  }
   context.getSharedPreferences("ble-trial",0).edit().clear().commit()
   File(context.filesDir,"ble-trial-state").deleteRecursively()
   File(context.filesDir,"ble-trial-report.json").delete();File(context.filesDir,"ble-trial-report.json.bak").delete()
@@ -233,4 +242,141 @@ class BleTrialUiTest:ActivityInstrumentationTestCase2<BleTrialActivity>(BleTrial
   assertFalse(context.packageManager.getServiceInfo(android.content.ComponentName(context,BleTrialService::class.java),0).exported)
   assertFalse(context.packageManager.getActivityInfo(android.content.ComponentName(context,BleTrialActivity::class.java),0).exported)
  }
+ fun testZigbeePairingNeedsExplicitConfirmationWithoutFirmwareSelection(){
+  setActivityIntent(Intent(instrumentation.targetContext,BleTrialActivity::class.java).putExtra("pairingOnly",true))
+  val screen=activity;instrumentation.waitForIdleSync()
+  assertNull(runtime.selection.value)
+  assertFalse(button("ble.trial.choose").getGlobalVisibleRect(android.graphics.Rect()))
+  assertTrue(button("ble.pairing.review").isEnabled)
+  runBlocking{runtime.controller.inspectPairing(address)}
+  waitUntil{runtime.controller.state.value.pairingReview!=null&&!runtime.controller.state.value.busy}
+  var nativeState=""
+  try{waitUntil{
+   var ready=false
+   instrumentation.runOnMainSync{
+    val foreground=BleTrialActivity::class.java.getDeclaredField("foreground").apply{isAccessible=true}.getBoolean(screen)
+    val button=button("ble.pairing.review")
+    nativeState="foreground=$foreground focus=${screen.hasWindowFocus()} shown=${button.isShown} enabled=${button.isEnabled} text=${button.text}"
+    ready=foreground&&button.isShown&&button.isEnabled&&button.text.toString()=="Review Zigbee pairing"
+   }
+   ready
+  }}catch(failure:AssertionError){capture("zigbee-pairing-not-ready");throw AssertionError(nativeState,failure)}
+  instrumentation.runOnMainSync{button("ble.pairing.review").performClick()}
+  instrumentation.waitForIdleSync()
+  val field=BleTrialActivity::class.java.getDeclaredField("dialog").apply{isAccessible=true}
+  val shown=field.get(screen) as AlertDialog
+  assertTrue(shown.isShowing);assertEquals(0,radio.pairingRequests)
+  capture("zigbee-pairing-review")
+  instrumentation.runOnMainSync{shown.getButton(AlertDialog.BUTTON_POSITIVE).performClick()}
+  waitUntil{!runtime.controller.state.value.busy&&runtime.controller.state.value.acknowledged==true}
+  assertEquals(1,radio.pairingRequests);assertEquals(0,radio.writes);assertEquals(0,radio.resets)
+  assertNull(runtime.controller.state.value.pairingReview)
+  capture("zigbee-pairing-acknowledged")
+ }
+
+
+ private fun pairingDialog():AlertDialog?=BleTrialActivity::class.java.getDeclaredField("dialog").apply{isAccessible=true}.get(activity) as? AlertDialog
+ private fun showPairingReview(){
+  waitUntil{
+   var ready=false
+   instrumentation.runOnMainSync{
+    ready=BleTrialActivity::class.java.getDeclaredField("foreground").apply{isAccessible=true}.getBoolean(activity)&&
+     button("ble.pairing.review").isEnabled&&button("ble.pairing.review").text.toString()=="Review Zigbee pairing"
+   }
+   ready
+  }
+  instrumentation.runOnMainSync{button("ble.pairing.review").performClick()}
+  instrumentation.waitForIdleSync()
+ }
+ private fun withSelectedPairingDevice(selectedAddress:String=address,uid:List<String> = listOf("11223344","55667788"),work:()->Unit){
+  val preferences=instrumentation.targetContext.getSharedPreferences("fleet-ui",0)
+  val devices=preferences.getString("devices",null);val batches=preferences.getString("batches",null)
+  try{
+   preferences.edit().remove("devices").commit()
+   FleetStore(instrumentation.targetContext).upsert(DeviceRecord("selected-pairing-fixture","Pairing fixture",address=selectedAddress,uid=uid))
+   setActivityIntent(Intent(instrumentation.targetContext,BleTrialActivity::class.java).putExtra("pairingOnly",true).putExtra("deviceId","selected-pairing-fixture"))
+   work()
+  }finally{preferences.edit().apply{
+   if(devices==null)remove("devices")else putString("devices",devices)
+   if(batches==null)remove("batches")else putString("batches",batches)
+  }.commit()}
+ }
+ fun testSelectedPairingInspectionUsesServiceAndCancelRevokesReviewWithoutRequest(){
+  withSelectedPairingDevice{
+   val screen=activity;instrumentation.waitForIdleSync()
+   assertEquals(0,radio.connections);assertNull(runtime.selection.value)
+   instrumentation.runOnMainSync{button("ble.pairing.review").performClick()}
+   waitUntil{runtime.controller.state.value.pairingReview!=null&&!runtime.controller.state.value.busy}
+   assertEquals(1,radio.connections);assertEquals(0,radio.pairingRequests)
+   showPairingReview();assertTrue(pairingDialog()!!.isShowing)
+   instrumentation.runOnMainSync{pairingDialog()!!.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()}
+   waitUntil{runtime.controller.state.value.pairingReview==null}
+   assertEquals(0,radio.pairingRequests);assertEquals(0,radio.writes);assertEquals(0,radio.resets)
+   val report=org.json.JSONObject(String(runBlocking{runtime.reportBytes()}!!))
+   assertEquals("zigbee_pairing",report.getString("operation"))
+   assertTrue(report.getString("interpretation").contains("does not establish successful Zigbee association"))
+  }
+ }
+ fun testPairingDialogBackCancelAlsoExpiresReview(){
+  setActivityIntent(Intent(instrumentation.targetContext,BleTrialActivity::class.java).putExtra("pairingOnly",true))
+  val screen=activity
+  runBlocking{runtime.controller.inspectPairing(address)}
+  showPairingReview();assertTrue(pairingDialog()!!.isShowing)
+  instrumentation.runOnMainSync{pairingDialog()!!.cancel()}
+  waitUntil{runtime.controller.state.value.pairingReview==null}
+  assertEquals(0,radio.pairingRequests);assertEquals(0,radio.writes);assertEquals(0,radio.resets)
+ }
+ fun testPairingReviewForDifferentRegisteredAddressCannotOpenConfirmation(){
+  withSelectedPairingDevice(selectedAddress="11:22:33:44:55:66"){
+   val screen=activity
+   runBlocking{runtime.controller.inspectPairing(address)}
+   showPairingReview()
+   waitUntil{runtime.message.value=="Inspect the selected device again before pairing."}
+   assertNull(pairingDialog());assertNull(runtime.controller.state.value.pairingReview)
+   assertEquals(0,radio.pairingRequests);assertEquals(0,radio.writes);assertEquals(0,radio.resets)
+  }
+ }
+ fun testPairingReviewForDifferentRegisteredUidCannotOpenConfirmation(){
+  withSelectedPairingDevice(uid=listOf("99999999","88888888")){
+   val screen=activity
+   runBlocking{runtime.controller.inspectPairing(address)}
+   showPairingReview()
+   waitUntil{runtime.message.value=="Inspect the selected device again before pairing."}
+   assertNull(pairingDialog());assertNull(runtime.controller.state.value.pairingReview)
+   assertEquals(0,radio.pairingRequests);assertEquals(0,radio.writes);assertEquals(0,radio.resets)
+  }
+ }
+ fun testLostPairingAcknowledgmentShowsUncertainOutcomeAndNeverRetries(){
+  radio.pairingAck=ResetAck.LOST
+  setActivityIntent(Intent(instrumentation.targetContext,BleTrialActivity::class.java).putExtra("pairingOnly",true))
+  val screen=activity
+  runBlocking{runtime.controller.inspectPairing(address)}
+  showPairingReview()
+  instrumentation.runOnMainSync{pairingDialog()!!.getButton(AlertDialog.BUTTON_POSITIVE).performClick()}
+  waitUntil{!runtime.controller.state.value.busy&&runtime.controller.state.value.acknowledged==false}
+  assertEquals(1,radio.pairingRequests);assertNull(runtime.controller.state.value.pairingReview)
+  assertTrue(runtime.controller.state.value.status.contains("no automatic retry"))
+  assertEquals("Inspect for Zigbee pairing",button("ble.pairing.review").text.toString())
+  assertEquals("Export pairing report",button("ble.trial.export").text.toString())
+  val report=org.json.JSONObject(String(runBlocking{runtime.reportBytes()}!!))
+  assertEquals("zigbee_pairing",report.getString("operation"));assertFalse(report.getBoolean("resetAcknowledged"))
+  assertEquals(0,radio.writes);assertEquals(0,radio.resets)
+ }
+ fun testStopAfterPairingSubmissionKeepsUncertaintyAndDoesNotResetOrRetry(){
+  radio.pairingGate=CompletableDeferred()
+  setActivityIntent(Intent(instrumentation.targetContext,BleTrialActivity::class.java).putExtra("pairingOnly",true))
+  val screen=activity
+  runBlocking{runtime.controller.inspectPairing(address)}
+  showPairingReview()
+  instrumentation.runOnMainSync{pairingDialog()!!.getButton(AlertDialog.BUTTON_POSITIVE).performClick()}
+  waitUntil{radio.pairingRequests==1&&runtime.controller.state.value.busy}
+  assertEquals("Stop",button("ble.trial.stop").text.toString())
+  instrumentation.runOnMainSync{button("ble.trial.stop").performClick()}
+  waitUntil{!runtime.controller.state.value.busy}
+  assertEquals(BleTrialPhase.PAUSED,runtime.controller.state.value.phase)
+  assertTrue(runtime.controller.state.value.status.contains("uncertain after Stop"))
+  assertEquals(false,runtime.controller.state.value.acknowledged);assertNull(runtime.controller.state.value.pairingReview)
+  assertEquals(1,radio.pairingRequests);assertEquals(0,radio.writes);assertEquals(0,radio.resets)
+ }
+
 }
