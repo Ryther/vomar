@@ -16,7 +16,7 @@ android {
     defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=26; versionName="1.0.6"; testInstrumentationRunner="android.test.InstrumentationTestRunner" }
     compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
 }
-dependencies { implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.12")); implementation(project(":core")); implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5"); implementation("androidx.core:core:1.19.1"); implementation("no.nordicsemi.android:mcumgr-ble:3.4.1"); implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"); implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0"); testImplementation("junit:junit:4.13.2") }
+dependencies { implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.12")); implementation(project(":core")); implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5"); implementation("androidx.core:core:1.19.1"); implementation("no.nordicsemi.android:mcumgr-ble:3.4.1"); implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"); implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0"); testImplementation("junit:junit:4.13.2"); testImplementation("org.mockito:mockito-subclass:5.24.0") }
 dependencyLocking { lockAllConfigurations() }
 
 
