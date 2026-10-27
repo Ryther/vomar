@@ -3,8 +3,8 @@ queries:
   - uses: security-extended
 paths:
   - firmware
-  - _test/codeql-firmware/typed/source/firmware
-  - _test/codeql-firmware/typed/loader/source/firmware
+  # Manual C builds capture generated firmware; codeql_scope verifies that archive.
+  # Interpreted extractors must only receive paths present in a fresh checkout.
   - apps/android-updater
   - apps/desktop-updater
   - integrations/zigbee2mqtt

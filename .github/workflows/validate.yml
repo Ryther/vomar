@@ -24,9 +24,9 @@ jobs:
       - run: python -m pip install --no-deps --no-build-isolation -e .
       - run: python -m tools.release.component_versions --output reports/component-versions.json
       - run: python -m tools.release.public_tree
-      - run: python -m pytest tools/release/tests tools/dev/tests apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
-      - run: python -m coverage run --source=vomar_updater -m pytest apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
+      - run: python -m coverage run --source=. -m pytest tools/release/tests tools/dev/tests apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
       - run: mkdir -p reports && python -m coverage xml -o reports/python-coverage.xml
+      - run: python -m tools.release.prepare_pr_analysis --python-coverage reports/python-coverage.xml --repository .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: {name: 'python-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
   devcontainer:
@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with: {node-version: '24.22.1'}
       - run: npm ci --prefix .devcontainer/assistants --omit=dev --ignore-scripts
       - name: Build and reopen the complete public profile
@@ -122,7 +122,6 @@ jobs:
         include:
           - {runner: ubuntu-22.04, platform: linux-x64}
           - {runner: windows-2022, platform: windows-x64}
-          - {runner: macos-15-intel, platform: macos-x64}
           - {runner: macos-15, platform: macos-arm64}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -133,11 +132,11 @@ jobs:
         with: {python-version: '3.13.12'}
       - run: python -m pip install --require-hashes -r requirements-desktop.lock
       - run: python -m pip install --no-deps .
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
       - name: GUI and core tests
         env: {QT_QPA_PLATFORM: offscreen}
         run: python -m pip install --require-hashes -r requirements-dev.lock && python -m pytest apps/desktop-updater/tests
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
       - run: python -m pip install --require-hashes -r requirements-security.lock
       - run: pip-audit --disable-pip --no-deps -r requirements-desktop.lock -f json -o native-dependency-audit.json
       - run: python -m tools.release.package_desktop --output _test/native
@@ -179,7 +178,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with: {node-version: '24.22.1'}
       - run: mkdir -p reports && node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=reports/lcov.info integrations/zigbee2mqtt/test/*.test.js
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

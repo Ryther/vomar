@@ -9,7 +9,8 @@ independent native owners; no release step resets them to the distribution tag.
 
 Validate one full immutable source SHA through the reusable workflow. Build/test
 jobs receive no production signing, publication or Sonar token. Native packages
-are built on all four runner architectures; Android emits an unsigned APK.
+are built for Linux x64, Windows x64 and macOS Apple Silicon (arm64); Android
+emits an unsigned APK. Intel Mac packages are not currently required or produced.
 Public DK compilation uses an explicit ephemeral development signer and cannot
 produce official firmware. Source and generated caches are separate.
 
@@ -79,7 +80,7 @@ assistant npm audit are mandatory CI checks. A query failure fails validation.
 OSV does not cover every Qt, OpenOCD, system-library or Nordic/ZBOSS vendor binary.
 
 `DEPENDENCY_REVIEW_JSON` therefore records a separately protected advisory review
-of all six delivered inventory graphs. It binds the source commit, every release
+of every delivered inventory graph. It binds the source commit, every release
 artifact hash, every inventory hash, a UTC review date within fourteen days, and
 explicit evidence/dispositions. Missing scope, stale evidence or unresolved
 advisories keep publication blocked. Inspect vendor advisories and the exact
@@ -89,7 +90,7 @@ proof of full coverage. A confirmed advisory must be fixed or receive a protecte
 allowlist to obtain a green result.
 
 `NATIVE_QUALIFICATION_JSON` is separate from firmware qualification. For Linux
-x64, Windows x64, macOS Intel and macOS arm64 it binds exact native asset hashes
+x64, Windows x64 and macOS Apple Silicon (arm64) it binds exact native asset hashes
 (including both Windows packages) and literal true observations for:
 `filesystemTransactions`, `bluetoothPermissionsAndUpdate`,
 `dkDriverInstallRepairStart` and `stopAndRestartRecovery`. Each platform entry

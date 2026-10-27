@@ -64,15 +64,6 @@
             "architecture": "x64"
           },
           {
-            "role": "desktop-macos-x64",
-            "filename": "desktop-macos-x64.dat",
-            "size": 17,
-            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
-            "componentVersion": "1.0.0",
-            "platform": "macos",
-            "architecture": "x64"
-          },
-          {
             "role": "desktop-macos-arm64",
             "filename": "desktop-macos-arm64.dat",
             "size": 19,
@@ -157,15 +148,6 @@
             "sha256": "22f14d468125a848faae4853475d04c834f574710a3fa5d0780022da0c22276b",
             "componentVersion": "1.0.0",
             "platform": "windows",
-            "architecture": "x64"
-          },
-          {
-            "role": "desktop-macos-x64",
-            "filename": "desktop-macos-x64.dat",
-            "size": 17,
-            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
-            "componentVersion": "1.0.0",
-            "platform": "macos",
             "architecture": "x64"
           },
           {
@@ -265,15 +247,6 @@
             "architecture": "x64"
           },
           {
-            "role": "desktop-macos-x64",
-            "filename": "desktop-macos-x64.dat",
-            "size": 17,
-            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
-            "componentVersion": "1.0.0",
-            "platform": "macos",
-            "architecture": "x64"
-          },
-          {
             "role": "desktop-macos-arm64",
             "filename": "desktop-macos-arm64.dat",
             "size": 19,
@@ -367,15 +340,6 @@
             "sha256": "b1c679788312e59bcceafce43d7942595110c8c93de17dffc27ef55a5be8da11",
             "componentVersion": "1.0.0",
             "platform": "windows",
-            "architecture": "x64"
-          },
-          {
-            "role": "desktop-macos-x64",
-            "filename": "desktop-macos-x64.dat",
-            "size": 17,
-            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
-            "componentVersion": "1.0.0",
-            "platform": "macos",
             "architecture": "x64"
           },
           {
@@ -475,15 +439,6 @@
             "architecture": "x64"
           },
           {
-            "role": "desktop-macos-x64",
-            "filename": "desktop-macos-x64.dat",
-            "size": 17,
-            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
-            "componentVersion": "1.0.0",
-            "platform": "macos",
-            "architecture": "x64"
-          },
-          {
             "role": "desktop-macos-arm64",
             "filename": "desktop-macos-arm64.dat",
             "size": 19,
@@ -580,15 +535,6 @@
             "architecture": "x64"
           },
           {
-            "role": "desktop-macos-x64",
-            "filename": "desktop-macos-x64.dat",
-            "size": 17,
-            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
-            "componentVersion": "1.0.0",
-            "platform": "macos",
-            "architecture": "x64"
-          },
-          {
             "role": "desktop-macos-arm64",
             "filename": "desktop-macos-arm64.dat",
             "size": 19,
@@ -682,15 +628,6 @@
             "sha256": "b1c679788312e59bcceafce43d7942595110c8c93de17dffc27ef55a5be8da11",
             "componentVersion": "1.0.0",
             "platform": "windows",
-            "architecture": "x64"
-          },
-          {
-            "role": "desktop-macos-x64",
-            "filename": "desktop-macos-x64.dat",
-            "size": 17,
-            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
-            "componentVersion": "1.0.0",
-            "platform": "macos",
             "architecture": "x64"
           },
           {
@@ -797,15 +734,6 @@
             "architecture": "x64"
           },
           {
-            "role": "desktop-macos-x64",
-            "filename": "desktop-macos-x64.dat",
-            "size": 17,
-            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
-            "componentVersion": "1.0.0",
-            "platform": "macos",
-            "architecture": "x64"
-          },
-          {
             "role": "desktop-macos-arm64",
             "filename": "desktop-macos-arm64.dat",
             "size": 19,
@@ -837,6 +765,127 @@
           }
         ],
         "secret": "x"
+      }
+    },
+    {
+      "id": "unsupported-macos-intel",
+      "accept": false,
+      "manifest": {
+        "schemaVersion": 1,
+        "distributionVersion": "0.1.0",
+        "tag": "v0.1.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "components": {
+          "firmware": "1.0.0",
+          "android": "1.0.0",
+          "desktop": "1.0.0"
+        },
+        "artifacts": [
+          {
+            "role": "firmware-common",
+            "filename": "vomar-firmware-0.1.0.zip",
+            "size": 15,
+            "sha256": "30965eafd9201d1aaa88ffc9da17b58f3d2bd309d990934e4b98fc1b56ed8cb2",
+            "componentVersion": "1.0.0"
+          },
+          {
+            "role": "zigbee-ota",
+            "filename": "zigbee-ota.dat",
+            "size": 10,
+            "sha256": "896ee4b0ceb0ea6bfb39b29d4e9dc93b6aa2654fb94e4f457e7613f3cb032541",
+            "componentVersion": "1.0.0"
+          },
+          {
+            "role": "android-apk",
+            "filename": "android-apk.dat",
+            "size": 11,
+            "sha256": "a83f47babea2729ab3d2776417b0cab96b60592e69b7b3810d03a990079646c9",
+            "componentVersion": "1.0.0",
+            "androidVersionCode": 20
+          },
+          {
+            "role": "desktop-linux-x64",
+            "filename": "desktop-linux-x64.dat",
+            "size": 17,
+            "sha256": "553b14a7887c27e10ec40005bf1c68ced66a43da58bfa8f56de696151c81e5ab",
+            "componentVersion": "1.0.0",
+            "platform": "linux",
+            "architecture": "x64"
+          },
+          {
+            "role": "desktop-windows-x64",
+            "filename": "desktop-windows-x64.dat",
+            "size": 19,
+            "sha256": "22f14d468125a848faae4853475d04c834f574710a3fa5d0780022da0c22276b",
+            "componentVersion": "1.0.0",
+            "platform": "windows",
+            "architecture": "x64"
+          },
+          {
+            "role": "desktop-windows-setup",
+            "filename": "desktop-windows-setup.dat",
+            "size": 21,
+            "sha256": "b1c679788312e59bcceafce43d7942595110c8c93de17dffc27ef55a5be8da11",
+            "componentVersion": "1.0.0",
+            "platform": "windows",
+            "architecture": "x64"
+          },
+          {
+            "role": "desktop-macos-arm64",
+            "filename": "desktop-macos-arm64.dat",
+            "size": 19,
+            "sha256": "96c084181a87e6c15036ae75f4c23a159cf5eaabb537bb00392cfefe5934751f",
+            "componentVersion": "1.0.0",
+            "platform": "macos",
+            "architecture": "arm64"
+          },
+          {
+            "role": "zigbee2mqtt-converter",
+            "filename": "zigbee2mqtt-converter.dat",
+            "size": 21,
+            "sha256": "efdf139b987f2248b3f0108fc42b229ee865b7a5cac5cb2ab767eab5c0ebd4ec",
+            "componentVersion": "1.0.0"
+          },
+          {
+            "role": "licenses",
+            "filename": "licenses.dat",
+            "size": 8,
+            "sha256": "46610887a7913b54a6b70e7dfaaaab5dec3e7c280521ab981f03e5d63a89279c",
+            "componentVersion": "1.0.0"
+          },
+          {
+            "role": "offline-guide",
+            "filename": "offline-guide.dat",
+            "size": 13,
+            "sha256": "4fe3527685cc95db1178181d03ac96c4899a7e33ef59f324427198adca327a4f",
+            "componentVersion": "1.0.0"
+          },
+          {
+            "role": "desktop-macos-x64",
+            "filename": "desktop-macos-x64.dat",
+            "size": 17,
+            "sha256": "c17645e4921512553bdda18e8fa43651cdc2365f8cea524d035c0980090f9ae1",
+            "componentVersion": "1.0.0",
+            "platform": "macos",
+            "architecture": "x64"
+          }
+        ]
+      }
+    },
+    {
+      "id": "non-array-artifacts",
+      "accept": false,
+      "manifest": {
+        "schemaVersion": 1,
+        "distributionVersion": "0.1.0",
+        "tag": "v0.1.0",
+        "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "components": {
+          "firmware": "1.0.0",
+          "android": "1.0.0",
+          "desktop": "1.0.0"
+        },
+        "artifacts": {}
       }
     }
   ]

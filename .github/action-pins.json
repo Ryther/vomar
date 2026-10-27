@@ -6,6 +6,6 @@
   "codeql-init": "github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
   "codeql-analyze": "github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370",
   "please": "googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7",
-  "node": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
-  "sonar": "SonarSource/sonarqube-scan-action@c7ee0f9df90b7aa20e8dcf9695dcfe2e7da5b4f2"
+  "node": "actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1",
+  "sonar": "SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9"
 }
