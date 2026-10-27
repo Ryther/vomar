@@ -130,6 +130,11 @@ is resolved from the scanner launch directory, rather than the selected project
 root. Install the protected file at the actual root instead of relying on that
 path being rebased by `projectBaseDir`.
 
+The trusted main scan passes absolute report paths under `github.workspace`.
+CFamily resolves its compilation database from the scanner launch directory;
+coverage analyzers can use the selected project root. Absolute paths keep both
+resolutions attached to the same downloaded and normalized reports.
+
 Initialize and verify a real `main` baseline. Fork/Dependabot analysis uses a
 disposable Community instance without any reusable project credential; firmware
 C remains mandatory in CodeQL and in full protected main/release Sonar analysis.
