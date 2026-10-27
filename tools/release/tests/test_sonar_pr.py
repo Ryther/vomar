@@ -70,6 +70,34 @@ def test_repository_python_coverage_refuses_unsafe_or_missing_paths(repository_p
     assert report.read_bytes()==original
 
 
+@pytest.mark.parametrize('filename,accepted',[
+    ('apps/desktop-updater/packaging/vomar.spec',True),
+    ('apps/desktop-updater/packaging/other.spec',False),
+    ('tools/unrelated.txt',False),
+])
+def test_python_coverage_retains_the_executed_packaging_recipe(tmp_path,filename,accepted):
+    import coverage
+    prepare=importlib.import_module('tools.release.prepare_pr_analysis')
+    repository=tmp_path/'repository';source=repository/filename
+    source.parent.mkdir(parents=True);source.write_text('enabled=True\nif enabled:\n    value=7\nelse:\n    value=3\n')
+    report=tmp_path/'coverage.xml'
+    measured=coverage.Coverage(source=[str(repository)],branch=True,config_file=False,data_file=None)
+    measured.start()
+    try:runpy.run_path(str(source))
+    finally:measured.stop()
+    measured.xml_report(outfile=str(report))
+    original=report.read_bytes();packages=ET.tostring(ET.parse(report).find('./packages'))
+    if not accepted:
+        with pytest.raises(ValueError,match='repository source'):prepare.normalize_python_coverage(report,repository)
+        assert report.read_bytes()==original
+        return
+    prepare.normalize_python_coverage(report,repository)
+    result=ET.parse(report)
+    assert ET.tostring(result.find('./packages'))==packages
+    assert result.find('.//class').get('filename')==filename
+    assert any(int(line.get('hits'))>0 for line in result.findall('.//line'))
+
+
 def test_repository_python_coverage_requires_exact_measured_repository(repository_python_report):
     prepare=importlib.import_module('tools.release.prepare_pr_analysis')
     repository,report=repository_python_report
