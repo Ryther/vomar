@@ -68,7 +68,8 @@ def test_android_adapters_and_private_filesystem_instrumentation_compile_against
         ('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.4.21')]]
     compiler += [jar('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.8.0'),jar('org.jetbrains','annotations','23.0.0')]
     sdk=ROOT/'work/android-sdk/platforms/android-37.0';app=ROOT/'apps/android-updater/app'
-    r=app/'build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/release/processReleaseResources/R.jar'
+    r=app/'build/intermediates/compile_and_runtime_r_class_jar/release/processReleaseResources/R.jar'
+    assert r.is_file(), 'Build the release resources before the standalone Android adapter check'
     cp=programming[3]+':'+':'.join(map(str,[sdk/'android.jar',sdk/'optional/android.test.base.jar',sdk/'optional/android.test.runner.jar',jar('junit','junit','4.13.2'),r]))
     directory=app/'src/main/kotlin/org/openvimar/updater'
     sources=list((directory/'installer').glob('Android*.kt'))+list((directory/'installer').glob('*Service.kt'))
