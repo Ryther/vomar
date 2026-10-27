@@ -40,6 +40,7 @@ android.buildTypes.getByName("debug").enableAndroidTestCoverage = true
 android.testCoverage.jacocoVersion = "0.8.14"
 val jacocoDebugReport = tasks.register<JacocoReport>("jacocoDebugReport") {
     dependsOn("testDebugUnitTest")
+    mustRunAfter(tasks.matching { it.name == "connectedDebugAndroidTest" })
     // Connected tests are an explicit CI/operator action. Reporting never
     // starts an emulator or connects to a target as a side effect.
     executionData(fileTree(layout.buildDirectory) {

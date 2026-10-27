@@ -134,7 +134,29 @@ jobs:
           force-avd-creation: true
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          script: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :app:connectedDebugAndroidTest :app:jacocoDebugReport -Pandroid.testInstrumentationRunnerArguments.class=org.openvimar.updater.InitialInstallUiTest,org.openvimar.updater.InitialInstallAndroidAdapterTest
+          script: >-
+            apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict
+            :app:connectedDebugAndroidTest
+            -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
+            -Pandroid.testInstrumentationRunnerArguments.class=org.openvimar.updater.InitialInstallUiTest,org.openvimar.updater.InitialInstallAndroidAdapterTest ||
+            { mkdir -p _test/android-ui-diagnostics;
+            adb -s emulator-5554 shell dumpsys window > _test/android-ui-diagnostics/window.txt;
+            adb -s emulator-5554 shell dumpsys power > _test/android-ui-diagnostics/power.txt;
+            adb -s emulator-5554 logcat -d -t 500 > _test/android-ui-diagnostics/logcat.txt;
+            adb -s emulator-5554 exec-out screencap -p > _test/android-ui-diagnostics/screen.png;
+            adb -s emulator-5554 pull /sdcard/Android/data/org.openvimar.updater/files/ui-failure _test/android-ui-diagnostics || true;
+            exit 1; };
+            apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :app:jacocoDebugReport
+      - name: Retain synthetic Android test diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: android-test-diagnostics-${{ inputs.sha || github.sha }}
+          path: |
+            apps/android-updater/app/build/reports/androidTests
+            apps/android-updater/app/build/outputs/androidTest-results
+            _test/android-ui-diagnostics
+          if-no-files-found: ignore
       - name: Collect actual JVM and synthetic device coverage
         run: |
           mkdir -p reports

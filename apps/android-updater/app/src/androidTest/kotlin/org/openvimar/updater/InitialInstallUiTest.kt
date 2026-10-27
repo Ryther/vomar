@@ -19,6 +19,32 @@ import java.io.File
 class InitialInstallUiTest:ActivityInstrumentationTestCase2<InitialInstallActivity>(InitialInstallActivity::class.java) {
     private fun nodes(v:View):List<View> = listOf(v)+if(v is ViewGroup)(0 until v.childCount).flatMap{nodes(v.getChildAt(it))}else emptyList()
     private fun field(name:String)=InitialInstallActivity::class.java.getDeclaredField(name).apply{isAccessible=true}
+    override fun runTest(){
+        try{super.runTest()}catch(failure:Throwable){
+            // Capture the obstructing window before teardown removes the app.
+            // Never collect system diagnostics from a physical user's device.
+            if(android.os.Build.HARDWARE in setOf("ranchu","goldfish"))runCatching{
+                val root=checkNotNull(instrumentation.targetContext.getExternalFilesDir("ui-failure"))
+                val directory=File(root,"${name.replace(Regex("[^A-Za-z0-9_.-]"),"_")}-${android.os.SystemClock.uptimeMillis()}")
+                check(directory.mkdirs())
+                fun capture(action:()->Unit){runCatching(action).onFailure(failure::addSuppressed)}
+                capture{instrumentation.uiAutomation.takeScreenshot()?.let{bitmap->try{
+                    File(directory,"screen.png").outputStream().use{check(bitmap.compress(Bitmap.CompressFormat.PNG,100,it))}
+                }finally{bitmap.recycle()}}}
+                for((filename,command) in listOf("window.txt" to "dumpsys -t 5 window","power.txt" to "dumpsys -t 5 power","logcat.txt" to "logcat -d -t 500"))capture{
+                    val descriptor=instrumentation.uiAutomation.executeShellCommand(command)
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(descriptor).use{input->
+                        File(directory,filename).outputStream().use{output->
+                            val buffer=ByteArray(8192);var remaining=1024*1024
+                            while(remaining>0){val count=input.read(buffer,0,minOf(buffer.size,remaining));if(count<0)break;output.write(buffer,0,count);remaining-=count}
+                        }
+                    }
+                }
+                android.util.Log.e("InitialInstallUiTest","Failure evidence: ${directory.absolutePath}")
+            }.onFailure(failure::addSuppressed)
+            throw failure
+        }
+    }
     fun testKeyboardScrollFocusDoesNotWashOutTheWholeScreen(){
         setActivityInitialTouchMode(false);instrumentation.setInTouchMode(false)
         val screen=activity;instrumentation.waitForIdleSync()
