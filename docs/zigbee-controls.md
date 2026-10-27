@@ -19,12 +19,12 @@ I valori seguenti sono i default di un Vimar nuovo, senza configurazione
 salvata. L’aggiornamento conserva le impostazioni precedenti e assegna soltanto
 ai nuovi parametri i rispettivi default. La configurazione del convertitore
 legge i valori dal dispositivo, senza scrivere i default. Il simulatore DK
-conserva le proprie soglie 250/100/10; il profilo Vimar usa 500/50/3.
+conserva le proprie soglie 250/100/10; il profilo Vimar usa 300/50/3.
 
 | Proprietà | Nome | Default |
 |---|---|---|
 | `double_click_window_ms` | Finestra doppio clic | `150` ms |
-| `long_press_ms` | Soglia pressione lunga | `500` ms |
+| `long_press_ms` | Soglia pressione lunga | `300` ms |
 | `level_step_period_ms` | Intervallo regolazione tenendo premuto | `50` ms |
 | `level_step_percent` | Passo di luminosità | `1,2` % (grezzo `3`) |
 | `short_press_mode` | Comportamento clic singolo | `symmetric_toggle` |
@@ -52,16 +52,16 @@ conserva le proprie soglie 250/100/10; il profilo Vimar usa 500/50/3.
 | `fixed_level_percent` | Livello nella modalità fissa | `100` % |
 | `min_level_percent` | Luminosità minima regolabile | `0,4` % |
 | `max_level_percent` | Luminosità massima regolabile | `100` % |
-| `led_on_red` | LED a lampada accesa: rosso | `0` |
-| `led_on_green` | LED a lampada accesa: verde | `255` |
-| `led_on_blue` | LED a lampada accesa: blu | `0` |
+| `led_on_red` | LED a lampada accesa: rosso | `255` |
+| `led_on_green` | LED a lampada accesa: verde | `254` |
+| `led_on_blue` | LED a lampada accesa: blu | `250` |
 | `led_on_intensity` | LED a lampada accesa: intensità | `10` % |
-| `led_off_red` | LED a lampada spenta: rosso | `0` |
-| `led_off_green` | LED a lampada spenta: verde | `0` |
-| `led_off_blue` | LED a lampada spenta: blu | `255` |
-| `led_off_intensity` | LED a lampada spenta: intensità | `10` % |
-| `led_on_mode` | Intensità LED a lampada accesa | `fixed` |
-| `led_on_min_intensity` | Intensità minima LED | `0` % |
+| `led_off_red` | LED a lampada spenta: rosso | `255` |
+| `led_off_green` | LED a lampada spenta: verde | `110` |
+| `led_off_blue` | LED a lampada spenta: blu | `84` |
+| `led_off_intensity` | LED a lampada spenta: intensità | `25` % |
+| `led_on_mode` | Intensità LED a lampada accesa | `follow_level` |
+| `led_on_min_intensity` | Intensità minima LED | `10` % |
 | `led_on_max_intensity` | Intensità massima LED | `100` % |
 
 ## LED del pulsante

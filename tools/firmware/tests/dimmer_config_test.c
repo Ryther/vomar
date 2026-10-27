@@ -37,12 +37,18 @@ static void test_defaults_match_approved_design(void)
 static void test_vimar_defaults_preserve_generic_profile(void)
 {
     struct dimmer_config config=dimmer_config_vimar_defaults();
-    assert(config.long_press_ms==500);
+    assert(config.long_press_ms==300);
     assert(config.level_step_period_ms==50);
     assert(config.level_step==3);
     assert(config.double_click_window_ms==150);
     assert(config.output_mode==DIMMER_OUTPUT_DIMMABLE);
     assert(config.power_on_fallback==DIMMER_POWER_FALLBACK_PREVIOUS);
+    assert(config.led_on.r==255 && config.led_on.g==254 && config.led_on.b==250);
+    assert(config.led_on.intensity==10);
+    assert(config.led_off.r==255 && config.led_off.g==110 && config.led_off.b==84);
+    assert(config.led_off.intensity==25);
+    assert(config.led_on_intensity_mode==DIMMER_LED_INTENSITY_FOLLOW_LEVEL);
+    assert(config.led_on_min_intensity==10 && config.led_on_max_intensity==100);
     assert(dimmer_config_validate(&config));
     config=dimmer_config_defaults();
     assert(config.long_press_ms==250);
