@@ -17,7 +17,9 @@ from typing import Any
 JsonObject = dict[str, Any]
 Fetch = Callable[[str, JsonObject], JsonObject]
 METRICS = "ncloc,files,coverage,line_coverage,duplicated_lines_density,bugs,vulnerabilities,code_smells,security_hotspots,reliability_rating,security_rating,sqale_rating,alert_status"
-FILE_METRICS = "ncloc,coverage,line_coverage,duplicated_lines_density"
+NEW_COVERAGE_METRICS = "new_coverage,new_line_coverage,new_lines_to_cover,new_uncovered_lines,new_conditions_to_cover,new_uncovered_conditions"
+METRICS += "," + NEW_COVERAGE_METRICS
+FILE_METRICS = "ncloc,coverage,line_coverage,duplicated_lines_density," + NEW_COVERAGE_METRICS
 
 
 def _pages(fetch: Fetch, endpoint: str, params: JsonObject, field: str, size: int) -> list[JsonObject]:
@@ -58,9 +60,13 @@ def introduced_issues(before: list[JsonObject], after: list[JsonObject]) -> list
 
 
 def export_analysis(
-    fetch: Fetch, project: str, directory: Path, *, pull_request: str = "", page_size: int = 500
+    fetch: Fetch, project: str, directory: Path, *, pull_request: str = "", page_size: int = 500,
+    backend: str = "cloud",
 ) -> JsonObject:
     """Write unabridged raw data and a readable index; reject missing PR analyses."""
+    if backend not in {"cloud", "community"}:
+        raise ValueError("Unsupported Sonar report backend")
+    hotspot_project_parameter = "projectKey" if backend == "cloud" else "project"
     directory.mkdir(parents=True, exist_ok=True)
     scope: JsonObject = {"pullRequest": pull_request} if pull_request else {}
     gate = fetch("/api/qualitygates/project_status", {"projectKey": project, **scope})
@@ -69,11 +75,14 @@ def export_analysis(
     measures = fetch("/api/measures/component", {"component": project, "metricKeys": METRICS, **scope})
     issues = _pages(fetch, "/api/issues/search", {"componentKeys": project, "resolved": "false", **scope}, "issues", page_size)
     files = _pages(fetch, "/api/measures/component_tree", {"component": project, "metricKeys": FILE_METRICS, "qualifiers": "FIL", **scope}, "components", page_size)
-    hotspots = _pages(fetch, "/api/hotspots/search", {"project": project, **scope}, "hotspots", page_size)
+    hotspots = _pages(fetch, "/api/hotspots/search", {hotspot_project_parameter: project, **scope}, "hotspots", page_size)
     for name, value in (("gate.json", gate), ("measures.json", measures), ("issues.json", issues), ("files.json", files), ("hotspots.json", hotspots)):
         _write_json(directory, name, value)
     status = gate["projectStatus"]["status"]
-    lines = ["# Sonar analysis report", "", f"Project: `{project}`", f"Scope: {'PR #' + pull_request if pull_request else 'overall branch'}", f"Quality gate: **{status}**", f"Open issues: **{len(issues)}**", f"Security hotspots: **{len(hotspots)}**", "", "The JSON files retain full API records, including issue flows and file measures.", "", "## Open issues", ""]
+    lines = ["# Sonar analysis report", "", f"Project: `{project}`", f"Scope: {'PR #' + pull_request if pull_request else 'overall branch'}", f"Quality gate: **{status}**", f"Open issues: **{len(issues)}**", f"Security hotspots: **{len(hotspots)}**", "", "The JSON files retain full API records, including issue flows and file measures.", "", "## Quality gate conditions", ""]
+    for condition in gate["projectStatus"].get("conditions", []):
+        lines.append(f"- `{condition.get('metricKey', '')}`: **{condition.get('status', '')}** · actual {condition.get('actualValue', 'unknown')} · threshold {condition.get('comparator', '')} {condition.get('errorThreshold', 'unknown')}")
+    lines.extend(["", "## Open issues", ""])
     for issue in issues:
         location = issue.get("component", "").partition(":")[2]
         line = issue.get("line")
@@ -90,11 +99,7 @@ def _http_fetch(base_url: str, token: str) -> Fetch:
         raise ValueError("Unsupported Sonar API endpoint")
 
     def fetch(path: str, params: JsonObject) -> JsonObject:
-        query = dict(params)
-        # Cloud and the pinned Community server use different hotspot selectors.
-        if base_url == "https://sonarcloud.io" and path == "/api/hotspots/search":
-            query["projectKey"] = query.pop("project")
-        url = base_url + path + "?" + urllib.parse.urlencode(query)
+        url = base_url + path + "?" + urllib.parse.urlencode(params)
         headers = {"Accept": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
@@ -129,8 +134,6 @@ def export_candidate(fetch: Fetch, project: str, directory: Path, pull_request: 
 
     before = current()
     gate = fetch('/api/qualitygates/project_status', {'analysisId': task['analysisId']})
-    if gate['projectStatus']['status'] != 'OK':
-        raise ValueError('Candidate analysis quality gate failed')
     def bound_fetch(path, params):
         return gate if path == '/api/qualitygates/project_status' else fetch(path, params)
     result = export_analysis(bound_fetch, project, directory, pull_request=pull_request)
@@ -143,17 +146,22 @@ def export_candidate(fetch: Fetch, project: str, directory: Path, pull_request: 
         'firmwareC': 'separate mandatory CodeQL required check',
         'fullReleaseAnalysis': False,
     })
+    if gate['projectStatus']['status'] != 'OK':
+        raise ValueError('Candidate analysis quality gate failed')
     return result
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="https://sonarcloud.io")
+    parser.add_argument("--backend", choices=("cloud", "community"), default="cloud")
     parser.add_argument("--project", required=True)
     parser.add_argument("--pull-request", default="")
     parser.add_argument("--sha")
     parser.add_argument("--task-file", type=Path)
     args = parser.parse_args()
+    if args.pull_request and args.backend != "cloud":
+        parser.error("PR export requires Cloud backend")
     fetch = _http_fetch(args.host, os.environ.get("SONAR_TOKEN", ""))
     if args.pull_request:
         if not args.sha or not args.task_file:
@@ -166,6 +174,7 @@ def main() -> None:
         args.project,
         Path("sonar-report"),
         pull_request=args.pull_request,
+        backend=args.backend,
     )
 
 

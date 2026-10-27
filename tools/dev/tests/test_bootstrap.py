@@ -27,6 +27,35 @@ def test_guide_fallback_never_overwrites_user_skill(tmp_path):
     with pytest.raises(ValueError): install_guide(source,dest,symlink=False)
 
 
+def test_guide_in_persistent_parent_symlink_survives_recreation(tmp_path):
+    from tools.dev.bootstrap import install_guide
+    source=tmp_path/'repo'/'SKILL.md';source.parent.mkdir();source.write_text('canonical')
+    state=tmp_path/'volumes'/'agents'/'claude';state.mkdir(parents=True)
+    home=tmp_path/'home';home.mkdir();(home/'.claude').symlink_to(state,target_is_directory=True)
+    dest=home/'.claude'/'skills'/'SKILL.md'
+    install_guide(source,dest)
+    assert dest.read_text()=='canonical'
+    install_guide(source,dest)
+    assert dest.resolve()==source.resolve()
+
+
+def test_guide_repairs_only_the_known_broken_legacy_alias(tmp_path):
+    import os
+    from tools.dev.bootstrap import install_guide
+    source=tmp_path/'repo'/'SKILL.md';source.parent.mkdir();source.write_text('canonical')
+    state=tmp_path/'volumes'/'agents'/'claude';state.mkdir(parents=True)
+    home=tmp_path/'home';home.mkdir();(home/'.claude').symlink_to(state,target_is_directory=True)
+    dest=home/'.claude'/'skills'/'SKILL.md';dest.parent.mkdir()
+    dest.symlink_to(os.path.relpath(source,dest.parent))
+    assert not dest.exists()
+    install_guide(source,dest)
+    assert dest.read_text()=='canonical'
+    dest.unlink();dest.symlink_to('user-customized-missing-skill.md')
+    with pytest.raises(ValueError,match='User skill'):
+        install_guide(source,dest)
+    assert os.readlink(dest)=='user-customized-missing-skill.md'
+
+
 def test_image_bootstrap_can_run_from_shallow_container_copy(tmp_path):
     import subprocess,shutil
     root=tmp_path/'tmp';root.mkdir();script=root/'bootstrap.py'

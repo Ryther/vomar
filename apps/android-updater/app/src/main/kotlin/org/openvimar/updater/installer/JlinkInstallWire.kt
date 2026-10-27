@@ -88,7 +88,8 @@ internal class JlinkInstallWire(private val channel:InstallBulkChannel,
         ready=false;overrun=null;invalidateCaches()
         if(query(0xe8) and (1L shl 17)==0L||query(0xc7,0xff) and 2==0L)throw IOException("Unsupported J-Link SWD probe")
         query(0xc7,1);if(query(0xc7,0xfe)!=1L)throw IOException("J-Link SWD selection failed")
-        send(byteArrayOf(5,100,0));val data=BooleanArray(136);repeat(56){data[it]=true;data[it+72]=true};repeat(16){data[it+56]=(0xe79e ushr it) and 1==1}
+        send(byteArrayOf(5,0xe8.toByte(),3)) // 1000kHz; identity/geometry are checked before mutation.
+        val data=BooleanArray(136);repeat(56){data[it]=true;data[it+72]=true};repeat(16){data[it+56]=(0xe79e ushr it) and 1==1}
         clocks(BooleanArray(136){true},data)
         if(dpRead(0)!=0x2ba01477L)throw IOException("Unsupported programming DPIDR")
         configure()
@@ -100,29 +101,70 @@ internal class JlinkInstallWire(private val channel:InstallBulkChannel,
         val flashPermissions=length==12&&address in 0x4001e800L..0x4001e870L&&(address-0x4001e800L)%16==0L
         require(memory||register||flashPermissions){"Programming read address is not allowed"}
     }
-    fun readWords(address:Long,length:Int):ByteArray {
-        readSpan(address,length);require(ready)
-        repeat(3){attempt->
-            ensureCsw();apWrite(4,address)
-            val words=length/4;val count=(words+1)*54
-            val reply=clocks(BooleanArray(count){it%54<8||it%54>=46},BooleanArray(count){i->val r=if(i/54==words)0xbd else 0x9f;i%54<8&&(r ushr(i%54)) and 1==1})
-            val values=LongArray(words+1);var waited=false
-            for(i in values.indices){val at=i*54;when(bits(reply,at+8,3).toInt()){
-                1->{val v=bits(reply,at+11,32);if(bits(reply,at+43,1).toInt()!=parity(v)){invalidateCaches();throw IOException("Programming block parity mismatch")};values[i]=v}
-                2->{waited=true;break}
-                4->{invalidateCaches();throw IOException("Programming read FAULT in block 0x%08x".format(address))}
-                else->{invalidateCaches();throw IOException("Programming read invalid ACK")}}}
-            if(!waited){status();return ByteArray(length){i->(values[i/4+1] ushr((i%4)*8)).toByte()}}
-            if(attempt==2)throw IOException("Programming block WAIT limit")
-            clocks(BooleanArray(64){true},BooleanArray(64){it<56});ready=false;invalidateCaches()
-            if(dpRead(0)!=0x2ba01477L)throw IOException("Programming DPIDR changed after synchronization")
-            configure()
+    private data class Access(val ap:Boolean,val read:Boolean,val address:Int,val value:Long=0)
+    private class QueuedWait:IOException("Programming queued SWD WAIT; no write replay")
+    /** ORUN fixes the data-phase length even on WAIT/FAULT (ADIv5 B4).
+     * A packet contains at most ONE FLASH write; all later accesses only
+     * complete it and observe READY. A failed write is never retried. */
+    private fun queue(accesses:List<Access>):LongArray {
+        require(ready&&overrun==true&&accesses.size in 1..129)
+        val direction=BooleanArray(accesses.size*54);val output=BooleanArray(direction.size)
+        accesses.forEachIndexed{index,a->
+            val at=index*54;var request=0x81 or(if(a.ap)2 else 0) or(if(a.read)4 else 0) or((a.address and 12) shl 1)
+            request=request or((Integer.bitCount((request ushr 1) and 15) and 1) shl 5)
+            for(bit in 0 until 54){direction[at+bit]=bit<8||bit>=if(a.read)46 else 13
+                if(bit<8)output[at+bit]=(request ushr bit) and 1==1
+                else if(!a.read&&bit in 13..44)output[at+bit]=(a.value ushr(bit-13)) and 1L==1L
+                else if(!a.read&&bit==45)output[at+bit]=parity(a.value)==1}
         }
-        throw IOException("Programming block incomplete")
+        try{
+            val reply=clocks(direction,output);val values=LongArray(accesses.size)
+            accesses.forEachIndexed{index,a->val at=index*54
+                when(val ack=bits(reply,at+8,3).toInt()){
+                    1->if(a.read){val value=bits(reply,at+11,32);if(bits(reply,at+43,1).toInt()!=parity(value))throw IOException("Programming queued SWD parity mismatch");values[index]=value}
+                    2->throw QueuedWait()
+                    4->throw IOException("Programming queued SWD FAULT; no write replay")
+                    else->throw IOException("Programming queued SWD invalid ACK $ack")
+                }
+            }
+            require(values.last() and 0xa3L==1L){"Programming debug access error or ORUN lost"}
+            return values
+        }catch(error:Exception){invalidateCaches();throw error}
+    }
+    fun readWords(address:Long,length:Int):ByteArray {
+        readSpan(address,length);require(ready);val result=ByteArray(length);var offset=0
+        // 124 words + TAR/completion/final/status fits the probe's packet.
+        while(offset<length){val size=minOf(496,length-offset);var complete=false
+            for(attempt in 0..2){
+                ensureCsw();select(0)
+                val accesses=mutableListOf(Access(true,false,4,address+offset),Access(false,true,12))
+                repeat(size/4){accesses+=Access(true,true,12)}
+                accesses+=Access(false,true,12);accesses+=Access(false,true,4)
+                try{val values=queue(accesses)
+                    for(i in 0 until size)result[offset+i]=(values[3+i/4] ushr((i%4)*8)).toByte()
+                    complete=true;break
+                }catch(wait:QueuedWait){
+                    if(attempt==2)throw wait
+                    clocks(BooleanArray(64){true},BooleanArray(64){it<56});ready=false;invalidateCaches()
+                    if(dpRead(0)!=0x2ba01477L)throw IOException("Programming DPIDR changed after synchronization")
+                    configure()
+                }
+            }
+            check(complete);offset+=size
+        };return result
+    }
+    fun programFlashWordAndReady(address:Int,data:ByteArray):Boolean {
+        require(address in 0..0xffffc&&address%4==0&&data.size==4)
+        ensureCsw();select(0)
+        val values=queue(listOf(Access(true,false,4,address.toLong()),Access(false,true,12),
+            Access(true,false,12,bits(data,0,32)),Access(false,true,12),
+            Access(true,false,4,0x4001e400L),Access(false,true,12),
+            Access(true,true,12),Access(false,true,12),Access(false,true,4)))
+        return values[7]==1L
     }
     private fun writeWord(address:Long,value:Long){
         require(value in 0..0xffffffffL)
-        try{ensureCsw();apWrite(4,address);apWrite(12,value)}
+        try{ensureCsw();select(0);queue(listOf(Access(true,false,4,address),Access(false,true,12),Access(true,false,12,value),Access(false,true,12),Access(false,true,4)))}
         catch(error:Exception){throw IOException("Write 0x%08x: %s".format(address,error.message?:error.javaClass.simpleName),error)}
     }
     fun writeDebugControl(value:Long){require(value in setOf(0xa05f0000L,0xa05f0001L,0xa05f0003L));writeWord(0xe000edf0L,value)}

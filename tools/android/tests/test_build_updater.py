@@ -12,7 +12,7 @@ spec.loader.exec_module(m)
 # Exact package/SDK lines captured from pinned aapt2 35.0.0 during failed regeneration:
 # experiments/android-updater/20261022T150311Z/aapt2-badging.txt
 CAPTURED_BADGING = "package: name='org.openvimar.updater' versionCode='1' versionName='0.1.0' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'\nminSdkVersion:'26'\ntargetSdkVersion:'35'\n"
-CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='26'").replace("versionName='0.1.0'", "versionName='1.0.6'")
+CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='27'").replace("versionName='0.1.0'", "versionName='1.0.7'")
 
 def test_patchReleaseAcceptedAndPreviousApkRejected():
     patched = CURRENT_BADGING
@@ -35,7 +35,7 @@ def test_patchReleaseAcceptedAndPreviousApkRejected():
     with pytest.raises(ValueError):
         m.audit_manifest(prior_ui, 'android:allowBackup=false')
 
-    for version,code in [('1.0.4',24),('1.0.5',25)]:
+    for version,code in [('1.0.4',24),('1.0.5',25),('1.0.6',26)]:
         stale = CAPTURED_BADGING.replace("versionCode='1'", f"versionCode='{code}'").replace("versionName='0.1.0'", f"versionName='{version}'")
         with pytest.raises(ValueError, match='version'):
             m.audit_manifest(stale, 'android:allowBackup=false')

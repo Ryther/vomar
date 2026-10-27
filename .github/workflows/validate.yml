@@ -39,11 +39,12 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with: {node-version: '24.22.1'}
       - run: npm ci --prefix .devcontainer/assistants --omit=dev --ignore-scripts
-      - name: Build and reopen the complete public profile
+      - name: Build and reopen the single development configuration
         run: .devcontainer/assistants/node_modules/.bin/devcontainer up --workspace-folder .
       - name: Check the mounted daemon and bundled tools inside the container
         run: |
           .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . python tools/dev/container_check.py
+          .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . python -c 'from pathlib import Path; from tempfile import TemporaryFile; TemporaryFile(dir=Path.home()/".codex").close()'
           .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . codex --version
           .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . opencode --version
           .devcontainer/assistants/node_modules/.bin/devcontainer exec --workspace-folder . claude --version
@@ -75,6 +76,7 @@ jobs:
       VIMAR_WEST: /home/runner/.cache/vomar/ncs-venv/bin/west
       VIMAR_BUILD_PYTHON: /home/runner/.cache/vomar/ncs-venv/bin/python
       ZEPHYR_SDK_INSTALL_DIR: /home/runner/.cache/vomar/zephyr-sdk-1.0.1
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -82,6 +84,16 @@ jobs:
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with: {python-version: '3.13.12'}
+      - name: Reserve disk capacity for all firmware profiles
+        if: runner.environment == 'github-hosted'
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /usr/local/.ghcup /opt/ghc
+          df -h "$GITHUB_WORKSPACE"
+          python - <<'PY'
+          import os,shutil
+          if shutil.disk_usage(os.environ['GITHUB_WORKSPACE']).free < 30 * 1024**3:
+              raise SystemExit('At least 30 GiB free is required before NCS setup')
+          PY
       - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gperf device-tree-compiler binutils-arm-none-eabi
       - run: python -m pip install --require-hashes -r requirements-dev.lock
       - run: python tools/dev/bootstrap.py firmware
@@ -103,8 +115,49 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
-      - run: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:assembleRelease :app:writeRuntimeInventory
-      - name: Collect actual JVM coverage
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r requirements-dev.lock
+      - run: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:lint :app:assembleRelease :app:writeRuntimeInventory
+      - name: Enable the disposable emulator's KVM access
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Exercise synthetic Android UI and collect device coverage
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          avd-name: vomar-ci
+          force-avd-creation: true
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          script: >-
+            apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict
+            :app:connectedDebugAndroidTest
+            -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true
+            -Pandroid.testInstrumentationRunnerArguments.class=org.openvimar.updater.InitialInstallUiTest,org.openvimar.updater.InitialInstallAndroidAdapterTest ||
+            { mkdir -p _test/android-ui-diagnostics;
+            adb -s emulator-5554 shell dumpsys window > _test/android-ui-diagnostics/window.txt;
+            adb -s emulator-5554 shell dumpsys power > _test/android-ui-diagnostics/power.txt;
+            adb -s emulator-5554 logcat -d -t 500 > _test/android-ui-diagnostics/logcat.txt;
+            adb -s emulator-5554 exec-out screencap -p > _test/android-ui-diagnostics/screen.png;
+            adb -s emulator-5554 pull /sdcard/Android/data/org.openvimar.updater/files/ui-failure _test/android-ui-diagnostics || true;
+            exit 1; };
+            apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict :app:jacocoDebugReport
+      - name: Retain synthetic Android test diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: android-test-diagnostics-${{ inputs.sha || github.sha }}
+          path: |
+            apps/android-updater/app/build/reports/androidTests
+            apps/android-updater/app/build/outputs/androidTest-results
+            _test/android-ui-diagnostics
+          if-no-files-found: ignore
+      - name: Collect actual JVM and synthetic device coverage
         run: |
           mkdir -p reports
           cp apps/android-updater/app/build/reports/dependencies/android-runtime.json reports/android-runtime.json
@@ -130,10 +183,11 @@ jobs:
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with: {python-version: '3.13.12'}
+      - name: Install Linux GUI runtime before tests
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-0 libdbus-1-3 libfontconfig1 fonts-dejavu-core libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
       - run: python -m pip install --require-hashes -r requirements-desktop.lock
       - run: python -m pip install --no-deps .
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
       - name: GUI and core tests
         env: {QT_QPA_PLATFORM: offscreen}
         run: python -m pip install --require-hashes -r requirements-dev.lock && python -m pytest apps/desktop-updater/tests

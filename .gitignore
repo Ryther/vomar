@@ -932,11 +932,6 @@
 !/.devcontainer/assistants/package-lock.json
 !/.devcontainer/devcontainer.json
 !/.devcontainer/Dockerfile
-!/.devcontainer/hardware/
-!/.devcontainer/hardware/devcontainer.json
-!/.devcontainer/research/
-!/.devcontainer/research/devcontainer.json
-!/.devcontainer/research/Dockerfile
 !/.agents/
 !/.agents/skills/
 !/.agents/skills/vomar-guide/
@@ -1153,3 +1148,13 @@
 **/__pycache__/
 **/node_modules/
 **/.gradle/
+
+# Reviewed Android progress and transport-policy regressions.
+!/apps/android-updater/app/src/test/kotlin/org/openvimar/updater/InstallProgressTest.kt
+!/apps/android-updater/app/src/androidTest/kotlin/org/openvimar/updater/CoverageInstrumentationTestRunner.kt
+!/apps/android-updater/app/src/test/kotlin/org/openvimar/updater/FirstInstallProgrammingContractTest.kt
+!/apps/android-updater/app/src/test/kotlin/org/openvimar/updater/DkUsbPresenceGuardTest.kt
+!/apps/android-updater/core/src/test/kotlin/org/openvimar/installer/
+!/apps/android-updater/core/src/test/kotlin/org/openvimar/installer/resume/
+!/apps/android-updater/core/src/test/kotlin/org/openvimar/installer/resume/ExplicitResumeContractTest.kt
+!/tools/android/generate_first_install_test_fixtures.py

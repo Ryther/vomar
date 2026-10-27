@@ -146,6 +146,16 @@ restoration is offered from a device with its retained matching original; it
 needs separate review and remains physically unqualified. Capturing/exporting
 an original does not prove installation, restoration or blackout recovery.
 
+Android 1.0.7 adds a second, teal overall bar below current-phase progress for
+installation and repair. Overall covers the active reviewed operation through
+final verification; backup and separately reviewed start have their own totals.
+Remaining time is an approximation from actual progress, shown only after
+sufficient measurements and recalculated for each phase. **Estimating remaining
+time…** is expected initially or with stale samples. Its optimized USB/SWD path
+retains explicit review, original/UID checks, HALT, ACL preparation and readback;
+host timings do not qualify a physical phone or DK. Keep USB and power connected
+during repair and let the owned operation end before upgrading the APK.
+
 ## Stop, resume and repair
 
 Stop requests cancellation and preserves session state. After interruption,

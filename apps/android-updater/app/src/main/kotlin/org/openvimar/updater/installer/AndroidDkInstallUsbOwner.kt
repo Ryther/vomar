@@ -34,8 +34,8 @@ internal class AndroidDkInstallUsbOwner private constructor(val token:DkUsbOpera
                 closer={if(closed.compareAndSet(false,true)){
                     try{if(claimed)connection.releaseInterface(port)}finally{connection.close();token.close()}
                 }}
-                fun transport(){token.checkCurrent();check(!closed.get()){ "USB connection already closed" }
-                    require(manager.deviceList.values.any{it.deviceName==device.deviceName&&it.deviceId==device.deviceId}){"USB generation disconnected; reconnect is prohibited"}}
+                val presence=DkUsbPresenceGuard{require(manager.deviceList.values.any{it.deviceName==device.deviceName&&it.deviceId==device.deviceId}){"USB generation disconnected; reconnect is prohibited"}}
+                fun transport(){token.checkCurrent();check(!closed.get()){ "USB connection already closed" };presence.check()}
                 if(cancelled())throw IOException("USB operation cancelled before claim")
                 claimed=connection.claimInterface(port,false);require(claimed){"J-Link interface is busy"}
                 val buffered=DkSwdBufferedChannel(object:DkBulkChannel {

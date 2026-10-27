@@ -187,3 +187,37 @@ Private originals survive app upgrades. Clearing app data or uninstalling the
 app deletes them: retain an exported copy. **First installation help** contains
 the explanation and diagnostic export. Software/fake-target checks do not qualify
 this physical restoration procedure.
+
+## Progress, remaining time and USB speed
+
+Android 1.0.7 shows the current phase above a second, teal overall progress bar.
+The overall bar covers the active reviewed installation or repair through its
+final verification. A two-pass backup and the separately reviewed start have
+their own overall totals. Waiting for a review is not a timed transfer.
+
+The overall value uses completed bytes/pages with relative phase weights; it
+stays increasing across phase boundaries and advances when verified work can be
+skipped. The remaining time is approximate, learned from observed progress and
+a monotonic clock. It displays **Estimating remaining time…** until there are
+sufficient samples, after a phase change or when progress samples are stale.
+It is not a deadline or evidence of hardware qualification.
+
+The programming path uses 1MHz SWD, bounded queued accesses and the same open
+USB handle. Each queued FLASH write is acknowledged and READY is checked before
+the next word; uncertain writes are never replayed automatically. Presence
+checks against Android's USB service are limited to one per 250ms, while owner,
+closed-handle and transfer-error checks remain per I/O. UID, halted CPU and
+watchdog checks surround bounded batches/pages. Original comparisons, ACL
+preparation, unchanged-UICR checks, durable intent and complete final readback
+remain required. A link/identity error prevents programming; no unlock fallback
+or automatic start is introduced.
+
+Repair reuses pages already proven correct within its issued frontier and any
+correct tail beyond the last required reconstruction. It preserves contiguous
+mutation intent for intervening unissued pages. A verified image uses the final
+complete comparison/hash pass without an extra redundant verification pass.
+
+Synthetic operation-count regressions measure the transport improvement;
+physical phone/DK throughput remains separately qualified. Keep USB and power
+connected during an active repair. An APK upgrade must wait until the owned
+operation has ended and its original/journal have been retained.

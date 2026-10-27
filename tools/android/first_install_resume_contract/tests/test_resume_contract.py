@@ -44,7 +44,7 @@ def test_initial_export_receipt_and_bit_identical_moved_backup_are_required(resu
 def test_resume_journal_is_hash_linked_atomic_and_retains_maximum_frontier_across_restarts(resume,tmp_path,scenario):
  subprocess.run([*resume,'journal',str(tmp_path),scenario],check=True)
 
-@pytest.mark.parametrize('scenario',['good','body-ready','body-short-frontier','body-short-frontier-lost','body-short-frontier-tail','committed','unissued-changed','uicr','uid','cancel-prior','cancel-after','generation','lost-commit','stale-head','stale-prepared','replay-prepared','wrong-generation','resume-again'])
+@pytest.mark.parametrize('scenario',['one-damaged-page','good','body-ready','body-short-frontier','body-short-frontier-lost','body-short-frontier-tail','committed','unissued-changed','uicr','uid','cancel-prior','cancel-after','generation','lost-commit','stale-head','stale-prepared','replay-prepared','wrong-generation','resume-again'])
 def test_explicit_resume_uses_protected_original_and_frontier_never_unknown_flash(resume,inputs,tmp_path,scenario):
  out=tmp_path/'out';out.mkdir()
  subprocess.run([*resume,'engine',*map(str,inputs),str(out),scenario],check=True)

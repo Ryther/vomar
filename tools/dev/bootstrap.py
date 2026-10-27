@@ -61,15 +61,20 @@ def install_guide(source, dest, *, symlink=True):
     digest=hashlib.sha256(source.read_bytes()).hexdigest()
     receipt=dest.with_suffix('.vomar-owned.json')
     if dest.is_symlink():
-        if dest.resolve()!=source: raise ValueError('User skill already exists')
-        return
+        if dest.resolve()==source: return
+        # Earlier bootstrap versions calculated links through a lexical home
+        # alias instead of its persistent parent. Repair only that exact,
+        # dangling legacy link; never replace an unrelated user-owned skill.
+        if dest.exists() or os.readlink(dest)!=os.path.relpath(source,dest.parent):
+            raise ValueError('User skill already exists')
+        dest.unlink()
     if dest.exists():
         old=json.loads(receipt.read_text()) if receipt.exists() else {}
         if hashlib.sha256(dest.read_bytes()).hexdigest()!=old.get('sha256'):
             raise ValueError('User-customized skill must not be overwritten')
     dest.parent.mkdir(parents=True,exist_ok=True)
     if symlink and not dest.exists():
-        try: dest.symlink_to(os.path.relpath(source,dest.parent));return
+        try: dest.symlink_to(os.path.relpath(source,dest.parent.resolve()));return
         except OSError: pass
     dest.write_bytes(source.read_bytes());receipt.write_text(json.dumps({'sha256':digest}))
 
@@ -148,6 +153,15 @@ def firmware(m):
     print(f'NCS graph ready at {ws}; set ZEPHYR_SDK_INSTALL_DIR={sdk}')
 
 
+def research():
+    if platform.system()!='Linux':
+        raise ValueError('Research tools use the Linux development container')
+    run('sudo','apt-get','update')
+    run('sudo','apt-get','install','-y','--no-install-recommends',
+        'gdb-multiarch','binwalk','wireshark-common')
+    print('Research tools installed in the existing container. Ghidra is installed separately; no evidence was imported.')
+
+
 def main():
     action=sys.argv[1] if len(sys.argv)>1 else 'help'
     if action=='image': image(sys.argv[2]);return
@@ -155,6 +169,7 @@ def main():
     if action=='workspace': workspace()
     elif action=='android': android(m)
     elif action=='firmware': firmware(m)
-    else: raise SystemExit('Usage: bootstrap.py workspace|android|firmware')
+    elif action=='research': research()
+    else: raise SystemExit('Usage: bootstrap.py workspace|android|firmware|research')
 
 if __name__=='__main__': main()
