@@ -6,7 +6,7 @@ import org.openvimar.installer.StrictJson
 object DistributionAssets {
     data class Asset(val role:String,val filename:String,val size:Int,val sha256:String)
     data class Selection(val tag:String,val firmware:Asset,val ota:Asset,val assets:List<Asset>)
-    private val required=setOf("firmware-common","zigbee-ota","android-apk","desktop-linux-x64","desktop-windows-x64","desktop-windows-setup","desktop-macos-x64","desktop-macos-arm64","zigbee2mqtt-converter","licenses","offline-guide")
+    private val required=setOf("firmware-common","zigbee-ota","android-apk","desktop-linux-x64","desktop-windows-x64","desktop-windows-setup","desktop-macos-arm64","zigbee2mqtt-converter","licenses","offline-guide")
     fun parse(raw:ByteArray,tag:String):Selection {
         require(raw.size in 1..65536)
         val m=StrictJson.parse(raw) as? Map<*,*> ?: error("Distribution object required")
@@ -17,7 +17,7 @@ object DistributionAssets {
         val semver=Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)")
         val components=m["components"] as? Map<*,*>;require(!components.isNullOrEmpty())
         require(components.all{(key,value)->key is String&&Regex("[a-z][a-z0-9-]*").matches(key)&&value is String&&semver.matches(value)})
-        val rows=m["artifacts"] as? List<*> ?: error("Distribution artifacts required");require(rows.size in 11..32)
+        val rows=m["artifacts"] as? List<*> ?: error("Distribution artifacts required");require(rows.size in required.size..32)
         val roles=mutableSetOf<String>();val names=mutableSetOf<String>();val assets=rows.map{entry->
             val a=entry as? Map<*,*> ?: error("Asset object required")
             require(a.keys.containsAll(setOf("role","filename","size","sha256","componentVersion"))&&(a.keys-setOf("role","filename","size","sha256","componentVersion")).all{it in setOf("platform","architecture","androidVersionCode")})

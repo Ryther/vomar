@@ -6,7 +6,6 @@ from .manifest import exact,digest
 PLATFORMS={
  'linux-x64':{'desktop-linux-x64'},
  'windows-x64':{'desktop-windows-x64','desktop-windows-setup'},
- 'macos-x64':{'desktop-macos-x64'},
  'macos-arm64':{'desktop-macos-arm64'},
 }
 NATIVE_CHECKS={'filesystemTransactions','bluetoothPermissionsAndUpdate','dkDriverInstallRepairStart','stopAndRestartRecovery'}

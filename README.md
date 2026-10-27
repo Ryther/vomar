@@ -38,7 +38,7 @@ Badges summarize their linked services and do not prove physical qualification.
   [first installation](docs/android-first-install.md) and
   [Bluetooth qualification trials](docs/android-bluetooth-trial.md).
 - [Desktop GUI and CLI](docs/desktop.md), sharing one engine. Native package
-  targets are Linux x64, Windows x64 and macOS Intel/arm64; platform-specific
+  targets are Linux x64, Windows x64 and macOS Apple Silicon (arm64); platform-specific
   BLE/USB behavior still needs its own acceptance evidence.
 - [Troubleshooting and interrupted work](docs/troubleshooting.md).
 - [Documentation home](docs/index.md) and
