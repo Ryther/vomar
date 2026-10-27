@@ -963,6 +963,8 @@
 !/tools/release/signers.py
 !/tools/release/signing-identities.json
 !/tools/release/tests/test_manifest.py
+!/tools/release/tests/test_assembly_admission.py
+!/tools/release/tests/test_sonar_settings.py
 !/tools/release/tests/test_desktop_native_versions.py
 !/VERSION
 !/.release-please-manifest.json

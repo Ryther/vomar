@@ -79,6 +79,16 @@ Restrict changes to workflow files and treat every pending signing/publication
 approval as a review of the exact workflow revision and candidate. A branch
 policy alone does not restrict an environment to one particular workflow file.
 
+## Configure automatic assembly
+
+Set repository variables `FIRMWARE_CANDIDATE_URL` and
+`FIRMWARE_CANDIDATE_SHA256` together when the exact signed candidate is ready.
+Without both variables, an automatic run after main validation records
+"not configured" and skips assembly. It produces no release assets. Setting
+only one variable is a configuration error, rather than a successful skip.
+Manual requests require complete valid inputs. Repository firmware defaults are reserved for automatic runs. Configuring a URL and hash does
+not waive signing continuity, physical qualification or publication checks.
+
 ## Provide project credentials
 
 These values are missing until a credential owner supplies them. GitHub returns
@@ -113,6 +123,13 @@ Configure public SonarQube Cloud project **`Ryther_vomar`**, organization
 instead of creating a duplicate. Disable automatic analysis when using CI scans,
 set an explicit quality gate and confirm the project's actual plan/analyzers
 support Kotlin, Python, JavaScript, firmware C and pull request analysis.
+The trusted main scan installs the protected `sonar-project.properties` in the
+candidate analysis root before using `projectBaseDir`. It replaces a candidate
+symlink rather than following it. An explicit relative `project.settings` path
+is resolved from the scanner launch directory, rather than the selected project
+root. Install the protected file at the actual root instead of relying on that
+path being rebased by `projectBaseDir`.
+
 Initialize and verify a real `main` baseline. Fork/Dependabot analysis uses a
 disposable Community instance without any reusable project credential; firmware
 C remains mandatory in CodeQL and in full protected main/release Sonar analysis.

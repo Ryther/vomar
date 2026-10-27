@@ -64,10 +64,16 @@ before publication. Existing identical uploads are retained; differing bytes or
 unreviewed extra assets fail. Upload completeness/readback precedes draft=false.
 A source fix creates a new reviewed candidate; never overwrite published bytes.
 
-Use the release workflow in dry-run mode before enabling publication. The workflow runs automatically after successful main validation, using the
-protected FIRMWARE_CANDIDATE_URL and SHA256 variables. Manual exact-candidate
-dry runs remain available. AUTO_PUBLISH_RELEASES enables the final publication
-step only after exact physical evidence and protected environments are configured.
+Use the release workflow in dry-run mode before enabling publication. After
+successful main validation, automatic assembly uses the repository variables
+`FIRMWARE_CANDIDATE_URL` and `FIRMWARE_CANDIDATE_SHA256`. When both are absent,
+the resolver records that assembly is not configured and downstream jobs skip;
+no assets are assembled or published. A partially configured pair, malformed
+values or an incomplete manual request fails with a named configuration error.
+Manual exact-candidate dry runs remain available. `AUTO_PUBLISH_RELEASES` enables
+the final publication step only after exact physical evidence and protected
+environments are configured. A successful unconfigured resolver is not a release
+or qualification result.
 
 ## Evidence and limits
 
