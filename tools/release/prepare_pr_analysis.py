@@ -8,6 +8,40 @@ REQUIRED = ('component-versions.json', 'python-coverage.xml', 'lcov.info',
             'core-jacoco.xml', 'app-jacoco.xml')
 
 
+def _python_sources(tree, candidate):
+    """Normalize Cobertura filenames to one checked candidate-relative root."""
+    package = Path('apps/desktop-updater/src/vomar_updater')
+    classes = tree.findall('.//class')
+    if not classes:
+        raise ValueError('Missing Python coverage sources')
+    for entry in classes:
+        name = entry.get('filename', '')
+        path = Path(name)
+        if not name or '..' in path.parts or '\\' in name:
+            raise ValueError('Unexpected Python coverage source: '+name)
+        if path.is_absolute():
+            if path.is_relative_to(candidate):
+                path = path.relative_to(candidate)
+            else:
+                # Absolute paths from the coverage producer's checkout are data.
+                marker = '/'+package.as_posix()+'/'
+                if marker not in name:
+                    raise ValueError('Unexpected Python coverage source: '+name)
+                path = package/name.split(marker, 1)[1]
+        choices = [candidate/path, candidate/package.parent/path, candidate/package/path]
+        matches = [choice for choice in choices
+                   if choice.resolve().is_relative_to(candidate) and choice.is_file()]
+        if len(matches) != 1:
+            raise ValueError('Unresolvable or ambiguous Python coverage source: '+name)
+        entry.set('filename', matches[0].relative_to(candidate).as_posix())
+    root = tree.getroot()
+    for old in root.findall('sources'):
+        root.remove(old)
+    sources = ET.Element('sources')
+    ET.SubElement(sources, 'source').text = str(candidate)
+    root.insert(0, sources)
+
+
 def normalize_python_coverage(report, repository):
     """Encode measured repository paths in the credential-free producer job.
 
@@ -50,9 +84,7 @@ def prepare(reports, candidate, sha):
         if tree.getroot().tag != tag or not list(tree.getroot()):
             raise ValueError('Empty or invalid PR coverage report: '+name)
         if name == 'python-coverage.xml':
-            for source in tree.findall('./sources/source'):
-                # Coverage's --source=vomar_updater records the package root.
-                source.text = str(candidate/'apps/desktop-updater/src/vomar_updater')
+            _python_sources(tree, candidate)
             tree.write(reports/name, encoding='utf-8', xml_declaration=True)
     lcov = reports/'lcov.info'
     lines = lcov.read_text().splitlines()

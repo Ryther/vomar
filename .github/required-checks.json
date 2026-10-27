@@ -13,7 +13,7 @@
     "CodeQL required",
     "Converter required",
     "Devcontainer required",
-    "Sonar required"
+    "sonar-pr / Sonar required"
   ],
   "release": [
     "Conventional Commits",

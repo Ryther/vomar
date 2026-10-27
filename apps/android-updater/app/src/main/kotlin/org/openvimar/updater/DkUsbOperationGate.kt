@@ -18,3 +18,16 @@ internal object DkUsbOperationGate {
         override fun close() {synchronized(DkUsbOperationGate){if(current===this)current=null}}
     }
 }
+
+/** Presence inspection is bounded on an already-open, non-reconnectable USB
+ * handle. Token/closed checks and bulk-transfer failures remain per I/O. */
+internal class DkUsbPresenceGuard(private val now:()->Long=System::nanoTime,private val verify:()->Unit){
+    private var checkedAt:Long?=null;private var failed=false
+    fun check(){
+        check(!failed){"USB presence was lost; reconnect is prohibited"}
+        val time=now();val previous=checkedAt
+        if(previous==null||time-previous>=250_000_000L||time-previous<0){
+            try{verify();checkedAt=time}catch(error:Exception){failed=true;throw error}
+        }
+    }
+}

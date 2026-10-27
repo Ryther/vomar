@@ -103,13 +103,14 @@ def verify_candidate(manifest,directory,qualification_path,public_key,android_to
 
 
 class GitHub:
-    def __init__(self,repo,token):
+    def __init__(self,repo,token,*,checks_token=None):
         if not re.fullmatch('[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+',repo):raise ValueError('Invalid GitHub repository')
-        self.repo=repo;self.token=token
+        self.repo=repo;self.token=token;self.checks_token=checks_token
     def request(self,path,method='GET',body=None,*,raw=False,upload=False):
         host='uploads.github.com' if upload else 'api.github.com'
         url='https://'+host+'/repos/'+self.repo+'/'+path
-        headers={'Accept':'application/octet-stream' if raw else 'application/vnd.github+json','Authorization':'Bearer '+self.token,'X-GitHub-Api-Version':'2022-11-28','User-Agent':'Vomar-release'}
+        headers={'Accept':'application/octet-stream' if raw else 'application/vnd.github+json','X-GitHub-Api-Version':'2022-11-28','User-Agent':'Vomar-release'}
+        if self.token:headers['Authorization']='Bearer '+self.token
         if body is not None:
             headers['Content-Type']='application/octet-stream' if upload else 'application/json'
             if not upload:body=json.dumps(body).encode()
@@ -128,7 +129,7 @@ class GitHub:
     def assets(self,release):return self.request(f'releases/{release}/assets?per_page=100')
     def download(self,asset):return self.request(f'releases/assets/{asset["id"]}',raw=True)
     def upload(self,release,name,raw):return self.request(f'releases/{release}/assets?name='+urllib.parse.quote(name,safe=''),'POST',raw,upload=True)
-    def checks(self,sha):return self.request(f'commits/{sha}/check-runs?per_page=100&filter=latest')
+    def checks(self,sha):return GitHub(self.repo,self.checks_token).request(f'commits/{sha}/check-runs?per_page=100&filter=latest')
     def tag_sha(self,tag):
         value=self.request('git/ref/tags/'+urllib.parse.quote(tag,safe=''))['object']
         if value['type']=='tag':value=self.request('git/tags/'+value['sha'])['object']
@@ -167,7 +168,7 @@ def main():
     if not a.publish:print('Dry run passed locally; no GitHub state changed. Exact remote checks and security are rechecked during publication.');return
     token=os.environ.get('GH_TOKEN')
     if not token:raise ValueError('Protected publication credential required')
-    remote=GitHub(a.repo,token);verify_checks(remote.checks(manifest['commit']),manifest['commit'])
+    remote=GitHub(a.repo,token,checks_token=os.environ.get('GH_CHECKS_TOKEN'));verify_checks(remote.checks(manifest['commit']),manifest['commit'])
     sonar_token=os.environ.get('SONAR_TOKEN')
     if not sonar_token:raise ValueError('Exact Sonar security verification credential required')
     def fetch(path,params):

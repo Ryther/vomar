@@ -14,18 +14,19 @@ def check(socket_path='/var/run/docker-host.sock', *, runner=subprocess.run, loc
         mounted=False
     if not mounted:
         raise RuntimeError('Host Docker socket mount is missing or is a regular file. Recreate the devcontainer to apply its configured bind mount.')
-    for tool in ('docker','gh'):
+    for tool in ('docker','gh','ssh'):
         if locate(tool) is None:
             raise RuntimeError(tool+' executable is missing. Rebuild the configured public devcontainer.')
     result={}
-    for label,args in [('Docker daemon',['docker','info','--format','{{.ServerVersion}}']),('GitHub CLI',['gh','--version'])]:
+    for label,key,args in [('Docker daemon','dockerServer',['docker','info','--format','{{.ServerVersion}}']),('GitHub CLI','githubCli',['gh','--version']),('SSH client','sshClient',['ssh','-V'])]:
         try:
             process=runner(args,capture_output=True,text=True,timeout=15,check=False)
         except (OSError,subprocess.TimeoutExpired) as error:
             raise RuntimeError(label+' check could not complete. Inspect the mounted socket and CLI installation.') from error
-        if process.returncode!=0 or not process.stdout.strip():
+        output=process.stdout.strip() or (process.stderr.strip() if key=='sshClient' else '')
+        if process.returncode!=0 or not output:
             raise RuntimeError(label+' check failed. Inspect the Docker context/socket or rebuild the CLI installation.')
-        result['dockerServer' if label=='Docker daemon' else 'githubCli']=process.stdout.splitlines()[0].strip()
+        result[key]=output.splitlines()[0]
     return result
 
 

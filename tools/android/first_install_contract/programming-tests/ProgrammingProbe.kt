@@ -12,9 +12,60 @@ import java.security.spec.X509EncodedKeySpec
 
 fun main(args:Array<String>) {
     when(args[0]) {
-        "prepare-acl-lower","prepare-acl-upper","prepare-no-acl","prepare-acl-empty","prepare-acl-capture","prepare-acl-watchdog","prepare-acl-persistent","prepare-acl-uncaught","prepare-acl-cancel","prepare-acl-empty-vectors","prepare-acl-read-denied","prepare-acl-wrong-pc","prepare-acl-wrong-msp","prepare-acl-even-vector","prepare-acl-fault" -> programmingPreparationProbe(args[0])
+        "prepare-acl-lower","prepare-acl-upper","prepare-no-acl","prepare-acl-empty","prepare-acl-capture","prepare-acl-watchdog","prepare-acl-persistent","prepare-acl-uncaught","prepare-acl-cancel","prepare-acl-empty-vectors","prepare-acl-read-denied","prepare-acl-wrong-pc","prepare-acl-wrong-msp","prepare-acl-even-vector","prepare-acl-fault" -> {
+            val candidate=if(args[0]=="prepare-acl-watchdog") {
+                val key=KeyFactory.getInstance("EC").generatePublic(X509EncodedKeySpec(Files.readAllBytes(Path.of(args[2]))))
+                CandidateRelease.inspect(Files.readAllBytes(Path.of(args[1])),key,"9.0.0")
+            } else null
+            programmingPreparationProbe(args[0],candidate)
+        }
         "restore-mode1","restore-paused-watchdog","restore-running-watchdog","restore-bad-uicr","restore-wrong-uid","restore-acl","restore-acl-watchdog" -> originalRestoreLeaseProbe(args[0])
         "resume-mode1","resume-mode2","resume-cancel","resume-bad-uicr","resume-mode-ack-loss","resume-unconfirmed" -> resumeLeaseProbe(args)
+        "lease-erase-ready-deadline" -> {
+            val target=ProgrammingWireTarget();val token=checkNotNull(DkUsbOperationGate.acquire("synthetic erase deadline"));var tick=0L
+            val lease=NrfInitialInstallLease(JlinkInstallWire(target),token,now={tick.also{tick+=250_000}})
+            try{
+                val id=TargetIdentity(0x12345678,0xabcdef01,0x41414430);lease.open(id)
+                val hash="00".repeat(32);val binding=InstallBinding(id,hash,hash,hash,hash,hash,hash,hash)
+                val port=lease.authorizer(binding).acquire(binding)
+                target.onMemoryWrite={at,_->if(at==0x4001e508L)target.readyAfterPolls=200}
+                port.erasePage(8192,token.generation)
+                check(target.readyAfterPolls<=0&&target.halted)
+                port.close()
+            }finally{lease.finish();token.close()}
+        }
+        "wire-flash-wait","wire-flash-fault","wire-flash-parity","wire-flash-ready" -> {
+            val target=ProgrammingWireTarget();val token=checkNotNull(DkUsbOperationGate.acquire("synthetic word fault"))
+            val lease=NrfInitialInstallLease(JlinkInstallWire(target),token)
+            try{
+                val id=TargetIdentity(0x12345678,0xabcdef01,0x41414430);lease.open(id)
+                val hash="00".repeat(32);val binding=InstallBinding(id,hash,hash,hash,hash,hash,hash,hash)
+                val port=lease.authorizer(binding).acquire(binding);port.erasePage(8192,token.generation)
+                if(args[0] in setOf("wire-flash-wait","wire-flash-fault"))target.inject(true,false,12,if(args[0].endsWith("wait"))2 else 4,skip=1)
+                target.onMemoryWrite={at,_->if(at==8192L){if(args[0].endsWith("parity"))target.corruptReadParityCount=1;if(args[0].endsWith("ready"))target.neverReady=true}}
+                check(runCatching{port.program(8192,ByteArray(256){1},token.generation)}.isFailure)
+                val words=target.memoryWrites.filter{it.first in 8192L..8447L}
+                check(words.size==if(args[0].endsWith("wait")||args[0].endsWith("fault"))0 else 1){"Next word was issued after uncertainty: $words"}
+                port.close()
+            }finally{runCatching{lease.finish()};token.close()}
+        }
+        "wire-performance" -> {
+            val target=ProgrammingWireTarget();target.logLimit=0
+            var writes=0;var reads=0
+            val channel=object:InstallBulkChannel{override fun write(bytes:ByteArray):Int{writes++;return target.write(bytes)};override fun read(maxBytes:Int):ByteArray{reads++;return target.read(maxBytes)}}
+            val token=checkNotNull(DkUsbOperationGate.acquire("synthetic performance"));val wire=JlinkInstallWire(channel);val lease=NrfInitialInstallLease(wire,token)
+            try{
+                val targetId=TargetIdentity(0x12345678,0xabcdef01,0x41414430);lease.open(targetId)
+                val hash="00".repeat(32);val binding=InstallBinding(targetId,hash,hash,hash,hash,hash,hash,hash)
+                val port=lease.authorizer(binding).acquire(binding);port.erasePage(8192,token.generation)
+                writes=0;reads=0;port.program(8192,ByteArray(256){1},token.generation)
+                check(writes<=100&&reads<=100){"256-byte program uses $writes commands and $reads replies; budget100"}
+                check(target.flash.copyOfRange(8192,8448).all{it==1.toByte()})
+                writes=0;reads=0;port.readFlash(8192,4096)
+                check(writes<=65&&reads<=65){"4KiB read uses $writes commands and $reads replies; budget65"}
+                port.close()
+            }finally{lease.finish();token.close()}
+        }
         "wire-cache" -> {
             val target=ProgrammingWireTarget();val wire=JlinkInstallWire(target);wire.initialize()
             val csw=target.events.count{it.startsWith("write:AP:0:")};val select=target.events.count{it.startsWith("write:DP:8:")}
@@ -316,8 +367,8 @@ fun main(args:Array<String>) {
         "wire-wait" -> {
             val target=ProgrammingWireTarget();val wire=JlinkInstallWire(target);wire.initialize()
             target.inject(true,false,12,2)
-            wire.writeDebugControl(0xa05f0003L)
-            check(target.dummyWrites==1&&target.memoryWrites.count{it.first==0xe000edf0L}==1)
+            check(runCatching{wire.writeDebugControl(0xa05f0003L)}.isFailure)
+            check(target.dummyWrites==1&&target.memoryWrites.none{it.first==0xe000edf0L}) // No replay of a queued mutation.
             check(target.apModes.all{it})
             val before=target.memoryWrites.size;target.inject(true,false,12,4)
             check(runCatching{wire.writeDebugControl(0xa05f0003L)}.isFailure)

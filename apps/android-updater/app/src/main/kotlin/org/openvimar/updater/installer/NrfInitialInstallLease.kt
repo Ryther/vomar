@@ -125,10 +125,10 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
     private fun transportGuard(){check(opened&&!finished);stopped()}
     private fun readRegion(at:Long,size:Int,onBytes:(Int)->Unit={}):ByteArray {
         require(size>0&&size%4==0);val out=ByteArray(size);var offset=0
-        while(offset<size){guard();val n=minOf(512,size-offset,(1024-(at+offset)%1024).toInt());val bytes=wire.readWords(at+offset,n)
+        while(offset<size){if(offset%4096==0)guard();val n=minOf(512,size-offset,(1024-(at+offset)%1024).toInt());val bytes=wire.readWords(at+offset,n)
             val first=wire.readWords(at+offset,4);val last=if(n==4)first else wire.readWords(at+offset+n-4,4)
             require(first.contentEquals(bytes.copyOfRange(0,4))&&last.contentEquals(bytes.copyOfRange(n-4,n))){"Independent acquisition sentinel mismatch"}
-            guard();bytes.copyInto(out,offset);offset+=n;onBytes(offset)}
+            bytes.copyInto(out,offset);offset+=n;if(offset%4096==0||offset==size)guard();onBytes(offset)}
         return out
     }
     @Synchronized fun currentIdentity():TargetIdentity {guard();return identity().also{require(it==expected)}}
@@ -168,7 +168,7 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
                             // operation. In particular the commit word gets no
                             // early all-FF pulse before its final four bytes.
                             if(word.all{it==0xff.toByte()})continue
-                            wire.programFlashWords(address+i,word);ready()
+                            if(!wire.programFlashWordAndReady(address+i,word))ready()
                         }
                         active();wire.setNvmcMode(0);ready();require(readRegion(address.toLong(),frozen.size).contentEquals(frozen)){"Program batch readback failed"}
                     }
@@ -177,7 +177,13 @@ internal class NrfInitialInstallLease(private val wire:JlinkInstallWire,
             }
         }
     }
-    private fun ready(){val start=now();repeat(128){transportGuard();if(word(READY)==1L)return;if(now()-start>=500_000_000)throw IOException("NVMC READY timed out; CPU remains halted")};throw IOException("NVMC READY polling limit")}
+    private fun ready(){
+        // Faster USB/SWD must not shorten the NVMC erase allowance. Bound
+        // elapsed time, not a poll count that depended on slow round trips.
+        val start=now()
+        while(true){transportGuard();if(word(READY)==1L)return
+            if(now()-start>=500_000_000)throw IOException("NVMC READY timed out; CPU remains halted")}
+    }
     private fun flashWriteProtections():List<Int> = (0 until 8).filter{index->
         val fields=wire.readWords(0x4001e800L+index*16,12)
         val address=number(fields);val size=number(fields,4);val permission=number(fields,8)

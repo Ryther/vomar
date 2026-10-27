@@ -78,17 +78,20 @@ class ExplicitResumeEngine {
             fun page(at:Int):ByteArray{active();val bytes=s.readFlash(at,4096).copyOf();require(bytes.size==4096);active();return bytes}
             phase=InstallPhase.ORIGINAL_VERIFY;intent(ResumePhase.VALIDATING);protected()
             require(s.readFicr().contentEquals(material.original.ficr())){"FICR differs from protected original"};active()
-            val old=material.original.flash();var bodyMatches=true;var finalMatches=true
+            val old=material.original.flash();var bodyMatches=true;var finalMatches=true;val correctPages=BooleanArray(AnchorV1.FLASH/4096)
             for(at in 0 until AnchorV1.FLASH step 4096){
                 val bytes=page(at)
                 if(at>frontier)require(bytes.contentEquals(old.copyOfRange(at,at+4096))){"Unissued FLASH page differs from the protected original; automatic repair denied"}
-                bodyMatches=bodyMatches&&bytes.contentEquals(plan.page(at,false))
+                correctPages[at/4096]=bytes.contentEquals(plan.page(at,false))
+                bodyMatches=bodyMatches&&correctPages[at/4096]
                 finalMatches=finalMatches&&bytes.contentEquals(plan.page(at,true))
                 onProgress("Checking repair",at+4096,AnchorV1.FLASH)
             }
             protected();mode=if(finalMatches)ResumeMode.VERIFY_ONLY else if(bodyMatches)ResumeMode.COMMIT_ONLY else ResumeMode.REBUILD
             if(mode==ResumeMode.REBUILD){
+                val lastChangedPage=correctPages.indexOfLast{!it}*4096
                 for(at in 0 until AnchorV1.FLASH step 4096){
+                    if(correctPages[at/4096]&&(at<=frontier||at>lastChangedPage)){active();onProgress("Repairing firmware",at+4096,AnchorV1.FLASH);continue}
                     protected();val wanted=plan.page(at,false);phase=InstallPhase.PAGE_ERASE_INTENT;address=at;mutated=true
                     intent(ResumePhase.ERASE_INTENT,at,maxOf(frontier,at));active();s.erasePage(at,generation)
                     for(offset in 0 until 4096 step 256){val batch=wanted.copyOfRange(offset,offset+256);if(batch.all{it==0xff.toByte()})continue
@@ -105,7 +108,9 @@ class ExplicitResumeEngine {
                 intent(ResumePhase.COMMIT_INTENT,0xb0fc,frontier,true);active()
                 val word=ByteArray(4);putWord(word,0,AnchorV1.COMMIT);s.program(0xb0fc,word,generation)
             }else {
-                verify(true,binding.installedSha256,"Checking installed firmware");protected()
+                // Initial complete comparison already established the exact image.
+                // The final pass below still verifies every byte and its hash.
+                protected()
                 intent(ResumePhase.COMPLETE_IMAGE_VERIFIED,committed=true)
             }
             protected();phase=InstallPhase.FINAL_VERIFY;address=null;intent(ResumePhase.FINAL_VERIFY)

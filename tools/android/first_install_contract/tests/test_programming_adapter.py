@@ -29,7 +29,7 @@ def test_process_wide_gate_keeps_one_owner_until_explicit_release_and_rejects_st
     subprocess.run([*programming,'gate'],check=True)
 
 
-@pytest.mark.parametrize('scenario',['wire-policy','wire-wait','wire-posted-read','wire-core-registers','wire-cache'])
+@pytest.mark.parametrize('scenario',['wire-policy','wire-wait','wire-posted-read','wire-core-registers','wire-cache','wire-performance','wire-flash-wait','wire-flash-fault','wire-flash-parity','wire-flash-ready','lease-erase-ready-deadline'])
 def test_real_jlink_programming_wire_obeys_independent_per_clock_target(programming,scenario):
     subprocess.run([*programming,scenario],check=True)
 
@@ -99,5 +99,11 @@ def test_original_restore_quiescence_is_bound_to_protected_backup_and_never_rese
 
 
 @pytest.mark.parametrize('scenario',['prepare-acl-lower','prepare-acl-upper','prepare-no-acl','prepare-acl-empty','prepare-acl-capture','prepare-acl-watchdog','prepare-acl-persistent','prepare-acl-uncaught','prepare-acl-cancel','prepare-acl-empty-vectors','prepare-acl-read-denied','prepare-acl-wrong-pc','prepare-acl-wrong-msp','prepare-acl-even-vector','prepare-acl-fault'])
-def test_programming_prepares_volatile_flash_state_only_after_mutation_request(programming,scenario):
-    subprocess.run([*programming,scenario],check=True)
+def test_programming_prepares_volatile_flash_state_only_after_mutation_request(programming,tmp_path,scenario):
+    args=[]
+    if scenario=='prepare-acl-watchdog':
+        raw,key,_,_=common_fixture(candidate=True,watchdog_handoff='paused-reset-before-main-v1')
+        source=tmp_path/'candidate.zip';source.write_bytes(raw)
+        public=tmp_path/'public.der';public.write_bytes(key)
+        args=[str(source),str(public)]
+    subprocess.run([*programming,scenario,*args],check=True)
