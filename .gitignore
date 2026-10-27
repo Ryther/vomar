@@ -1232,3 +1232,8 @@
 !/tools/release/branding.py
 !/tools/release/tests/test_branding.py
 !/apps/android-updater/app/src/androidTest/kotlin/org/openvimar/updater/MqttCleartextPolicyTest.kt
+
+# Explicit maintainer review of exact Sonar findings.
+!/tools/release/sonar_review.py
+!/tools/release/tests/test_sonar_review.py
+!/.github/workflows/sonar-review.yml
