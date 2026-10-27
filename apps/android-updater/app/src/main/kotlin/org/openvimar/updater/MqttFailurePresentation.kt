@@ -25,6 +25,7 @@ internal fun presentMqttFailure(error:Throwable):MqttFailurePresentation {
         val cause=current ?: return failurePresentation(fallback)
         if(!seen.add(cause))return failurePresentation(fallback)
         val kind=when(cause) {
+            is NetworkLostException -> MqttFailureKind.UNREACHABLE
             is UnknownHostException -> MqttFailureKind.DNS
             is SocketTimeoutException,is TimeoutException -> MqttFailureKind.TIMEOUT
             is SSLException,is CertificateException,is CertPathValidatorException -> MqttFailureKind.TLS
@@ -36,6 +37,10 @@ internal fun presentMqttFailure(error:Throwable):MqttFailurePresentation {
                 MqttException.REASON_CODE_SSL_CONFIG_ERROR.toInt(),MqttException.REASON_CODE_SOCKET_FACTORY_MISMATCH.toInt() -> MqttFailureKind.TLS
                 MqttException.REASON_CODE_BROKER_UNAVAILABLE.toInt(),MqttException.REASON_CODE_SERVER_CONNECT_ERROR.toInt() -> {
                     // These generic Paho codes can wrap a more useful DNS or TLS cause.
+                    fallback=MqttFailureKind.UNREACHABLE
+                    null
+                }
+                MqttException.REASON_CODE_CONNECTION_LOST.toInt(),MqttException.REASON_CODE_CLIENT_NOT_CONNECTED.toInt() -> {
                     fallback=MqttFailureKind.UNREACHABLE
                     null
                 }

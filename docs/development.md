@@ -6,7 +6,7 @@ research work use the same container. Install additional tools there as needed;
 there is no hardware/research profile to switch to.
 
 The Ubuntu image pins Python 3.13.12, Node 24 and assistant packages; npm verifies
-package integrity. Java 21 runs Kotlin; Java 17 remains the target. Git and the
+package integrity. Java 21 runs Gradle 9.6.0, AGP 9.4.1 and Kotlin 2.4.21; Java 17 remains the bytecode target. Git and the
 OpenSSH client, Docker CLI/Buildx, GitHub CLI, Codex, OpenCode, Claude and the
 Linux GUI runtime are available. Startup checks Docker, gh and `ssh -V` without
 logging in, contacting an assistant or opening hardware.

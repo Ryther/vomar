@@ -22,20 +22,34 @@ internal suspend fun finishFailedMqttConnection(error:Exception,disconnect:suspe
 
 internal class SavedConnectionReconnectException(cause:Throwable):Exception("Changes saved; reconnect failed",cause)
 
-/** Optional process-local connection. Opening the app never connects/publishes. */
-internal class AndroidNetworkOwner private constructor(context:Context) {
+/** Restore only the explicitly activated broker; firmware operations retain their own admission. */
+internal class AndroidNetworkOwner(
+    context:Context,
+    private val scope:CoroutineScope=CoroutineScope(SupervisorJob()+Dispatchers.IO),
+    private val connection:()->MqttConnection={PahoMqttConnection()},
+    private val connectTimeoutMs:Long=30000
+) {
     private val application=context.applicationContext
-    private val scope=CoroutineScope(SupervisorJob()+Dispatchers.IO)
     private val settings=BrokerProfileStore(application)
     private val secrets=BrokerSecretStore(application)
     private val lifecycle=Mutex()
+    private val changes=Mutex()
     private val mutable=MutableStateFlow(NetworkBackendState())
     val state:StateFlow<NetworkBackendState> = mutable.asStateFlow()
     @Volatile private var active:ZigbeeBridge?=null
     private var forwarding:Job?=null
-    @Volatile var activeProfileId:String?=null; private set
+    private var lastFailure:Exception?=null
+    @Volatile var activeProfileId:String?=runCatching { settings.activatedId() }.getOrNull(); private set
+    private val reconnect=MqttReconnectLoop(scope,state,{
+        lifecycle.withLock {
+            val saved=requireNotNull(activeProfileId?.let(::profile)) { "Connection is no longer saved" }
+            disconnectLocked()
+            connectLocked(saved)
+        }
+    },{ delayMs->mutable.update { it.copy(reconnecting=true,status="Reconnecting in ${delayMs/1000}s") } })
     private val fleetExecutor=ZigbeeFleetExecutor(::bridge,{ ref -> AndroidFleetReleases(application).load(ref) })
     val executor=FleetJobExecutor { context,emit -> lifecycle.withLock { fleetExecutor.execute(context,emit) } }
+    init { require(connectTimeoutMs>0);if(activeProfileId!=null)reconnect.start(connectImmediately=true) }
     fun loadProfiles():List<BrokerProfile> = settings.loadAll()
     fun loadProfile():BrokerProfile?=loadProfiles().firstOrNull { it.id==activeProfileId } ?: settings.load()
     fun profile(id:String):BrokerProfile?=loadProfiles().firstOrNull { it.id==id }
@@ -43,7 +57,18 @@ internal class AndroidNetworkOwner private constructor(context:Context) {
     fun credentialsAvailable(profile:BrokerProfile):Boolean=try{secrets.load(profile).use{it!=null}}catch(_:Exception){false}
     fun connectionInUse(profile:BrokerProfile?):Boolean=connectionHasPendingUpdates(profile,AndroidFleetOwner.get(application).queue.groups.value)
     private fun ensureIdle(profile:BrokerProfile?) { check(!connectionInUse(profile)) { "Wait for the current update to finish" } }
-    suspend fun saveProfile(profile:BrokerProfile,credentials:BrokerCredentials?=null,clearCredentials:Boolean=false,reconnect:Boolean=false,disconnectAfterSave:Boolean=false)=lifecycle.withLock {
+    private suspend fun <T> changeConnection(work:suspend ()->T):T=changes.withLock {
+        try {
+            // A stalled connect/subscription holds lifecycle; cancel it before waiting for that lock.
+            reconnect.stopAndJoin()
+            lifecycle.withLock { work() }
+        } finally {
+            if(activeProfileId!=null)reconnect.start(
+                connectImmediately=!state.value.connected && !state.value.connectionError,
+                initialFailure=lastFailure)
+        }
+    }
+    suspend fun saveProfile(profile:BrokerProfile,credentials:BrokerCredentials?=null,clearCredentials:Boolean=false,reconnect:Boolean=false,disconnectAfterSave:Boolean=false)=changeConnection {
         saveLocked(profile,credentials,clearCredentials,reconnect,disconnectAfterSave)
     }
     private suspend fun saveLocked(profile:BrokerProfile,credentials:BrokerCredentials?,clearCredentials:Boolean,reconnect:Boolean,disconnectAfterSave:Boolean=false) {
@@ -53,15 +78,15 @@ internal class AndroidNetworkOwner private constructor(context:Context) {
         val endpointChanged=previous!=null && previous.validated().serverUri!=canonical.serverUri
         require(!endpointChanged || credentials!=null || clearCredentials) { "Enter credentials for the new broker, or choose Use no credentials" }
         if(changed || credentials!=null || clearCredentials)ensureIdle(previous)
-        val isActive=activeProfileId==canonical.id && active!=null
+        val isActive=activeProfileId==canonical.id
         check(!isActive || !changed && credentials==null && !clearCredentials || reconnect || disconnectAfterSave) { "Save and reconnect to apply these changes" }
         // Encrypt before the single metadata+secret commit. Failed encryption cannot mutate the old pair.
         val encrypted=credentials?.let { secrets.encrypt(canonical,it) }
         settings.save(canonical,encrypted,credentials!=null || clearCredentials)
-        if(isActive && disconnectAfterSave)disconnectLocked()
-        else if(isActive && reconnect){try{disconnectLocked();connectLocked(canonical)}catch(cancelled:CancellationException){throw cancelled}catch(e:Exception){throw SavedConnectionReconnectException(e)}}
+        if(isActive && disconnectAfterSave)deactivateLocked()
+        else if(isActive && reconnect){try{activateLocked(canonical)}catch(cancelled:CancellationException){throw cancelled}catch(e:Exception){throw SavedConnectionReconnectException(e)}}
     }
-    suspend fun editCredentials(id:String,changeUsername:Boolean,username:String?,newPassword:CharArray?,clear:Boolean,reconnect:Boolean)=lifecycle.withLock {
+    suspend fun editCredentials(id:String,changeUsername:Boolean,username:String?,newPassword:CharArray?,clear:Boolean,reconnect:Boolean)=changeConnection {
         val profile=requireNotNull(profile(id)) { "Connection is no longer saved" }
         if(clear)saveLocked(profile,null,true,reconnect)
         else {
@@ -71,30 +96,55 @@ internal class AndroidNetworkOwner private constructor(context:Context) {
             }
         }
     }
-    suspend fun removeProfile(id:String)=lifecycle.withLock {
-        val profile=profile(id) ?: return@withLock;ensureIdle(profile)
+    suspend fun removeProfile(id:String)=changeConnection {
+        val profile=profile(id) ?: return@changeConnection;ensureIdle(profile)
         settings.remove(id)
-        if(activeProfileId==id)disconnectLocked()
+        if(activeProfileId==id)deactivateLocked()
     }
-    suspend fun clearCredentials() { loadProfile()?.let { editCredentials(it.id,false,null,null,true,state.value.connected) } }
-    suspend fun connect(profile:BrokerProfile=requireNotNull(loadProfile()) { "Configure a broker first" })=lifecycle.withLock {
-        ensureIdle(loadProfiles().firstOrNull { it.id==activeProfileId });val saved=requireNotNull(this.profile(profile.id)) { "Connection is no longer saved" };require(saved==profile.validated()) { "Connection settings changed; select it again" };disconnectLocked();connectLocked(saved)
+    suspend fun clearCredentials() { loadProfile()?.let { editCredentials(it.id,false,null,null,true,activeProfileId==it.id) } }
+    suspend fun connect(profile:BrokerProfile=requireNotNull(loadProfile()) { "Configure a broker first" })=changeConnection {
+        ensureIdle(loadProfiles().firstOrNull { it.id==activeProfileId });val saved=requireNotNull(this.profile(profile.id)) { "Connection is no longer saved" };require(saved==profile.validated()) { "Connection settings changed; select it again" };activateLocked(saved)
+    }
+    private suspend fun activateLocked(profile:BrokerProfile) {
+        settings.activate(profile.id)
+        activeProfileId=profile.id
+        reconnect.stop()
+        try { disconnectLocked();connectLocked(profile) }
+        catch(cancelled:CancellationException) {
+            withContext(NonCancellable) { deactivateLocked() }
+            throw cancelled
+        }
     }
     private suspend fun connectLocked(profile:BrokerProfile) {
         activeProfileId=profile.id
-        mutable.value=NetworkBackendState(status="Connecting")
-        val candidate=ZigbeeBridge(PahoMqttConnection(),scope)
+        mutable.value=NetworkBackendState(status="Connecting",reconnecting=true)
+        val candidate=ZigbeeBridge(connection(),scope)
         try {
-            secrets.load(profile).use { credentials -> candidate.connect(profile,credentials) }
+            val connected=withTimeoutOrNull(connectTimeoutMs) {
+                secrets.load(profile).use { credentials -> candidate.connect(profile,credentials) }
+                true
+            }
+            if(connected!=true)throw java.net.SocketTimeoutException()
+            lastFailure=null
             active=candidate
             forwarding=scope.launch(start=CoroutineStart.UNDISPATCHED) { candidate.state.collect { mutable.value=it } }
         } catch(e:Exception) {
+            if(e !is CancellationException)lastFailure=e
             finishFailedMqttConnection(e,{ candidate.disconnect() },{ mutable.value=it })
         }
     }
-    suspend fun disconnect()=lifecycle.withLock { ensureIdle(loadProfiles().firstOrNull { it.id==activeProfileId });disconnectLocked() }
+    suspend fun disconnect()=changeConnection { ensureIdle(loadProfiles().firstOrNull { it.id==activeProfileId });deactivateLocked() }
+    private suspend fun deactivateLocked() {
+        settings.activate(null)
+        activeProfileId=null
+        lastFailure=null
+        reconnect.stop()
+        disconnectLocked()
+    }
     private suspend fun disconnectLocked() {
-        active?.disconnect();active=null;forwarding?.cancelAndJoin();forwarding=null
+        forwarding?.cancelAndJoin();forwarding=null
+        val previous=active;active=null
+        previous?.disconnect()
         mutable.value=NetworkBackendState(status="Not connected")
     }
     suspend fun refreshInventory()=lifecycle.withLock { bridge().refreshInventory() }

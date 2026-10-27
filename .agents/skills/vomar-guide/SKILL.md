@@ -32,7 +32,8 @@ checkout or a latest-release link exists.
 
 For Android, select the signed APK and use the system installer. Review any
 permission for that installer source deliberately. Open the app and check its
-version in Settings; opening it does not connect, query or update a dimmer.
+version in Settings. Opening it restores a previously activated Android broker
+connection and its subscriptions; it does not send device commands or start updates.
 A compatible upgrade retains package identity and signing continuity. Do not
 uninstall an existing app to bypass a signer mismatch or delete its recovery
 records as a first troubleshooting step.
@@ -76,11 +77,35 @@ manual exception neither qualifies a package nor approves a device write.
 Desktop candidate handling remains a separate explicit qualification route.
 
 Broker integration is optional. On Android use Settings → Zigbee2MQTT to choose
-and explicitly connect a saved broker profile and its named Zigbee topics. On
-desktop use the MQTT settings and OS credential store. There is one active
+and connect a saved broker profile and its named Zigbee topics once. Android
+remembers that activation, restores it when the app opens and reconnects after
+temporary network loss. **Disconnect** disables automatic connection until you
+choose **Connect** again; saving a profile alone never activates it. There is no
+guarantee of a permanent background connection after Android stops the process.
+Credential, certificate and configuration errors need correction before retrying;
+use **Retry connection** or save corrected settings with **Save and reconnect**.
+Reconnection restores subscriptions only, never interrupted device commands or
+firmware operations. On desktop use the MQTT settings and OS credential store. There is one active
 broker and up to three configured Zigbee2MQTT base topics. Use the exact host,
 port and supported transport. Plaintext local connections require their own
 consent; the port number alone does not enable encryption.
+
+Android 1.0.9 adds the device-association and row-touch corrections below.
+Install the matching signed upgrade over the existing app to retain its state.
+A first-installed dimmer's Devices record can also acquire its
+Zigbee connection after the broker profile is connected. Automatic association waits
+for all configured topic inventories; explicit import remains available if one
+topic is unavailable. Inventory/state reports
+and explicit Zigbee import associate an unambiguous UID/IEEE match with the
+existing record, retaining its Bluetooth address and original-backup link.
+The generic dimmer name follows Zigbee. In Edit name and room, clear Use Zigbee
+name to enter a custom name, or select it to follow the network name again.
+Older records without name-source information retain their names until that
+choice is made. Existing duplicate organisational records are
+consolidated without altering original archives or update journals. Matching
+names do not prove identity, and another topic cannot silently reassign a link.
+Tap the name, version or empty central area of the Devices row to open details;
+the checkbox and eligibility indicator remain separate controls.
 
 Android protects broker credentials in encrypted private storage; desktop uses
 Secret Service, Keychain or Windows Credential Manager without a plaintext
@@ -156,6 +181,10 @@ retains explicit review, original/UID checks, HALT, ACL preparation and readback
 host timings do not qualify a physical phone or DK. Keep USB and power connected
 during repair and let the owned operation end before upgrading the APK.
 
+Android 1.0.8 corrects the ICU regex used to read retained start evidence. It
+replaces the affected 1.0.7 APK with versionCode 28 and the same signing identity;
+existing original archives and journal bytes need no conversion. An uncertain
+start still needs explicit same-package repair and separately reviewed start.
 ## Stop, resume and repair
 
 Stop requests cancellation and preserves session state. After interruption,
@@ -181,6 +210,7 @@ install: the separate reviewed start still has to occur.
 | Broker fails | Check active connection, host/port/transport, credentials, topic names and plaintext consent. Do not infer TLS from port 8883. |
 | Device version stale | Check active connection and new reports. Saved/retained readings are historical, not update authorization. |
 | Interrupted or halted target | Preserve original/journal/package and last phase. Use explicit reviewed repair/start; never erase or auto-release. |
+| Android 1.0.7 reports `Syntax error in regexp pattern` for start evidence | Preserve the original, journal and report. After the active operation ends, upgrade in place to a corrected APK with the same signer; do not uninstall or clear data. Existing evidence needs no conversion. An unacknowledged start requires explicit same-package repair and separately reviewed start. The error alone does not establish FLASH/CPU state. |
 | Restart acknowledged | Report acknowledgment only; verify actual device behavior separately. |
 
 For a Bluetooth trial, use its explicit report export when available. Review

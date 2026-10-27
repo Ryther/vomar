@@ -120,6 +120,16 @@ capture of a target with prior possible programming, including a completed first
 installation; partially rewritten firmware must not be labelled as its original
 backup. **Prepare a different device** does not remove that protection.
 
+An affected Android 1.0.7 build can report **Syntax error in regexp pattern**
+while saving or reopening private start evidence. This is an app-side reader
+error; the message alone does not establish the installed FLASH or CPU state.
+Preserve the original ZIP, journal and diagnostic report. Once the active
+operation has ended, install a corrected APK with the same signing identity
+over the existing app, without uninstalling or clearing its data. Android 1.0.8
+corrects the reader and accepts the existing record without changing it. For an unacknowledged
+start, use the explicit repair sequence below with the same firmware package;
+repair ends halted and start still needs its separate review.
+
 ## Explicit repair after an interrupted installation
 
 Returning to the screen never restarts work. Use this sequence only for the same

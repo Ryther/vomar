@@ -18,6 +18,7 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
     private var reader:Job?=null
     private val live=ConcurrentHashMap<String,ZigbeeLiveDevice>()
     private val offline=ConcurrentHashMap.newKeySet<String>()
+    private val receivedInventories=ConcurrentHashMap.newKeySet<String>()
     private val subscribed=ConcurrentHashMap.newKeySet<String>()
     private data class Contract(val sample:Long,val boot:Long,val ready:Boolean,val recovery:String)
     private val contracts=ConcurrentHashMap<String,Contract>()
@@ -46,7 +47,8 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
             }
             val filters=canonical.networks.flatMap { n -> listOf("${n.baseTopic}/bridge/devices","${n.baseTopic}/bridge/state","${n.baseTopic}/bridge/event","${n.baseTopic}/bridge/response/device/ota_update/+") }
             connection.subscribe(filters);subscribed.addAll(filters)
-            mutable.update { it.copy(connected=true,status="Connected · waiting for bridge inventory") }
+            mutable.update { if(it.connectionError)it else it.copy(connected=true,status="Connected · waiting for bridge inventory") }
+            if(!state.value.connected || !connection.connected)throw NetworkLostException()
         } catch(e:Exception) { reader?.cancel();reader=null;connection.disconnect();mutable.value=NetworkBackendState(status="Connection failed",connectionError=true);throw e }
     }
     suspend fun refreshInventory() {
@@ -55,11 +57,11 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
         connection.subscribe(current.networks.map { "${it.baseTopic}/bridge/devices" })
     }
     private fun lost() {
-        mutable.update { it.copy(connected=false,status="Connection lost · reconnect explicitly",connectionError=true) }
+        mutable.update { it.copy(connected=false,status="Broker connection lost",connectionError=true) }
         pending.values.forEach { it.result.completeExceptionally(NetworkLostException()) };pending.clear()
     }
     suspend fun disconnect() {
-        reader?.cancelAndJoin();reader=null;lost();connection.disconnect();live.clear();offline.clear();contracts.clear();subscribed.clear()
+        reader?.cancelAndJoin();reader=null;lost();connection.disconnect();live.clear();offline.clear();receivedInventories.clear();contracts.clear();subscribed.clear()
         mutable.value=NetworkBackendState(status="Disconnected")
     }
     internal fun consume(message:MqttMessageEnvelope) {
@@ -78,7 +80,8 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
                 val filters=devices.flatMap { d -> listOf("${network.baseTopic}/${d.friendlyName}","${network.baseTopic}/${d.record.ieee}") }.distinct().filter { subscribed.add(it) }
                 if(subscribed.size>12012) { lost();return }
                 if(filters.isNotEmpty())scope.launch { try { filters.chunked(64).forEach { connection.subscribe(it) } } catch(_:Exception) { lost() } }
-                mutable.update { it.copy(devices=live.values.map { d -> d.record }.sortedBy { d -> d.id },status="Connected · ${live.size} supported devices",inventoryReceived=true) }
+                receivedInventories.add(network.id)
+                mutable.update { it.copy(devices=live.values.map { d -> d.record }.sortedBy { d -> d.id },status="Connected · ${live.size} supported devices",inventoryReceived=profile.networks.all{n->n.id in receivedInventories}) }
             }
             relative=="bridge/state" -> {
                 val state=when(value) { is JsonObject -> value.string("state");is JsonPrimitive -> value.content;else -> null }
@@ -119,8 +122,9 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
         }
     }
     private fun invalidate(network:String,status:String) {
+        receivedInventories.remove(network)
         live.keys.filter { it.startsWith(network+":") }.forEach(live::remove)
-        mutable.update { it.copy(status=status,devices=live.values.map { d -> d.record }) }
+        mutable.update { it.copy(status=status,devices=live.values.map { d -> d.record },inventoryReceived=false) }
     }
     fun requireCustomTarget(network:String,ieee:String)=target(network,ieee)
     suspend fun prepareBluetooth(network:String,ieee:String):BluetoothPreparation {
@@ -251,7 +255,7 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
                 val kind=if(vendor.equals("OpenVimar",true))FirmwareKind.CUSTOM else FirmwareKind.STOCK
                 val version=row.string("software_build_id")?.takeIf { it.isNotBlank() && it.length<=64 }
                 val record=DeviceRecord("zigbee:$network:$ieee",name,networkId=network,ieee=ieee,installedVersion=version,
-                    firmwareKind=kind,capabilities=capabilities,observedAt=at,observationSource=ZigbeeDeviceMetadata.INVENTORY)
+                    firmwareKind=kind,capabilities=capabilities,observedAt=at,observationSource=ZigbeeDeviceMetadata.INVENTORY,followZigbeeName=true)
                 ZigbeeLiveDevice(record,name,row.string("model_id"),(row["disabled"] as? JsonPrimitive)?.booleanOrNull ?: false)
             }
             require(devices.map { it.record.ieee }.distinct().size==devices.size) { "Ambiguous duplicate IEEE" }

@@ -103,6 +103,11 @@ internal class BrokerProfileStore(context:Context) {
     @Synchronized fun loadAll():List<BrokerProfile> = preferences.getString("catalog.v2",null)?.let(::decodeCatalog)
         ?: legacy.getString("profile",null)?.let { listOf(decode(it)) }.orEmpty()
     fun load():BrokerProfile?=loadAll().firstOrNull()
+    @Synchronized fun activatedId():String?=preferences.getString("activation.v1",null)?.takeIf { id->loadAll().any { it.id==id } }
+    @Synchronized fun activate(id:String?) {
+        require(id==null || loadAll().any { it.id==id }) { "Connection is no longer saved" }
+        check(preferences.edit().apply { if(id==null)remove("activation.v1") else putString("activation.v1",id) }.commit()) { "Unable to save connection activation" }
+    }
     @Synchronized fun save(profile:BrokerProfile)=save(profile,null,false)
     @Synchronized fun save(profile:BrokerProfile,encryptedCredentials:String?,replaceCredentials:Boolean) {
         val current=loadAll();val all=replaceInCatalog(current,profile)
@@ -113,7 +118,9 @@ internal class BrokerProfileStore(context:Context) {
     }
     @Synchronized fun remove(id:String) {
         val all=loadAll().filterNot { it.id==id }
-        check(preferences.edit().putString("catalog.v2",encodeCatalog(all)).remove(id).commit()) { "Unable to remove connection" }
+        val edit=preferences.edit().putString("catalog.v2",encodeCatalog(all)).remove(id)
+        if(preferences.getString("activation.v1",null)==id)edit.remove("activation.v1")
+        check(edit.commit()) { "Unable to remove connection" }
         legacy.edit().remove("profile").commit()
     }
     companion object {

@@ -42,7 +42,8 @@ internal class PahoMqttConnection:MqttConnection {
         finally { config.password?.fill('\u0000') }
     }
     override suspend fun subscribe(filters:List<String>) {
-        require(filters.isNotEmpty() && filters.size<=64);val mqtt=requireNotNull(client);check(mqtt.isConnected)
+        require(filters.isNotEmpty() && filters.size<=64);val mqtt=requireNotNull(client)
+        if(!mqtt.isConnected)throw NetworkLostException()
         action { mqtt.subscribe(filters.toTypedArray(),IntArray(filters.size){1},null,it) }
     }
     override suspend fun publish(topic:String,payload:ByteArray) {

@@ -12,7 +12,7 @@ spec.loader.exec_module(m)
 # Exact package/SDK lines captured from pinned aapt2 35.0.0 during failed regeneration:
 # experiments/android-updater/20261022T150311Z/aapt2-badging.txt
 CAPTURED_BADGING = "package: name='org.openvimar.updater' versionCode='1' versionName='0.1.0' platformBuildVersionName='15' platformBuildVersionCode='35' compileSdkVersion='35' compileSdkVersionCodename='15'\nminSdkVersion:'26'\ntargetSdkVersion:'35'\n"
-CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='27'").replace("versionName='0.1.0'", "versionName='1.0.7'")
+CURRENT_BADGING = CAPTURED_BADGING.replace("versionCode='1'", "versionCode='29'").replace("versionName='0.1.0'", "versionName='1.0.9'")
 
 def test_patchReleaseAcceptedAndPreviousApkRejected():
     patched = CURRENT_BADGING
@@ -35,7 +35,7 @@ def test_patchReleaseAcceptedAndPreviousApkRejected():
     with pytest.raises(ValueError):
         m.audit_manifest(prior_ui, 'android:allowBackup=false')
 
-    for version,code in [('1.0.4',24),('1.0.5',25),('1.0.6',26)]:
+    for version,code in [('1.0.4',24),('1.0.5',25),('1.0.6',26),('1.0.7',27),('1.0.8',28)]:
         stale = CAPTURED_BADGING.replace("versionCode='1'", f"versionCode='{code}'").replace("versionName='0.1.0'", f"versionName='{version}'")
         with pytest.raises(ValueError, match='version'):
             m.audit_manifest(stale, 'android:allowBackup=false')
@@ -73,6 +73,22 @@ def test_pinned_runtime_probe_is_accepted_but_changed_bytes_are_rejected(tmp_pat
     entries['DebugProbesKt.bin'] = probe[:-1] + bytes([probe[-1] ^ 1])
     with pytest.raises(ValueError, match='Unexpected sensitive/firmware'):
         m.audit_entries(apk(tmp_path, entries), b'production', b'fixture')
+
+
+def test_pinned_coroutines_probe_is_the_only_approved_runtime_binary(tmp_path, monkeypatch):
+    # The upstream class cannot be embedded as public source. Substitute only
+    # its hash result; exercise the real archive audit and all other hashing.
+    real_sha256 = m.hashlib.sha256
+    probe = b'synthetic pinned runtime class'
+    class PinnedDigest:
+        def hexdigest(self):
+            return '065bd792b8527764f33147188302af5bf9e2a8da40fde0830dc111ad26dae40e'
+    monkeypatch.setattr(m.hashlib, 'sha256', lambda data: PinnedDigest() if data == probe else real_sha256(data))
+    trusted = {'res/raw/firmware_public.der': b'production', 'DebugProbesKt.bin': probe}
+    assert m.audit_entries(apk(tmp_path, trusted), b'production', b'fixture') == list(trusted)
+    for name, data in [('DebugProbesKt.bin', probe + b'changed'), ('assets/stock.bin', probe)]:
+        with pytest.raises(ValueError, match='Unexpected sensitive/firmware archive entry'):
+            m.audit_entries(apk(tmp_path, {'res/raw/firmware_public.der': b'production', name: data}), b'production', b'fixture')
 
 def test_fixtureSigningKeyNotTrustedByRelease(tmp_path):
     with pytest.raises(ValueError): m.audit_entries(apk(tmp_path, {'res/raw/firmware_public.der':b'fixture'}), b'production', b'fixture')

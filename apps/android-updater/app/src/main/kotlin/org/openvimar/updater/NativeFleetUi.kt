@@ -166,11 +166,8 @@ internal class NativeFleetUi(
             val connectionChanged=currentConnection!=previousConnection;previousConnection=currentConnection
             if(pageId=="network")connectionsUi.updateState()
             if(pageId=="zigbee-import")refreshPage()
-            var changed=false
-            value.devices.forEach { observed ->
-                val known=store.devices.firstOrNull{it.networkId==observed.networkId&&it.ieee==observed.ieee}
-                if(known!=null){val merged=ZigbeeDeviceMetadata.mergeSaved(known,observed);if(known!=merged){store.upsert(merged);changed=true}}
-            }
+            val changed=store.mergeZigbee(value.devices,inventoryComplete=value.inventoryReceived)
+            if(changed)selected.retainAll(store.devices.map{it.id}.toSet())
             if((changed||connectionChanged)&&pageId in listOf("devices","device"))refreshPage()
         } }
     }
@@ -332,6 +329,7 @@ internal class NativeFleetUi(
             // Removing an organisational record must stay removed on resume;
             // its private original remains available when that UID is re-added.
             store.preferences.edit().putStringSet("indexedOriginalUids",indexed).apply()
+            network.state.value.let{store.mergeZigbee(it.devices,inventoryComplete=it.inventoryReceived)}
             refreshPage()
         }
     }
@@ -400,12 +398,14 @@ internal class NativeFleetUi(
             val check=CheckBox(activity).apply{minWidth=dp(48);minHeight=dp(48);buttonTintList=ColorStateList.valueOf(color(R.color.ui_primary));contentDescription="Select ${r.name}";isChecked=selected.contains(r.id);setOnCheckedChangeListener{_,checked->if(checked)selected.add(r.id)else selected.remove(r.id);updateSelectionSummary();selectionFooter()}}
             row.addView(check,LinearLayout.LayoutParams(dp(48),-2))
             val info=LinearLayout(activity).apply{gravity=Gravity.CENTER_VERTICAL;setPadding(dp(4),dp(8),dp(4),dp(8));isClickable=true;isFocusable=true;minimumHeight=dp(56);setBackgroundResource(android.R.drawable.list_selector_background);setOnClickListener{rememberRoute();detailId=r.id;pageId="device";renderPage();scroll.scrollTo(0,0)}}
-            val name=text(r.name,16,true).apply{maxLines=if(activity.resources.configuration.fontScale>1.2f)2 else 1;ellipsize=android.text.TextUtils.TruncateAt.END;tooltipText=r.name}
+            val name=text(r.name,16,true).apply{maxLines=if(activity.resources.configuration.fontScale>1.2f)2 else 1;ellipsize=android.text.TextUtils.TruncateAt.END}
             info.addView(name,LinearLayout.LayoutParams(0,-2,1f))
             if(expanded&&r.room.isNotBlank())info.addView(text(r.room,13,secondary=true).apply{maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END},LinearLayout.LayoutParams(dp(120),-2).apply{marginStart=dp(8)})
             val saved=r.networkId!=null&&ZigbeeDeviceMetadata.savedReading(r,r.networkId in activeTopics,currentReports[r.networkId to r.ieee])
             val version=r.installedVersion?.let{if(saved)"$it (saved)" else it}?:"—"
-            info.addView(text(version,13,secondary=true).apply{maxLines=1;tooltipText=version},LinearLayout.LayoutParams(-2,-2).apply{marginStart=dp(8)})
+            info.addView(text(version,13,secondary=true).apply{maxLines=1},LinearLayout.LayoutParams(-2,-2).apply{marginStart=dp(8)})
+            // A child tooltip consumes short taps before the clickable parent.
+            info.tooltipText=listOf(r.name,r.room,"Firmware $version").filter{it.isNotBlank()}.joinToString("\n")
             val status=deviceStatus(r)
             row.addView(info,LinearLayout.LayoutParams(0,-2,1f))
             row.addView(NativeUi.stateDot(activity,"${status.label}. ${r.name}",eligibilityColor(status.eligibility)){
@@ -505,8 +505,13 @@ internal class NativeFleetUi(
         val name=NativeUi.field(activity,"Device name",record.name);add(name,form)
         copy("Room (optional)",form,false)
         val room=NativeUi.field(activity,"Room",record.room);add(room,form)
+        val follows=if(record.ieee!=null)CheckBox(activity).apply{
+            text="Use Zigbee name";isChecked=record.followZigbeeName;minHeight=dp(48)
+            setOnCheckedChangeListener{_,checked->name.isEnabled=!checked;if(checked)network.state.value.devices.firstOrNull{it.networkId==record.networkId&&it.ieee==record.ieee}?.let{name.setText(it.name)}}
+        }.also{add(it,form)} else null
+        name.isEnabled=follows?.isChecked!=true
         val dialog=AlertDialog.Builder(activity).setTitle(if(store.devices.any{it.id==record.id})"Edit device" else "Save device").setView(form).setNegativeButton("Cancel",null).setPositiveButton("Save",null).create()
-        dialog.setOnShowListener{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener{val entered=name.text.toString().trim();if(entered.isEmpty())name.error="Enter a device name" else {store.upsert(record.copy(name=entered,room=room.text.toString().trim()));dialog.dismiss();navigate("devices")}}};dialog.show()
+        dialog.setOnShowListener{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener{val entered=name.text.toString().trim();if(entered.isEmpty())name.error="Enter a device name" else {store.upsert(record.copy(name=entered,room=room.text.toString().trim(),followZigbeeName=follows?.isChecked==true));dialog.dismiss();navigate("devices")}}};dialog.show()
     }
     fun acceptZigbeeList(json:String){
         val rows=runCatching{JSONArray(json)}.getOrElse{sourceNotice("Choose a Zigbee2MQTT bridge/devices JSON array. This file could not be read.");return};val candidates=mutableListOf<DeviceRecord>()
@@ -516,11 +521,14 @@ internal class NativeFleetUi(
             val vendor=definition.optString("vendor")
             if(!FleetPolicy.recognisesZigbee(vendor,model))continue
             val ieee=row.optString("ieee_address");if(!ieee.matches(Regex("0x[0-9a-fA-F]{16}")))continue
-            candidates.add(DeviceRecord("zigbee:$ieee",row.optString("friendly_name").ifBlank{ieee},""))
+            candidates.add(DeviceRecord("zigbee:${ieee.lowercase()}",row.optString("friendly_name").ifBlank{ieee},ieee=ieee.lowercase(),
+                installedVersion=row.optString("software_build_id").takeIf{it.isNotBlank()},
+                firmwareKind=if(vendor.equals("OpenVimar",true))FirmwareKind.CUSTOM else FirmwareKind.STOCK,
+                observedAt=System.currentTimeMillis(),observationSource=ZigbeeDeviceMetadata.INVENTORY+" (exported, cached)",followZigbeeName=true))
         }
         if(candidates.isEmpty()){sourceNotice("No supported Vimar 30805 records were found. Export the bridge/devices JSON array from Zigbee2MQTT.");return}
         val checked=BooleanArray(candidates.size)
-        AlertDialog.Builder(activity).setTitle("Import from Zigbee").setMultiChoiceItems(candidates.map{it.name}.toTypedArray(),checked){_,which,value->checked[which]=value}.setNegativeButton("Cancel",null).setPositiveButton("Import selected"){_,_->candidates.forEachIndexed{i,r->if(checked[i])store.upsert(r)};navigate("devices")}.show()
+        AlertDialog.Builder(activity).setTitle("Import from Zigbee").setMultiChoiceItems(candidates.map{it.name}.toTypedArray(),checked){_,which,value->checked[which]=value}.setNegativeButton("Cancel",null).setPositiveButton("Import selected"){_,_->store.mergeZigbee(candidates.filterIndexed{i,_->checked[i]},addNew=true);navigate("devices")}.show()
     }
     private fun archiveActivity(id:String){
         runCatching{store.setActivityArchived(id,!store.archivedActivities().contains(id));refreshPage()}
@@ -744,9 +752,8 @@ internal class NativeFleetUi(
         if(candidates.isEmpty())copy(if(!received)"Waiting for Zigbee2MQTT devices…" else "No supported dimmers found in these topics.")
         val selectedText=copy("${zigbeeSelection.size} selected")
         val submit=button("Add selected (${zigbeeSelection.size})",filled=true){
-            network.state.value.devices.filter{it.id in zigbeeSelection && profile.networks.any{n->n.id==it.networkId}}.forEach{r->
-                if(store.devices.none{it.networkId==r.networkId&&it.ieee==r.ieee})store.upsert(r)
-            };zigbeeSelection.clear();navigate("devices")
+            store.mergeZigbee(network.state.value.devices.filter{it.id in zigbeeSelection && profile.networks.any{n->n.id==it.networkId}},addNew=true)
+            zigbeeSelection.clear();navigate("devices")
         }
         candidates.forEach{candidate->
             val topic=profile.networks.firstOrNull{it.id==candidate.networkId}

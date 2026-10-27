@@ -15,6 +15,13 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MqttFailurePresentationTest {
+    @Test fun droppedTransportDuringSubscriptionIsTransient() {
+        for(error in listOf(NetworkLostException(),
+            MqttException(MqttException.REASON_CODE_CONNECTION_LOST.toInt()),
+            MqttException(MqttException.REASON_CODE_CLIENT_NOT_CONNECTED.toInt()))) {
+            assertEquals(MqttFailureKind.UNREACHABLE,presentMqttFailure(error).kind)
+        }
+    }
     private val sensitive="private-broker.example fixture-user fixture-password"
 
     @Test fun pahoAndIoWrappersPreserveDnsPortAndTimeoutCauses() {
