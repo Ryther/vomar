@@ -45,6 +45,13 @@ class BleTrialUiTest:ActivityInstrumentationTestCase2<BleTrialActivity>(BleTrial
  override fun setUp(){
   super.setUp()
   val context=instrumentation.targetContext
+  // The transport remains synthetic; a fresh AVD still needs the foreground
+  // permission prerequisites checked by the actual activity and service.
+  PermissionPolicy.required(android.os.Build.VERSION.SDK_INT).forEach { permission ->
+   instrumentation.uiAutomation.executeShellCommand("pm grant ${context.packageName} $permission").use { descriptor ->
+    java.io.FileInputStream(descriptor.fileDescriptor).use { it.readBytes() }
+   }
+  }
   context.getSharedPreferences("ble-trial",0).edit().clear().commit()
   File(context.filesDir,"ble-trial-state").deleteRecursively()
   File(context.filesDir,"ble-trial-report.json").delete();File(context.filesDir,"ble-trial-report.json.bak").delete()

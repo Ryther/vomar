@@ -463,19 +463,20 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         val active=network.javaClass.getDeclaredField("activeProfileId").apply{isAccessible=true}
         val mutable=network.javaClass.getDeclaredField("mutable").apply{isAccessible=true}.get(network) as kotlinx.coroutines.flow.MutableStateFlow<NetworkBackendState>
         val priorId=active.get(network);val priorState=mutable.value
+        val settings=BrokerProfileStore(activity);val priorActivation=settings.activatedId()
         kotlinx.coroutines.runBlocking{network.saveProfile(profile)}
         try{
             // Presentation/state plumbing only: no transport is opened.
-            active.set(network,id);mutable.value=NetworkBackendState(status="Synthetic connection failure",connectionError=true)
+            settings.activate(id);active.set(network,id);mutable.value=NetworkBackendState(status="Synthetic connection failure",connectionError=true)
             val native=fixture(emptyList());instrumentation.runOnMainSync{native.navigate("network")};instrumentation.waitForIdleSync()
             val row=nodes().first{it.contentDescription?.toString()?.startsWith("Owner connection state.")==true}
             instrumentation.runOnMainSync{row.performClick()};instrumentation.waitForIdleSync()
             fun title()=nodes().filterIsInstance<TextView>().single{it.text==profile.label}
             assertTrue(title().contentDescription.toString().contains("Connection error"))
             kotlinx.coroutines.runBlocking{network.disconnect()};instrumentation.waitForIdleSync()
-            assertEquals(id,network.activeProfileId)
+            assertNull(network.activeProfileId);assertNull(settings.activatedId())
             assertTrue(title().contentDescription.toString().contains("Not connected"));assertFalse(network.state.value.connectionError);assertEquals(0,executions)
-        }finally{kotlinx.coroutines.runBlocking{network.removeProfile(id)};active.set(network,priorId);mutable.value=priorState}
+        }finally{kotlinx.coroutines.runBlocking{network.removeProfile(id)};settings.activate(priorActivation);active.set(network,priorId);mutable.value=priorState}
     }
     fun testOwnerConnectionDeletionKeepsFirstTapReadOnlyAndOtherProfileIntact(){
         val id=java.util.UUID.randomUUID().toString();val otherId=java.util.UUID.randomUUID().toString()
