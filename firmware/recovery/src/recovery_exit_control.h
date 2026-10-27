@@ -8,6 +8,7 @@ struct recovery_exit_control {
  /* exiting without migration_pending belongs to the SDK/ordinary exit and
   * must never be cancelled by RPC output errors or disconnect. */
  bool migration_pending,migration_ready;
+ bool pairing_pending,pairing_ready;
 };
 struct recovery_exit_io {
  void *context;
@@ -29,4 +30,8 @@ void recovery_exit_migration_done(struct recovery_exit_control *,bool output_ok)
 void recovery_exit_migration_cancel(struct recovery_exit_control *);
 int recovery_exit_migration_attempt(struct recovery_exit_control *,const struct recovery_exit_io *);
 int recovery_exit_sdk_reset_prepare(struct recovery_exit_control *,const struct recovery_exit_io *);
+int recovery_exit_pairing_request(struct recovery_exit_control *,const struct recovery_exit_io *);
+int recovery_exit_pairing_local_request(struct recovery_exit_control *,const struct recovery_exit_io *);
+void recovery_exit_pairing_done(struct recovery_exit_control *,bool output_ok);
+int recovery_exit_pairing_attempt(struct recovery_exit_control *,const struct recovery_exit_io *,int (*request)(void));
 #endif

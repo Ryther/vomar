@@ -14,6 +14,12 @@
 #include "recovery_session.h"
 #include "vimar_led.h"
 #endif
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+#include "recovery_pairing.h"
+#include "connection_intent.h"
+#include "vimar_buttons.h"
+static struct vimar_buttons connection_buttons;
+#endif
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -49,7 +55,11 @@ static bool led_ready;
 static bool session_due(void)
 {
  return recovery_session_poll(&session,(uint64_t)k_uptime_get(),
-  control.command_busy||control.session||control.exiting,control.partial);
+  control.command_busy||control.session||control.exiting
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+  ||connection_buttons.selecting
+#endif
+  ,control.partial);
 }
 #endif
 static const char marker_key[]="vimar/recovery_upload";
@@ -111,9 +121,52 @@ int recovery_exit_zephyr_prepare_reset(void)
  }
  k_mutex_unlock(&gate);return rc;
 }
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+static int verify_pairing(void *ctx)
+{
+ ARG_UNUSED(ctx);
+ return recovery_primary_validate_pairing((const uint8_t *)RECOVERY_PRIMARY_BASE,RECOVERY_PRIMARY_CAPACITY);
+}
+static const struct recovery_exit_io pairing_io={
+ .persist=persist,.verify=verify_pairing,.flush=flush,.clear_boot=clear_boot,.reboot=reboot
+};
+int recovery_exit_zephyr_pairing_capable(void)
+{
+ int rc=-EBUSY;k_mutex_lock(&gate,K_FOREVER);
+ if(admitted_command&&admitted_group==VIMAR_PAIRING_GROUP&&admitted_id==0&&
+    !control.exiting&&!control.partial&&!control.session){
+  img_mgmt_take_lock();rc=verify_pairing(NULL);img_mgmt_release_lock();
+ }
+ k_mutex_unlock(&gate);return rc;
+}
+int recovery_exit_zephyr_pairing_request(void)
+{
+ int rc=-EBUSY;k_mutex_lock(&gate,K_FOREVER);
+ if(admitted_command&&admitted_group==VIMAR_PAIRING_GROUP&&admitted_id==0&&
+    control.command_busy&&!control.exiting&&!control.partial&&!control.session){
+  img_mgmt_take_lock();rc=recovery_exit_pairing_request(&control,&pairing_io);img_mgmt_release_lock();
+  if(!rc)manual_exit_pending=false;
+ }
+ k_mutex_unlock(&gate);return rc;
+}
+#endif
 static void exit_handler(struct k_work *work)
 {
  ARG_UNUSED(work);k_mutex_lock(&gate,K_FOREVER);
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+ if(control.pairing_pending){
+  if(control.pairing_ready&&!control.command_busy&&!control.session&&!control.partial){
+   img_mgmt_take_lock();
+   int rc=recovery_exit_pairing_attempt(&control,&pairing_io,connection_intent_request);
+   img_mgmt_release_lock();
+   if(rc){
+    recovery_session_refuse_exit(&session);
+    LOG_WRN("Zigbee pairing refused; recovery retained: %d",rc);
+   }
+  }
+  k_mutex_unlock(&gate);return;
+ }
+#endif
 #if defined(CONFIG_VIMAR_RECOVERY_MIGRATION_EXEC)
  if(control.migration_pending){
   if(control.migration_ready&&!control.command_busy&&!control.session&&!control.partial){
@@ -157,20 +210,43 @@ static void poll_handler(struct k_work *work)
   if(value<0)failed=true;else if(value)pressed|=BIT(i);
  }
  k_mutex_lock(&gate,K_FOREVER);
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+ bool inhibited=failed||control.partial||control.session||control.command_busy||control.exiting;
+ bool was_selecting=connection_buttons.selecting;
+ struct vimar_button_sample choice={0};
+ if(inhibited){
+  connection_buttons.enabled=false;connection_buttons.blocked=true;
+  connection_buttons.selecting=false;connection_buttons.chord=false;
+ }else choice=vimar_buttons_tick(&connection_buttons,k_uptime_get(),pressed);
+ bool fire=false;
+ if(choice.pairing){
+  img_mgmt_take_lock();
+  fire=recovery_exit_pairing_local_request(&control,&pairing_io)==0;
+  img_mgmt_release_lock();
+ }
+ if(choice.selector||choice.recovery||was_selecting)recovery_session_activity(&session,k_uptime_get());
+#else
  bool fire=recovery_exit_tick(&gesture,k_uptime_get_32(),pressed,
   failed||control.partial||control.session||control.command_busy||control.exiting);
  if(fire)manual_exit_pending=true;
+#endif
  bool requested=fire;
 #if defined(CONFIG_VIMAR_RECOVERY_SERVICE_MODE)
  if(failed)recovery_session_refuse_exit(&session);
  requested=session_due()||requested;
  enum wireless_status_led_mode mode=recovery_session_led_mode(&session);
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+ if(connection_buttons.selecting)mode=WIRELESS_STATUS_LED_SELECTOR;
+#endif
 #endif
  k_mutex_unlock(&gate);
  if(requested)k_work_submit_to_queue(&exit_queue,&exit_work);
 #if defined(CONFIG_VIMAR_RECOVERY_SERVICE_MODE)
  if(led_ready){
   uint64_t elapsed=(uint64_t)k_uptime_get()-session_started;
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+  if(mode==WIRELESS_STATUS_LED_SELECTOR)elapsed=k_uptime_get()-connection_buttons.selector_since;
+#endif
   struct led_output output=wireless_status_led_resolve(mode,
    vimar_power_protection_status_blocked(),NULL,elapsed);
   int error=vimar_led_render(&output,elapsed);
@@ -215,6 +291,12 @@ static enum mgmt_cb_return command_event(uint32_t event,enum mgmt_cb_return prev
 #endif
   recovery_exit_command_done(&control);
   admitted_command=false;
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+  if(done->group==VIMAR_PAIRING_GROUP&&done->id==0){
+   recovery_exit_pairing_done(&control,done->err==0);
+   if(control.pairing_ready)k_work_submit_to_queue(&exit_queue,&exit_work);
+  }
+#endif
 #if defined(CONFIG_VIMAR_RECOVERY_MIGRATION_EXEC)
   if(done->group==VIMAR_MIGRATION_GROUP&&done->id==0){
    /* SDK smp_process_request_packet notifies successful DONE only after its
@@ -265,6 +347,9 @@ static struct mgmt_callback images={.callback=image_event,
 void recovery_exit_zephyr_disconnected(void)
 {
  k_mutex_lock(&gate,K_FOREVER);
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+ if(!control.pairing_ready)recovery_exit_pairing_done(&control,false);
+#endif
 #if defined(CONFIG_VIMAR_RECOVERY_MIGRATION_EXEC)
  recovery_exit_migration_cancel(&control);
 #endif

@@ -57,3 +57,4 @@ const struct dimmer_secondary_capabilities *platform_io_capabilities(void)
 bool platform_io_input_settled(void){return true;}
 #include <errno.h>
 int platform_io_request_recovery(void){return-ENOTSUP;}
+int platform_io_request_pairing(void){return-ENOTSUP;}

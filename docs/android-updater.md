@@ -391,3 +391,13 @@ unexpected bundled firmware and PEM private-key markers. These bounded checks
 are not a general proof against every possible secret. Runtime licenses are in
 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and the
 APK asset `third_party_notices.txt`.
+
+## Explicit Zigbee pairing on supporting firmware
+
+The feature-branch Android client adds **Devices → device → Zigbee pairing**.
+Inspect without selecting a firmware package, then review and explicitly confirm
+replacement of the current Zigbee network. Supporting MAIN/recovery performs a
+two-minute pairing window; unsupported recovery is refused without a reset
+fallback. See [Connection modes](connection-modes.md) for physical entry, colours,
+retained settings and uncertain-acknowledgment handling. Existing released packages
+and physical qualification are not upgraded by this source change.

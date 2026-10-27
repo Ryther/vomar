@@ -133,6 +133,8 @@ internal class AndroidBleGateway(context:Context,private val address:String):Ble
     override fun onResponse(response:T){if(c.isActive && token==generation){
      try {
       if(response is MigrationBootResponse)response.validateWire()
+      if(response is ZigbeePairingReadResponse)response.validateWire()
+      if(response is ZigbeePairingWriteResponse)response.validateWire()
       if(response is RuntimeIdentityResponse)response.validateWire()
       if(response is RecoveryBootHistoryResponse)response.validateWire()
       if(response.isSuccess)c.resume(response) else if(response is RuntimeIdentityResponse)c.resumeWithException(response.rejection()) else if(response is MigrationBootResponse)c.resumeWithException(response.rejection()) else if(response is RecoveryBootHistoryResponse)c.resumeWithException(response.rejection()) else c.resumeWithException(IllegalStateException("The dimmer refused the Bluetooth request. Export the diagnostic report. Technical detail: rc=${response.rc}, group=${response.groupReturnCode}"))
@@ -167,6 +169,16 @@ internal class AndroidBleGateway(context:Context,private val address:String):Ble
  override suspend fun bootMigration(hash:String):org.openvimar.updater.core.ResetAck {
   checkReady();val manager=migrationManager ?: error("Migration boot manager unavailable")
   return try{request{cb:McuMgrCallback<MigrationBootResponse> -> manager.boot(hash,cb)}.acknowledgement()}
+  catch(_:McuMgrTimeoutException){throw ResetResponseLost()}
+  catch(t:TimeoutCancellationException){currentCoroutineContext().ensureActive();throw ResetResponseLost()}
+ }
+ override suspend fun pairingCapabilities():org.openvimar.updater.core.ZigbeePairingCapabilities {
+  checkReady();val manager=ZigbeePairingManager(transport ?: error("Bluetooth connection closed"))
+  return request{cb:McuMgrCallback<ZigbeePairingReadResponse> -> manager.read(cb)}.capabilities()
+ }
+ override suspend fun startZigbeePairing():org.openvimar.updater.core.ResetAck {
+  checkReady();val manager=ZigbeePairingManager(transport ?: error("Bluetooth connection closed"))
+  return try{request{cb:McuMgrCallback<ZigbeePairingWriteResponse> -> manager.start(cb)}.acknowledgement()}
   catch(_:McuMgrTimeoutException){throw ResetResponseLost()}
   catch(t:TimeoutCancellationException){currentCoroutineContext().ensureActive();throw ResetResponseLost()}
  }

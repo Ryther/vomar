@@ -67,7 +67,8 @@ internal class BleTrialRuntime(context:Context,verificationKey:PublicKey?=null,
         val j=JSONObject(BleTrialReport.snapshot(state,address,selection.value?.reference?.digest,selection.value?.version,
             app.packageManager.getPackageInfo(app.packageName,0).versionName ?: "unknown",Build.VERSION.SDK_INT,Build.VERSION.RELEASE,diagnostics.events))
             .put("observedAtMillis",System.currentTimeMillis())
-            .put("interpretation","Image verification and reset acknowledgement do not establish lamp, buttons or Zigbee operation")
+            .put("operation",if(state.pairing)"zigbee_pairing" else "firmware_update")
+            .put("interpretation",if(state.pairing)"Request acknowledgment does not establish successful Zigbee association" else "Image verification and reset acknowledgement do not establish lamp, buttons or Zigbee operation")
         val output=report.startWrite()
         try{output.write(j.toString(2).toByteArray());report.finishWrite(output)}catch(failure:Throwable){report.failWrite(output);throw failure}
     }
@@ -82,10 +83,12 @@ internal object AndroidBleTrialOwner {
     @Synchronized fun get(context:Context):BleTrialRuntime=owner ?: BleTrialRuntime(context).also{owner=it}
     @Synchronized internal fun installForTest(replacement:BleTrialRuntime?){check(owner?.controller?.state?.value?.busy!=true);owner=replacement}
 }
-private class TrialCheckedTransport(private val delegate:BleTransport,private val check:()->Unit):BleTransport,MigrationBootTransport {
+private class TrialCheckedTransport(private val delegate:BleTransport,private val check:()->Unit):BleTransport,MigrationBootTransport,ZigbeePairingTransport {
     override suspend fun connect(address:String){check();delegate.connect(address);check()}
     override suspend fun identity():RuntimeIdentity {check();return delegate.identity().also{check()}}
     override suspend fun identityV2():RuntimeIdentity {check();return delegate.identityV2().also{check()}}
+    override suspend fun pairingCapabilities():ZigbeePairingCapabilities {check();return (delegate as? ZigbeePairingTransport ?: error("Pairing unavailable")).pairingCapabilities().also{check()}}
+    override suspend fun startZigbeePairing():ResetAck {check();return (delegate as? ZigbeePairingTransport ?: error("Pairing unavailable")).startZigbeePairing()}
     override suspend fun images():RemoteImages {check();return delegate.images().also{check()}}
     override suspend fun upload(data:ByteArray,onAck:suspend(Int)->Unit){check();delegate.upload(data){check();onAck(it)}}
     override suspend fun reset():ResetAck {check();return delegate.reset().also{check()}}

@@ -64,7 +64,7 @@ def crypto(tmp_path_factory):
         '-I' + str(ROOT / 'firmware/ota'), '-I' + str(ROOT / 'firmware/recovery/src'),
         '-I' + str(ROOT / 'tools/firmware/tests/ota_image_host'),
         '-I' + str(SDK / 'nrf/include'), '-I' + str(nrf / 'lzma'), str(host),
-        str(ROOT / 'firmware/recovery/src/recovery_primary.c'),
+        '-I'+str(ROOT/'firmware/src'), str(ROOT / 'firmware/recovery/src/recovery_primary.c'),
         str(ROOT / 'tools/firmware/tests/ota_image_host/registry.c'),
         *[str(nrf / p) for p in ['src/lzma.c', 'src/arm_thumb.c', 'lzma/LzmaDec.c',
                                'lzma/Lzma2Dec.c', 'lzma/armthumb.c']],

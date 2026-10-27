@@ -12,6 +12,8 @@
 #include "zb_dimmable_light.h"
 #include "zb_vimar_custom.h"
 #include "zigbee_report_policy.h"
+#include "connection_pairing.h"
+#include "connection_intent.h"
 
 #include <zephyr/logging/log.h>
 #include <zephyr/app_version.h>
@@ -39,6 +41,44 @@
 #define LED_RUNTIME_REPORT_INTERVAL_MS 250U
 
 LOG_MODULE_REGISTER(vimar_zigbee, LOG_LEVEL_INF);
+
+static struct connection_pairing connection_pairing;
+static bool connection_selecting,pairing_expired,pairing_stop_pending;
+static uint64_t connection_selector_since;
+static int initial_connection_intent;
+
+void zigbee_device_connection_selector(bool active,uint64_t since_ms)
+{connection_selecting=active;connection_selector_since=since_ms;}
+
+static void cancel_pairing(zb_bufid_t buffer)
+{
+    pairing_stop_pending=false;
+    /* bdb_cancel_joining takes ownership and reports cancellation by signal. */
+    bdb_cancel_joining(buffer);
+}
+
+static void connection_pairing_poll(uint64_t now)
+{
+    if(connection_pairing_tick(&connection_pairing,now)) {
+        pairing_expired=true;pairing_stop_pending=true;
+        zigbee_network_rejoin_abort();
+        LOG_INF("Zigbee pairing window expired");
+    }
+    if(pairing_stop_pending) {
+        if(zb_buf_get_out_delayed(cancel_pairing)==RET_OK)pairing_stop_pending=false;
+    }
+}
+
+static bool pairing_signal_requires_window(zb_zdo_app_signal_type_t signal)
+{
+    switch(signal){
+    case ZB_BDB_SIGNAL_STEERING:
+    case ZB_BDB_SIGNAL_STEERING_CANCELLED:
+    case ZB_BDB_SIGNAL_TC_REJOIN_DONE:
+    case ZB_ZDO_SIGNAL_LEAVE:return true;
+    default:return false;
+    }
+}
 
 #if defined(CONFIG_VIMAR_FAULT_DIAGNOSTICS)
 static void vimar_diag_zboss_assert(zb_uint16_t file_id,zb_int_t line)
@@ -434,6 +474,14 @@ static void refresh_led_runtime(uint64_t now_ms)
     led_controller_set_fault(&controller.leds, controller.model.state.fault.active);
     struct led_output led = led_controller_resolve(&controller.leds,
         controller.model.state.on, controller.model.state.level, now_ms);
+    enum wireless_status_led_mode connection_mode=connection_pairing_mode(&connection_pairing);
+    bool selector_visible=connection_selecting&&connection_mode!=WIRELESS_STATUS_LED_PAIRED;
+    if(selector_visible)connection_mode=WIRELESS_STATUS_LED_SELECTOR;
+    uint64_t connection_since=selector_visible?
+        connection_selector_since:connection_pairing.since_ms;
+    led=wireless_status_led_resolve(connection_mode,
+        controller.model.state.fault.active||vimar_power_protection_blocked(),
+        &led,now_ms-connection_since);
     /* Fault priority bypasses the resolver's override expiry check. */
     bool override_active = controller.leds.override.active &&
         (!controller.leds.override.expires_ms ||
@@ -908,6 +956,7 @@ static void application_tick(zb_uint8_t unused)
     vimar_fault_diag_tick((uint32_t)k_uptime_get());
     ARG_UNUSED(unused);
     uint64_t now_ms = k_uptime_get();
+    connection_pairing_poll(now_ms);
     process_protection(now_ms);
     refresh_protection_diagnostics();
     refresh_ota_contract(now_ms,false);
@@ -965,7 +1014,27 @@ void zboss_signal_handler(zb_bufid_t buffer)
         LOG_INF("Zigbee signal: %d status: %d", signal, status);
     }
     if (!IS_ENABLED(CONFIG_VIMAR_HARDWARE)) { zigbee_led_status_update(buffer, DK_LED2); }
-    ZB_ERROR_CHECK(zigbee_default_signal_handler(buffer));
+    connection_pairing_poll(k_uptime_get());
+    bool default_allowed=true;
+    if(signal==ZB_BDB_SIGNAL_DEVICE_FIRST_START) {
+        /* Persist consumption before the SDK can associate. A reboot after
+         * success must never replay the earlier forget-network request. */
+        if(status==RET_OK&&initial_connection_intent>=CONNECTION_INITIAL&&
+           initial_connection_intent!=CONNECTION_ATTEMPTED&&
+           connection_intent_claim()==0) {
+            connection_pairing_start(&connection_pairing,k_uptime_get());
+            initial_connection_intent=CONNECTION_ATTEMPTED;
+            pairing_expired=false;
+        } else {default_allowed=false;zigbee_network_rejoin_abort();}
+    }
+    if(pairing_expired&&pairing_signal_requires_window(signal))
+        default_allowed=false;
+    if(zb_bdb_is_factory_new()&&
+       connection_pairing_mode(&connection_pairing)!=WIRELESS_STATUS_LED_PAIRING&&
+       pairing_signal_requires_window(signal))default_allowed=false;
+    if(default_allowed)ZB_ERROR_CHECK(zigbee_default_signal_handler(buffer));
+    if(signal==ZB_BDB_SIGNAL_STEERING&&status==RET_OK&&ZB_JOINED())
+        (void)connection_pairing_joined(&connection_pairing,k_uptime_get());
     if (status == RET_OK && ZB_JOINED()) {
         switch (signal) {
         case ZB_BDB_SIGNAL_DEVICE_FIRST_START:
@@ -1124,6 +1193,11 @@ int zigbee_device_start(void)
     extern void zb_zdo_register_assert_indication_cb(void (*cb)(zb_uint16_t,zb_int_t));
     zb_zdo_register_assert_indication_cb(vimar_diag_zboss_assert);
 #endif
+    initial_connection_intent=connection_intent_load();
+    if(initial_connection_intent==CONNECTION_REQUESTED)
+        zigbee_erase_persistent_storage(ZB_TRUE);
+    if(initial_connection_intent<0)
+        LOG_ERR("Connection intent unreadable; automatic pairing disabled: %d",initial_connection_intent);
     zigbee_enable();
     LOG_INF("Zigbee dimmable-light endpoint started");
     return 0;

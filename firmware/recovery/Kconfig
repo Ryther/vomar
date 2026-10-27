@@ -21,7 +21,8 @@ config VIMAR_RECOVERY_BUTTON_EXIT
     select MCUMGR_GRP_IMG_STATUS_HOOKS
     select MCUMGR_GRP_IMG_MUTEX
     help
-      Require release after boot, a five-second two-button chord and release.
+      Require release after boot. Legacy profiles use a five-second two-button
+      chord and release; pairing-capable profiles use the shared selector.
       Refuse partial uploads and any primary that fails signature, geometry or
       the current compatible-main role policy. Candidate requires qualification.
       The SDK image-check fast path can omit DFU_PENDING; it must stay disabled
@@ -37,6 +38,17 @@ config VIMAR_RECOVERY_SERVICE_MODE
       gate. Other causes and interrupted writes retain blue/red recovery without
       expiry. Active commands/uploads prevent timeout. Uses only RGB PWM0 and
       a passive protection status read; requires measured paired qualification.
+
+config VIMAR_RECOVERY_PAIRING
+    bool "Explicit authenticated Zigbee network replacement"
+    default y if VIMAR_RECOVERY_SERVICE_MODE
+    depends on VIMAR_RECOVERY_SERVICE_MODE && VIMAR_RECOVERY_MIGRATION_EXEC
+    help
+      SMP group0x8043 exposes read-only capabilities and explicit WRITE0
+      requesting a 120-second Zigbee pairing window. Only an authenticated
+      Bluetooth command, validated MAIN and idle complete-image state may
+      reserve this transition. Successful command output precedes durable
+      intent and deferred MAIN restart. Application settings are retained.
 
 config VIMAR_RECOVERY_IDENTITY
     bool "Authenticated runtime identity for common release packages"

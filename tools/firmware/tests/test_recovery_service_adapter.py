@@ -119,7 +119,7 @@ def adapter(tmp_path_factory):
     executable = directory / "adapter"
     subprocess.run([
         "cc", "-std=c11", "-Wall", "-Wextra", "-Werror", "-fsanitize=undefined",
-        "-DCONFIG_VIMAR_RECOVERY_SERVICE_MODE=1", "-DCONFIG_VIMAR_P031_PROTECTION=1",
+        "-DCONFIG_VIMAR_RECOVERY_PAIRING=1", "-DCONFIG_VIMAR_RECOVERY_SERVICE_MODE=1", "-DCONFIG_VIMAR_P031_PROTECTION=1",
         "-DCONFIG_VIMAR_RECOVERY_MIGRATION_EXEC=1", "-DCONFIG_VIMAR_RECOVERY_BUTTON_EXIT=1",
         "-DCONFIG_MCUMGR_TRANSPORT_BT=1", "-DCONFIG_MCUMGR_TRANSPORT_BT_PERM_RW_AUTHEN=1",
         "-DCONFIG_MCUMGR_SMP_COMMAND_STATUS_HOOKS=1", "-DCONFIG_MCUMGR_GRP_IMG_MUTEX=1",
@@ -133,6 +133,7 @@ def adapter(tmp_path_factory):
         str(ROOT / "firmware/recovery/src/recovery_exit.c"),
         str(ROOT / "firmware/recovery/src/recovery_exit_control.c"),
         str(ROOT / "firmware/src/wireless_status_led.c"),
+        str(ROOT / "firmware/src/vimar_buttons.c"),
         "-o", str(executable),
     ], check=True)
     return executable
@@ -144,7 +145,7 @@ def adapter(tmp_path_factory):
     "migration_upload", "migration_ack", "migration_output_error", "migration_disconnect",
     "migration_recheck", "migration_preflight", "sdk_reset", "sdk_reset_migration",
     "sdk_reset_partial", "sdk_reset_fault",
-    "admission_store_failure",
+    "admission_store_failure", "pairing_ack", "pairing_ack_disconnect", "pairing_unsupported", "pairing_output_error", "pairing_disconnect", "pairing_recheck", "pairing_partial",
 ])
 def test_real_recovery_adapter_callbacks(adapter, scenario):
     subprocess.run([str(adapter), scenario], check=True)

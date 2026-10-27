@@ -1165,3 +1165,21 @@
 !/apps/android-updater/core/src/test/kotlin/org/openvimar/installer/resume/
 !/apps/android-updater/core/src/test/kotlin/org/openvimar/installer/resume/ExplicitResumeContractTest.kt
 !/tools/android/generate_first_install_test_fixtures.py
+
+
+# Authored connection selector and explicit Zigbee pairing protocol.
+!/firmware/src/connection_pairing.c
+!/firmware/src/connection_pairing.h
+!/firmware/src/connection_intent.h
+!/firmware/src/connection_intent_zephyr.c
+!/firmware/recovery/src/recovery_pairing.h
+!/firmware/recovery/src/recovery_pairing_zephyr.c
+!/tools/firmware/tests/test_recovery_pairing_rpc.py
+!/apps/android-updater/core/src/main/kotlin/org/openvimar/updater/core/ZigbeePairing.kt
+!/apps/android-updater/core/src/test/kotlin/org/openvimar/updater/core/ZigbeePairingTest.kt
+!/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/ble/ZigbeePairingManager.kt
+!/docs/connection-modes.md
+!/firmware/src/connection_capability.h
+!/firmware/src/connection_capability.c
+!/tools/firmware/tests/test_connection_zigbee_adapter.py
+

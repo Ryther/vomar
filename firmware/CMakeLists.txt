@@ -17,10 +17,15 @@ target_sources(app PRIVATE
     src/ota_runtime_contract.c
     src/zigbee_device.c
     src/zigbee_report_policy.c
+    src/wireless_status_led.c
+    src/connection_pairing.c
+    src/connection_capability.c
+    src/connection_intent_zephyr.c
     src/zboss_mem_globals.c
 )
 
 target_include_directories(app PRIVATE src)
+zephyr_link_libraries(-Wl,--undefined=vimar_connection_pairing_capability)
 
 if(CONFIG_LTO)
     set_source_files_properties(src/zboss_mem_globals.c PROPERTIES COMPILE_OPTIONS -fno-lto)

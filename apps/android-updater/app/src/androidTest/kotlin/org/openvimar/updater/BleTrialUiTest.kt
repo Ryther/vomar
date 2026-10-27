@@ -28,8 +28,8 @@ class BleTrialUiTest:ActivityInstrumentationTestCase2<BleTrialActivity>(BleTrial
  private val address="AA:BB:CC:DD:EE:FF"
  private lateinit var metadata:JsonObject
  private fun hash(role:String)=metadata.getValue(role).jsonObject.getValue("signedRegionSha256").jsonPrimitive.content
- private inner class Radio:BleTransport,MigrationBootTransport {
-  @Volatile var writes=0;@Volatile var resets=0;var uploadGate:CompletableDeferred<Unit>?=null
+ private inner class Radio:BleTransport,MigrationBootTransport,ZigbeePairingTransport {
+  @Volatile var pairingRequests=0;@Volatile var writes=0;@Volatile var resets=0;var uploadGate:CompletableDeferred<Unit>?=null
   var remote=RemoteImages(RemoteImage(metadata.getValue("allowedSourceSignedHashes").jsonArray[0].jsonPrimitive.content,false,true,"0.5.5"),RemoteImage(hash("recovery"),true,true))
   override suspend fun connect(address:String){}
   override suspend fun identityV2()=RuntimeIdentity(2,"VIMAR30805",2,listOf("11223344","55667788"),"",LoaderContract(LoaderContract.COMMON,metadata.getValue("loaderContracts").jsonArray[0].jsonObject.getValue("sha256").jsonPrimitive.content),"12".repeat(32))
@@ -38,6 +38,8 @@ class BleTrialUiTest:ActivityInstrumentationTestCase2<BleTrialActivity>(BleTrial
   override suspend fun upload(data:ByteArray,onAck:suspend(Int)->Unit){writes++;onAck(data.size/2);uploadGate?.await();onAck(data.size);remote=remote.copy(primary=RemoteImage(hash("main"),false,true))}
   override suspend fun reset():ResetAck{resets++;return ResetAck.ACKNOWLEDGED}
   override suspend fun bootMigration(expectedHash:String)=error("No migration expected in this synthetic native test")
+  override suspend fun pairingCapabilities()=ZigbeePairingCapabilities(1,120,true)
+  override suspend fun startZigbeePairing():ResetAck {pairingRequests++;return ResetAck.ACKNOWLEDGED}
   override suspend fun close(){}
  }
  override fun setUp(){
@@ -233,4 +235,36 @@ class BleTrialUiTest:ActivityInstrumentationTestCase2<BleTrialActivity>(BleTrial
   assertFalse(context.packageManager.getServiceInfo(android.content.ComponentName(context,BleTrialService::class.java),0).exported)
   assertFalse(context.packageManager.getActivityInfo(android.content.ComponentName(context,BleTrialActivity::class.java),0).exported)
  }
+ fun testZigbeePairingNeedsExplicitConfirmationWithoutFirmwareSelection(){
+  setActivityIntent(Intent(instrumentation.targetContext,BleTrialActivity::class.java).putExtra("pairingOnly",true))
+  val screen=activity;instrumentation.waitForIdleSync()
+  assertNull(runtime.selection.value)
+  assertFalse(button("ble.trial.choose").getGlobalVisibleRect(android.graphics.Rect()))
+  assertTrue(button("ble.pairing.review").isEnabled)
+  runBlocking{runtime.controller.inspectPairing(address)}
+  waitUntil{runtime.controller.state.value.pairingReview!=null&&!runtime.controller.state.value.busy}
+  var nativeState=""
+  try{waitUntil{
+   var ready=false
+   instrumentation.runOnMainSync{
+    val foreground=BleTrialActivity::class.java.getDeclaredField("foreground").apply{isAccessible=true}.getBoolean(screen)
+    val button=button("ble.pairing.review")
+    nativeState="foreground=$foreground focus=${screen.hasWindowFocus()} shown=${button.isShown} enabled=${button.isEnabled} text=${button.text}"
+    ready=foreground&&button.isShown&&button.isEnabled&&button.text.toString()=="Review Zigbee pairing"
+   }
+   ready
+  }}catch(failure:AssertionError){capture("zigbee-pairing-not-ready");throw AssertionError(nativeState,failure)}
+  instrumentation.runOnMainSync{button("ble.pairing.review").performClick()}
+  instrumentation.waitForIdleSync()
+  val field=BleTrialActivity::class.java.getDeclaredField("dialog").apply{isAccessible=true}
+  val shown=field.get(screen) as AlertDialog
+  assertTrue(shown.isShowing);assertEquals(0,radio.pairingRequests)
+  capture("zigbee-pairing-review")
+  instrumentation.runOnMainSync{shown.getButton(AlertDialog.BUTTON_POSITIVE).performClick()}
+  waitUntil{!runtime.controller.state.value.busy&&runtime.controller.state.value.acknowledged==true}
+  assertEquals(1,radio.pairingRequests);assertEquals(0,radio.writes);assertEquals(0,radio.resets)
+  assertNull(runtime.controller.state.value.pairingReview)
+  capture("zigbee-pairing-acknowledged")
+ }
+
 }

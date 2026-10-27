@@ -18,9 +18,11 @@ internal interface BleGateway {
  suspend fun chunk(data:ByteArray,offset:Int,image:Int):Chunk
  suspend fun reset()
  suspend fun bootMigration(hash:String):ResetAck=error("Purpose-specific migration boot gateway unavailable")
+ suspend fun pairingCapabilities():ZigbeePairingCapabilities=error("Zigbee pairing unavailable on this recovery")
+ suspend fun startZigbeePairing():ResetAck=error("Zigbee pairing unavailable on this recovery")
  fun close()
 }
-class NordicBleTransport internal constructor(private val expectedAddress:String,private val gateway:BleGateway):BleTransport,MigrationBootTransport,BootHistoryTransport {
+class NordicBleTransport internal constructor(private val expectedAddress:String,private val gateway:BleGateway):BleTransport,MigrationBootTransport,BootHistoryTransport,ZigbeePairingTransport {
  constructor(context:android.content.Context,address:String):this(address,AndroidBleGateway(context,address))
  private val command=Mutex()
  private suspend fun <T> serial(block:suspend()->T):T=command.withLock {
@@ -30,6 +32,11 @@ class NordicBleTransport internal constructor(private val expectedAddress:String
  override suspend fun identity():RuntimeIdentity=serial {gateway.checkReady();gateway.identity()}
  override suspend fun identityV2():RuntimeIdentity=serial {gateway.checkReady();gateway.identityV2()}
  override suspend fun bootHistory():RecoveryBootHistory=serial {gateway.checkReady();gateway.bootHistory()}
+ override suspend fun pairingCapabilities():ZigbeePairingCapabilities=serial {gateway.checkReady();gateway.pairingCapabilities()}
+ override suspend fun startZigbeePairing():ResetAck=serial {
+  gateway.checkReady()
+  try{gateway.startZigbeePairing()}catch(_:TransportDisconnected){ResetAck.LOST}catch(_:ResetResponseLost){ResetAck.LOST}
+ }
  override suspend fun images():RemoteImages=serial {
   gateway.checkReady()
   val rows=gateway.images();check(rows.all{it.image==0 && it.slot in 0..1}){"Foreign image/slot"}

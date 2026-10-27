@@ -40,6 +40,7 @@ class BleTrialControllerTest {
         var holdImages:CompletableDeferred<Unit>?=null
         var imagesEntered=CompletableDeferred<Unit>()
         var reset=ResetAck.ACKNOWLEDGED
+        var pairingRequests=0
         var checkpoint:Checkpoint?=null
         var identity=RuntimeIdentity(2,"VIMAR30805",2,listOf("11223344","55667788"),"",
             LoaderContract(LoaderContract.COMMON,manifest.getValue("loaderContracts").jsonArray[0].jsonObject.getValue("sha256").jsonPrimitive.content),"12".repeat(32))
@@ -54,7 +55,7 @@ class BleTrialControllerTest {
             override suspend fun save(checkpoint:BootstrapCheckpoint){error("Modern target must not enter bootstrap")}
         }
         private fun check(){check(leased){"Global lease missing"};check(permission){"Bluetooth permission revoked"}}
-        private fun radio(expected:String,guard:()->Unit)=object:BleTransport {
+        private fun radio(expected:String,guard:()->Unit)=object:BleTransport,ZigbeePairingTransport {
             override suspend fun connect(address:String){guard();check();require(address==expected)}
             override suspend fun identityV2():RuntimeIdentity {guard();check();return identity}
             override suspend fun identity():RuntimeIdentity {guard();check();return identity}
@@ -64,6 +65,11 @@ class BleTrialControllerTest {
                 writes++;onAck(data.size/2);uploadEntered.complete(Unit);uploadGate?.await();onAck(data.size);remote=remote.copy(primary=RemoteImage(hash("main"),false,true,"0.6.0"))
             }
             override suspend fun reset():ResetAck {guard();check();resets++;resetEntered.complete(Unit);resetGate?.await();return reset}
+            override suspend fun pairingCapabilities()=ZigbeePairingCapabilities(1,120,true)
+            override suspend fun startZigbeePairing():ResetAck {
+                guard();check();assertTrue(reports.last().pairing);assertTrue(reports.last().busy)
+                pairingRequests++;return reset
+            }
             override suspend fun close(){closes++}
         }
         val reports=mutableListOf<BleTrialState>()
@@ -229,4 +235,23 @@ class BleTrialControllerTest {
         candidate()
         assertThrows(Exception::class.java){CommonPackageValidator.validate(CommonPackageReader.read(bytes.inputStream()),key,"9.0.0")}
     }
+    @Test fun pairingNeedsFreshReviewAndDurableIntentWithoutFirmwareSelection()=runBlocking {
+        val h=Harness();h.loader={error("Pairing needs no firmware package")}
+        h.controller.inspectPairing(address,h.identity.uid)
+        val review=requireNotNull(h.controller.state.value.pairingReview)
+        assertEquals(0,h.pairingRequests)
+        h.controller.executePairing(review.id)
+        assertEquals(1,h.pairingRequests);assertEquals(0,h.writes);assertEquals(0,h.resets)
+        assertEquals(true,h.controller.state.value.acknowledged)
+        h.controller.executePairing(review.id);assertEquals(1,h.pairingRequests)
+    }
+    @Test fun pairingLostAckIsUncertainAndCannotReplayTheReview()=runBlocking {
+        val h=Harness();h.reset=ResetAck.LOST
+        h.controller.inspectPairing(address)
+        h.controller.executePairing(requireNotNull(h.controller.state.value.pairingReview).id)
+        assertEquals(false,h.controller.state.value.acknowledged)
+        assertTrue(h.controller.state.value.status.contains("uncertain",true))
+        assertNull(h.controller.state.value.pairingReview);assertEquals(1,h.pairingRequests)
+    }
+
 }

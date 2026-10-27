@@ -101,7 +101,7 @@ def test_actual_project_pinned_key_accepts_only_exact_common_candidate_migration
     library = tmp_path / 'actual.so'
     subprocess.run(['cc', '-shared', '-fPIC', '-std=c11', '-Wno-deprecated-declarations',
         '-DOTA_IMAGE_AUTH_ONLY', '-DOTA_IMAGE_HOST', '-I' + str(ROOT / 'firmware/recovery/src'),
-        '-I' + str(ROOT / 'firmware/ota'), str(ROOT / 'firmware/recovery/src/recovery_primary.c'),
+        '-I' + str(ROOT / 'firmware/src'), '-I' + str(ROOT / 'firmware/ota'), str(ROOT / 'firmware/recovery/src/recovery_primary.c'),
         str(ROOT / 'firmware/ota/ota_image.c'), '-lcrypto', '-o', str(library)], check=True)
     fn = ctypes.CDLL(str(library)).recovery_primary_validate_migration
     fn.argtypes = [ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]

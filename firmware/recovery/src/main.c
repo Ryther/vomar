@@ -1,6 +1,9 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
 #include <zephyr/kernel.h>
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+#include "recovery_pairing.h"
+#endif
 #include <zephyr/logging/log.h>
 #include <zephyr/mgmt/mcumgr/transport/smp_bt.h>
 #include <zephyr/settings/settings.h>
@@ -151,6 +154,9 @@ int main(void)
 #endif
 #if defined(CONFIG_VIMAR_RECOVERY_MIGRATION_EXEC)
 	recovery_migration_register();
+#endif
+#if defined(CONFIG_VIMAR_RECOVERY_PAIRING)
+    recovery_pairing_register();
 #endif
 	k_work_init(&advertise_work, advertise);
 	k_work_submit(&advertise_work);

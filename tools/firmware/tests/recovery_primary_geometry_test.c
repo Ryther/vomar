@@ -4,6 +4,7 @@
 #include <string.h>
 #include "recovery_primary.h"
 #include "ota_image.h"
+#include "connection_capability.h"
 #include "recovery_main_allowlist.h"
 static bool allowlisted;
 static uint8_t role,authenticated_profile;
@@ -45,5 +46,14 @@ int main(void)
  put32(image+516,0xc201);allowlisted=false;
  assert(recovery_primary_validate(image,sizeof(image))==-EACCES);
  assert(recovery_primary_validate(image,519)==-EINVAL);
+ put32(image+512,0x20001000);put32(image+516,0xc201);
+ role=OTA_IMAGE_ROLE_MAIN;authenticated_profile=2;put32(image+12,64);
+ assert(recovery_primary_validate_pairing(image,sizeof(image))==-ENOTSUP);
+ const uint8_t capability[]=CONNECTION_PAIRING_CAPABILITY_BYTES;
+ memcpy(image+532,capability,sizeof(capability));
+ assert(!recovery_primary_validate_pairing(image,sizeof(image)));
+ put32(image+12,8);assert(recovery_primary_validate_pairing(image,sizeof(image))==-ENOTSUP);
+ put32(image+12,64);role=OTA_IMAGE_ROLE_NONE;allowlisted=true;
+ assert(recovery_primary_validate_pairing(image,sizeof(image))==-EACCES);
  return 0;
 }

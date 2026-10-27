@@ -12,6 +12,7 @@ static int clear(void *ctx){(void)ctx;op('B');return clear_error;}
 static void reboot(void *ctx){(void)ctx;op('R');reboots++;}
 static const struct recovery_exit_io io={.persist=persist,.verify=verify,.flush=flush,.clear_boot=clear,.reboot=reboot};
 static void reset(void){stored=0;valid=1;flush_error=clear_error=store_error=reboots=0;count=0;order[0]=0;}
+static int pairing_request(void){op('P');return store_error;}
 int main(void)
 {
  struct recovery_exit_control c;
@@ -59,5 +60,22 @@ int main(void)
  assert(!recovery_exit_attempt(&c,&io));
  reset();recovery_exit_control_init(&c,-EIO,0);
  assert(recovery_exit_attempt(&c,&io)==-EBUSY);
+ /* Pairing must own an admitted command, then wait for successful output. */
+ reset();recovery_exit_control_init(&c,0,0);
+ assert(recovery_exit_pairing_request(&c,&io)==-EBUSY);
+ assert(!recovery_exit_command_begin(&c,false,&io));
+ assert(!recovery_exit_pairing_request(&c,&io)&&c.exiting&&!c.pairing_ready);
+ assert(recovery_exit_pairing_attempt(&c,&io,pairing_request)==-EBUSY&&reboots==0);
+ recovery_exit_command_done(&c);recovery_exit_pairing_done(&c,false);
+ assert(!c.exiting&&!c.pairing_pending&&reboots==0);
+ assert(!recovery_exit_command_begin(&c,false,&io));
+ assert(!recovery_exit_pairing_request(&c,&io));
+ recovery_exit_command_done(&c);recovery_exit_pairing_done(&c,true);
+ assert(c.pairing_ready);order[0]=0;count=0;
+ assert(!recovery_exit_pairing_attempt(&c,&io,pairing_request));
+ assert(!strcmp(order,"VFBPR")&&reboots==1);
+ reset();recovery_exit_control_init(&c,1,1);
+ assert(!recovery_exit_command_begin(&c,false,&io));
+ assert(recovery_exit_pairing_request(&c,&io)==-EBUSY&&reboots==0);
  return 0;
 }

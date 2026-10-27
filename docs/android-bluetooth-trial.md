@@ -77,3 +77,13 @@ stock target. It uses the same single **Choose firmware** action.
 The delivered APK's host/emulator checks are software evidence. Earlier phone trials do not qualify every source/recovery pair. Physical
 phone pairing, radio and actual lamp acceptance for the exact 1.0.0 set remain
 separate from its bounded DK runtime test. See [evidence scope](research-summary.md).
+
+## Explicit Zigbee pairing on supporting firmware
+
+The feature-branch Android client adds **Devices → device → Zigbee pairing**.
+Inspect without selecting a firmware package, then review and explicitly confirm
+replacement of the current Zigbee network. Supporting MAIN/recovery performs a
+two-minute pairing window; unsupported recovery is refused without a reset
+fallback. See [Connection modes](connection-modes.md) for physical entry, colours,
+retained settings and uncertain-acknowledgment handling. Existing released packages
+and physical qualification are not upgraded by this source change.

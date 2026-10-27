@@ -17,6 +17,7 @@ nav:
       - Desktop: desktop.md
       - Troubleshooting: troubleshooting.md
   - Device operations:
+      - Connection modes and Zigbee pairing: connection-modes.md
       - Package and recovery rules: offline-guide.md
       - Android first installation: android-first-install.md
       - Bluetooth qualification trial: android-bluetooth-trial.md

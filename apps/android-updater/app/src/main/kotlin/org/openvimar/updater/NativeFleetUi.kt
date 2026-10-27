@@ -469,6 +469,7 @@ internal class NativeFleetUi(
             add(NativeUi.disclosure(activity,"Diagnostics","Hide diagnostics",diagnostics,record.id in diagnosticsExpanded){if(it)diagnosticsExpanded.add(record.id)else diagnosticsExpanded.remove(record.id)});add(diagnostics,gap=0)
         }
         action("Update firmware"){activity.startActivity(Intent(activity,BleTrialActivity::class.java).putExtra("deviceId",record.id))}
+        action("Zigbee pairing"){activity.startActivity(Intent(activity,BleTrialActivity::class.java).putExtra("deviceId",record.id).putExtra("pairingOnly",true))}
         originalBackups[normalUid(record.uid)]?.let{hash->action("Original firmware"){activity.startActivity(Intent(activity,OriginalRestoreActivity::class.java).putExtra("backup",hash).putExtra("deviceName",record.name))}}
         action("Edit name and room"){editRecord(record)}
         action("Remove from Devices"){
@@ -491,7 +492,7 @@ internal class NativeFleetUi(
         action("Search Bluetooth",filled=true,enabled=!state.busy){searchBluetooth()}
         val modes=column().apply{visibility=View.GONE}
         copy("Blue / green: a Bluetooth session. It returns to Zigbee after a minute without activity; an update keeps it open.",modes)
-        copy("Blue / red: recovery. Hold both buttons for 5 seconds to request a safe return to Zigbee. Earlier firmware may need the app to exit recovery.",modes)
+        copy("Blue / red: recovery. Incomplete updates keep recovery active. On supporting firmware, hold both buttons for five seconds, release both, then choose Up for Zigbee pairing or Down for Bluetooth. Up forgets the old Zigbee network.",modes)
         action("About Bluetooth modes"){modes.visibility=if(modes.visibility==View.VISIBLE)View.GONE else View.VISIBLE}
         add(modes,gap=0)
         section("Import from Zigbee")

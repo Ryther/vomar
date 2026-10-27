@@ -199,6 +199,32 @@ reconciliation. Do not start a second update based only on a retained message.
 A target left halted after verified FLASH readback is not necessarily a failed
 install: the separate reviewed start still has to occur.
 
+## Connection selector and Zigbee pairing on supporting firmware
+
+This is feature-branch behavior requiring matching MAIN, recovery and Android
+components; do not assume installed 1.0.0 or a published client supports it. Hold
+both buttons for five seconds: violet/green opens a 30-second selector. Release
+both fully, then Up forgets only the Zigbee network and pairs for two minutes
+(blue/violet); Down enters Bluetooth service (blue/green). Selection presses do
+not operate the light. Network replacement preserves dimmer settings, light state,
+Bluetooth bonds and originals; the old coordinator may retain its device entry.
+Successful stack association flashes yellow rapidly for three seconds, then
+restores normal LED behavior. This is not proof of a completed coordinator
+interview. Protection indication wins. First installation automatically starts
+one bounded pairing window; normal restarts retain/rejoin an existing network.
+An already used uncommissioned initial window does not restart on each reboot.
+
+Android exposes Devices → device → Zigbee pairing. Enable Bluetooth, explicitly
+inspect the live target/capability, enable permit join on the intended coordinator,
+then review and confirm Start Zigbee pairing. No firmware package is required.
+Unsupported recovery refuses this command; no reset fallback is used. Partial or
+active updates and invalid MAIN block exit. Acknowledgment means request accepted,
+not association completed. Lost acknowledgment/Stop leaves an uncertain outcome;
+never auto-retry or reuse a review. Desktop has no equivalent pairing control yet.
+The existing 60-second ordinary Bluetooth idle return remains; exceptional or
+partial-update recovery remains active, with blue/red rather than ordinary
+blue/green. Physical qualification of this new feature is pending.
+
 ## Diagnose without guessing
 
 | Symptom | Next checks |

@@ -17,6 +17,11 @@ class ZigbeeLedRuntimeTests(unittest.TestCase):
 #include <stdint.h>
 #include <stdbool.h>
 #include "led_controller.h"
+#include "connection_pairing.h"
+static bool connection_selecting;
+static uint64_t connection_selector_since;
+static struct connection_pairing connection_pairing;
+static bool vimar_power_protection_blocked(void){return false;}
 typedef bool zb_bool_t;
 struct { uint8_t led_runtime_r,led_runtime_g,led_runtime_b,led_runtime_intensity,led_runtime_effect; bool led_override_active; } context;
 struct { struct led_controller leds; struct { struct { bool on; uint8_t level; struct { bool active; } fault; } state; } model; } controller;
@@ -60,6 +65,13 @@ int main(void) {
    refresh_led_runtime(i);
  }
  assert(reports<=before+2);
+ connection_selecting=true;connection_selector_since=1200;
+ connection_pairing_start(&connection_pairing,1200);
+ assert(connection_pairing_joined(&connection_pairing,1300));
+ refresh_led_runtime(1300);
+ assert(context.led_runtime_r==255&&context.led_runtime_g==255&&context.led_runtime_b==0);
+ connection_pairing_tick(&connection_pairing,4300);refresh_led_runtime(4300);
+ assert(context.led_runtime_r==255&&context.led_runtime_g==0&&context.led_runtime_b==255);
  return 0;
 }
 '''
@@ -67,7 +79,7 @@ int main(void) {
             test = Path(temporary)/'test.c'
             exe = Path(temporary)/'test'
             test.write_text(harness)
-            result = subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-I',str(REPO/'firmware/src'),str(test),str(REPO/'firmware/src/led_controller.c'),str(REPO/'firmware/src/dimmer_config.c'),'-o',str(exe)], capture_output=True,text=True)
+            result = subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-I',str(REPO/'firmware/src'),str(test),str(REPO/'firmware/src/led_controller.c'),str(REPO/'firmware/src/connection_pairing.c'),str(REPO/'firmware/src/wireless_status_led.c'),str(REPO/'firmware/src/dimmer_config.c'),'-o',str(exe)], capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
             subprocess.run([str(exe)],check=True)
 
