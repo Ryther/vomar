@@ -1,7 +1,7 @@
 package org.openvimar.updater.ble
 
-import io.runtime.mcumgr.*
-import io.runtime.mcumgr.response.McuMgrResponse
+import no.nordicsemi.android.mcumgr.*
+import no.nordicsemi.android.mcumgr.response.McuMgrResponse
 import org.openvimar.updater.core.*
 
 /** Exactly group 0x8041 READ command 0; no write/reset variant exists here. */

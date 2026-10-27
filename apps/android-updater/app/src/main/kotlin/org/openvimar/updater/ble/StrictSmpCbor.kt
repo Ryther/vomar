@@ -1,6 +1,6 @@
 package org.openvimar.updater.ble
 
-import io.runtime.mcumgr.response.McuMgrResponse
+import no.nordicsemi.android.mcumgr.response.McuMgrResponse
 import java.nio.ByteBuffer
 import java.nio.charset.CodingErrorAction
 

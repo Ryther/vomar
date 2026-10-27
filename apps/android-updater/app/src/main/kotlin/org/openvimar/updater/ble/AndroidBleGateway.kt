@@ -6,12 +6,12 @@ import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import io.runtime.mcumgr.*
-import io.runtime.mcumgr.ble.McuMgrBleTransport
-import io.runtime.mcumgr.ble.exception.McuMgrDisconnectedException
-import io.runtime.mcumgr.exception.*
-import io.runtime.mcumgr.managers.*
-import io.runtime.mcumgr.response.McuMgrResponse
+import no.nordicsemi.android.mcumgr.*
+import no.nordicsemi.android.mcumgr.ble.McuMgrBleTransport
+import no.nordicsemi.android.mcumgr.ble.exception.McuMgrDisconnectedException
+import no.nordicsemi.android.mcumgr.exception.*
+import no.nordicsemi.android.mcumgr.managers.*
+import no.nordicsemi.android.mcumgr.response.McuMgrResponse
 import kotlinx.coroutines.*
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -67,7 +67,7 @@ internal class AndroidBleGateway(context:Context,private val address:String):Ble
   val initialBond=InitialBondQueue()
   var initializationFailure:Exception?=null
   val owned=object:McuMgrBleTransport(context,peer) {
-   // McuMgr2.7.4 makes initialize() final. The pinned Ble2.11 callback's
+   // McuMgr3.4.1 makes initialize() final. The pinned Ble2.11 callback's
    // initGatt queue is prepended to it, after discovery on the live LE link.
    // This avoids relying on CCC authentication to display pairing on Android16.
    @Suppress("DEPRECATION","OVERRIDE_DEPRECATION")
@@ -159,11 +159,11 @@ internal class AndroidBleGateway(context:Context,private val address:String):Ble
   checkReady();val manager=bootHistoryManager ?: error("Bluetooth boot-history manager unavailable")
   return request{cb:McuMgrCallback<RecoveryBootHistoryResponse> -> manager.read(cb)}.history()
  }
- override suspend fun images():List<Slot>{checkReady();val manager=imageManager ?: error("Bluetooth connection closed");val response=request{cb:McuMgrCallback<io.runtime.mcumgr.response.img.McuMgrImageStateResponse> -> manager.list(cb)}
+ override suspend fun images():List<Slot>{checkReady();val manager=imageManager ?: error("Bluetooth connection closed");val response=request{cb:McuMgrCallback<no.nordicsemi.android.mcumgr.response.img.McuMgrImageStateResponse> -> manager.list(cb)}
   return response.images?.map{Slot(it.image,it.slot,it.hash?.joinToString(""){byte->"%02x".format(byte.toInt() and 255)},it.active,it.bootable,it.version)} ?: error("Missing image records")
  }
- override suspend fun chunk(data:ByteArray,offset:Int,image:Int):Chunk{checkReady();val manager=imageManager ?: error("Bluetooth connection closed");val response=request{cb:McuMgrCallback<io.runtime.mcumgr.response.img.McuMgrImageUploadResponse> -> manager.upload(data,offset,image,cb)};return Chunk(response.off,response.match)}
- override suspend fun reset(){checkReady();val manager=osManager ?: error("Bluetooth connection closed");try{request{cb:McuMgrCallback<io.runtime.mcumgr.response.dflt.McuMgrOsResponse> -> manager.reset(cb)}}catch(_:McuMgrTimeoutException){throw ResetResponseLost()}catch(t:TimeoutCancellationException){currentCoroutineContext().ensureActive();throw ResetResponseLost()}}
+ override suspend fun chunk(data:ByteArray,offset:Int,image:Int):Chunk{checkReady();val manager=imageManager ?: error("Bluetooth connection closed");val response=request{cb:McuMgrCallback<no.nordicsemi.android.mcumgr.response.img.McuMgrImageUploadResponse> -> manager.upload(data,offset,image,cb)};return Chunk(response.off,response.match)}
+ override suspend fun reset(){checkReady();val manager=osManager ?: error("Bluetooth connection closed");try{request{cb:McuMgrCallback<no.nordicsemi.android.mcumgr.response.dflt.McuMgrOsResponse> -> manager.reset(cb)}}catch(_:McuMgrTimeoutException){throw ResetResponseLost()}catch(t:TimeoutCancellationException){currentCoroutineContext().ensureActive();throw ResetResponseLost()}}
  override suspend fun bootMigration(hash:String):org.openvimar.updater.core.ResetAck {
   checkReady();val manager=migrationManager ?: error("Migration boot manager unavailable")
   return try{request{cb:McuMgrCallback<MigrationBootResponse> -> manager.boot(hash,cb)}.acknowledgement()}
