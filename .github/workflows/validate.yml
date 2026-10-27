@@ -24,9 +24,9 @@ jobs:
       - run: python -m pip install --no-deps --no-build-isolation -e .
       - run: python -m tools.release.component_versions --output reports/component-versions.json
       - run: python -m tools.release.public_tree
-      - run: python -m pytest tools/release/tests tools/dev/tests apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
-      - run: python -m coverage run --source=vomar_updater -m pytest apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
+      - run: python -m coverage run --source=. -m pytest tools/release/tests tools/dev/tests apps/desktop-updater/tests --ignore=apps/desktop-updater/tests/test_gui.py
       - run: mkdir -p reports && python -m coverage xml -o reports/python-coverage.xml
+      - run: python -m tools.release.prepare_pr_analysis --python-coverage reports/python-coverage.xml --repository .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: {name: 'python-reports-${{ inputs.sha || github.sha }}', path: reports, if-no-files-found: error}
   devcontainer:
@@ -36,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with: {node-version: '24.22.1'}
       - run: npm ci --prefix .devcontainer/assistants --omit=dev --ignore-scripts
       - name: Build and reopen the single development configuration
@@ -175,7 +175,6 @@ jobs:
         include:
           - {runner: ubuntu-22.04, platform: linux-x64}
           - {runner: windows-2022, platform: windows-x64}
-          - {runner: macos-15-intel, platform: macos-x64}
           - {runner: macos-15, platform: macos-arm64}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -187,24 +186,7 @@ jobs:
       - name: Install Linux GUI runtime before tests
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libglib2.0-0 libdbus-1-3 libfontconfig1 fonts-dejavu-core libegl1 libgl1 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0
-      - name: Build Intel macOS cryptography with static OpenSSL
-        if: matrix.platform == 'macos-x64'
-        shell: bash
-        run: |
-          printf 'OPENSSL_DIR=%s\n' "$(brew --prefix openssl@3)" >> "$GITHUB_ENV"
-          printf 'OPENSSL_STATIC=1\nPIP_NO_BINARY=cryptography\nPIP_NO_CACHE_DIR=1\n' >> "$GITHUB_ENV"
       - run: python -m pip install --require-hashes -r requirements-desktop.lock
-      - name: Require static cryptography OpenSSL on Intel macOS
-        if: matrix.platform == 'macos-x64'
-        shell: bash
-        run: |
-          python - <<'PY'
-          import subprocess
-          from cryptography.hazmat.bindings import _rust
-          links=subprocess.check_output(['otool','-L',_rust.__file__],text=True)
-          if any('libssl' in line or 'libcrypto' in line for line in links.splitlines()[1:]):
-              raise SystemExit('cryptography must use static OpenSSL before freezing')
-          PY
       - run: python -m pip install --no-deps .
       - name: GUI and core tests
         env: {QT_QPA_PLATFORM: offscreen}
@@ -250,7 +232,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ inputs.sha || github.sha }}', persist-credentials: false}
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
         with: {node-version: '24.22.1'}
       - run: mkdir -p reports && node --test --experimental-test-coverage --test-reporter=lcov --test-reporter-destination=reports/lcov.info integrations/zigbee2mqtt/test/*.test.js
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9

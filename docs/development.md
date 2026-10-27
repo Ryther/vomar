@@ -104,14 +104,11 @@ PySide6, including in offscreen mode. The desktop and UX jobs install those
 libraries before tests; packaging prerequisites installed later cannot repair an
 earlier import failure.
 
-The macOS Intel job builds the locked cryptography source with static OpenSSL,
-an explicit Homebrew OpenSSL directory and no cached wheels. It verifies the
-native extension's links before freezing, then retains the actual frozen CLI,
-signed-package verification and GUI smoke checks. This avoids a collision
-between cryptography's build-time OpenSSL and another bundled `libssl.3.dylib`.
-See [cryptography's static macOS build procedure](https://cryptography.io/en/latest/installation/#building-cryptography-on-macos).
-The workflow change must still pass on an Intel runner; Linux checks cannot
-establish that native package's behavior.
+The supported desktop targets are Linux x64, Windows x64 and macOS Apple Silicon.
+Each native runner builds and checks its own package, including frozen CLI,
+signed-package verification and GUI smoke checks. Linux checks cannot establish
+another native platform's hardware behavior; actual qualification remains
+separate from hosted build and smoke results.
 
 Firmware and native CodeQL jobs reclaim unused Android/.NET/Haskell SDKs only
 on disposable GitHub-hosted runners and require 30 GiB free before setup. They

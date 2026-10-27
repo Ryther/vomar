@@ -14,11 +14,13 @@ Windows/macOS drivers or Bluetooth.
   the unsigned application through the normal Windows first-launch flow after
   checking the downloaded distribution checksums. DK USB access may require a
   compatible libusb/WinUSB driver selected deliberately for the probe interface.
-- macOS Intel and Apple Silicon: choose the matching DMG and copy Vomar to
+- macOS Apple Silicon (arm64): choose the arm64 DMG and copy Vomar to
   Applications. The CLI is `Vomar.app/Contents/MacOS/vomar-cli`. The initial bundle
   has ad-hoc integrity signing, without a trusted developer certificate or
   notarization. Use System Settings' normal approval flow. Bluetooth access is
   requested only when you initiate a scan/connection.
+
+Intel Mac packages are not currently provided.
 
 The target contracts are Ubuntu 22.04+ x64, Windows 10 1809+/11 x64 and macOS
 14.4+ on the matching architecture. Native runner checks and linked-library

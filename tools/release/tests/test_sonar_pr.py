@@ -6,9 +6,73 @@ import os
 import subprocess
 import xml.etree.ElementTree as ET
 from pathlib import Path
+import runpy
 
 import pytest
 import yaml
+
+
+@pytest.fixture
+def repository_python_report(tmp_path):
+    import coverage
+    repository=tmp_path/'repository';repository.mkdir()
+    files=('tools/release/manifest.py','apps/desktop-updater/src/vomar_updater/runtime.py')
+    for filename in files:
+        path=repository/filename;path.parent.mkdir(parents=True,exist_ok=True)
+        path.write_text('enabled=True\nif enabled:\n    value=7\nelse:\n    value=3\n')
+    report=tmp_path/'python-coverage.xml'
+    measured=coverage.Coverage(source=[str(repository)],branch=True,config_file=False,data_file=None)
+    measured.start()
+    try:
+        for filename in files:runpy.run_path(str(repository/filename))
+    finally:measured.stop()
+    measured.xml_report(outfile=str(report))
+    return repository,report
+
+
+def test_repository_python_coverage_survives_legacy_preparation_without_changing_measures(repository_python_report,tmp_path):
+    prepare=importlib.import_module('tools.release.prepare_pr_analysis')
+    repository,report=repository_python_report
+    original=ET.parse(report)
+    measures=ET.tostring(original.find('./packages'))
+    prepare.normalize_python_coverage(report,repository)
+    normalized=ET.parse(report)
+    assert normalized.findall('./sources/source')==[]
+    assert ET.tostring(normalized.find('./packages'))==measures
+    reports=tmp_path/'reports';reports.mkdir();report.rename(reports/report.name)
+    sha='a'*40
+    (reports/'component-versions.json').write_text(json.dumps({'commit':sha}))
+    (reports/'lcov.info').write_text('SF:integrations/zigbee2mqtt/index.js\nDA:1,1\nend_of_record\n')
+    for name in ('core-jacoco.xml','app-jacoco.xml'):(reports/name).write_text('<report><package name="synthetic"/></report>')
+    prepare.prepare(reports,repository,sha)
+    prepared=ET.parse(reports/report.name)
+    assert [source.text for source in prepared.findall('./sources/source')]==[str(repository)]
+    assert ET.tostring(prepared.find('./packages'))==measures
+    files={item.get('filename') for item in prepared.findall('.//class')}
+    assert files=={'tools/release/manifest.py','apps/desktop-updater/src/vomar_updater/runtime.py'}
+    for item in prepared.findall('.//class'):
+        assert (repository/item.get('filename')).is_file()
+        assert any(int(line.get('hits'))>0 for line in item.findall('./lines/line'))
+        assert any(line.get('condition-coverage')=='50% (1/2)' for line in item.findall('./lines/line'))
+
+
+@pytest.mark.parametrize('filename',['/tmp/outside.py','../outside.py','tools/../outside.py','C:/outside.py',r'tools\outside.py','tools/missing.py'])
+def test_repository_python_coverage_refuses_unsafe_or_missing_paths(repository_python_report,filename):
+    prepare=importlib.import_module('tools.release.prepare_pr_analysis')
+    repository,report=repository_python_report
+    tree=ET.parse(report);tree.find('.//class').set('filename',filename);tree.write(report)
+    original=report.read_bytes()
+    with pytest.raises(ValueError,match='coverage'):prepare.normalize_python_coverage(report,repository)
+    assert report.read_bytes()==original
+
+
+def test_repository_python_coverage_requires_exact_measured_repository(repository_python_report):
+    prepare=importlib.import_module('tools.release.prepare_pr_analysis')
+    repository,report=repository_python_report
+    tree=ET.parse(report);tree.find('./sources/source').text=str(repository/'apps');tree.write(report)
+    original=report.read_bytes()
+    with pytest.raises(ValueError,match='coverage'):prepare.normalize_python_coverage(report,repository)
+    assert report.read_bytes()==original
 
 
 def test_only_expected_successful_scan_with_reports_can_pass():
@@ -45,11 +109,17 @@ def test_export_retains_all_paginated_findings_and_missing_pages_fail(tmp_path):
         if path.endswith('/issues/search'):
             item = {**issue, 'key': str(params['p'])}
             return {'paging': {'pageIndex': params['p'], 'pageSize': 1, 'total': 2}, 'issues': [item]}
+        if path.endswith('/hotspots/search'):
+            assert params == {'projectKey': 'project', 'pullRequest': '8', 'p': 1, 'ps': 1}
+            return {'paging': {'pageIndex': 1, 'pageSize': 1, 'total': 1},
+                    'hotspots': [{'key': 'hotspot-one', 'status': 'TO_REVIEW'}]}
         field = 'components' if path.endswith('component_tree') else 'hotspots'
         return {'paging': {'pageIndex': 1, 'pageSize': 1, 'total': 0}, field: []}
     result = report.export_analysis(fetch, 'project', tmp_path, pull_request='8', page_size=1)
     assert [i['key'] for i in result['issues']] == ['1', '2']
     assert json.loads((tmp_path/'issues.json').read_text())[1]['flows'] == issue['flows']
+    assert json.loads((tmp_path/'hotspots.json').read_text()) == [
+        {'key': 'hotspot-one', 'status': 'TO_REVIEW'}]
     assert (tmp_path/'report.md').is_file()
     def missing(path, params):
         value = fetch(path, params)
@@ -359,3 +429,61 @@ def test_report_cli_rejects_community_pr_export(tmp_path, monkeypatch, capsys):
         report.main()
     assert stopped.value.code == 2
     assert 'PR export requires Cloud backend' in capsys.readouterr().err
+
+
+@pytest.mark.parametrize('hotspot_parameter,export_status', [('project', '0'), ('projectKey', '0'), ('project', '1')])
+def test_cloud_workflow_adapts_only_protected_hotspot_requests(tmp_path, hotspot_parameter, export_status):
+    import sys
+    workflow = yaml.safe_load((Path(__file__).resolve().parents[3]/
+                               '.github/workflows/sonar-pr.yml').read_text())
+    step = next(step for step in workflow['jobs']['cloud']['steps']
+                if step.get('name') == 'Export complete PR findings')
+    package = tmp_path/'trusted/tools/release'
+    package.mkdir(parents=True)
+    for parent in (package, package.parent):
+        (parent/'__init__.py').write_text('')
+    (package/'sonar_report.py').write_text('''
+import json
+import os
+from pathlib import Path
+
+def _http_fetch(host, token):
+    assert host == "https://sonarcloud.io" and token == ""
+    def fetch(path, params):
+        if path == "/api/hotspots/search":
+            assert params == {"projectKey": "Ryther_vomar", "pullRequest": "8", "p": 2, "ps": 500}
+        else:
+            assert path == "/api/issues/search"
+            assert params == {"componentKeys": "Ryther_vomar", "resolved": "false", "pullRequest": "8", "p": 1, "ps": 500}
+        with Path("calls.jsonl").open("a") as output:
+            output.write(json.dumps({"path": path, "params": params})+"\\n")
+        return {}
+    return fetch
+
+def export_candidate(fetch, project, directory, pull_request, sha, receipt):
+    assert project == "Ryther_vomar" and pull_request == "8" and sha == "a"*40
+    assert directory == Path("sonar-report") and receipt == Path("sonar-report/task/report-task.txt")
+    assert receipt.read_text() == "projectKey=Ryther_vomar\\nceTaskId=task-A\\n"
+    fetch("/api/hotspots/search", {os.environ["HOTSPOT_PARAMETER"]: project, "pullRequest": pull_request, "p": 2, "ps": 500})
+    fetch("/api/issues/search", {"componentKeys": project, "resolved": "false", "pullRequest": pull_request, "p": 1, "ps": 500})
+    (directory/"report.md").write_text("# Protected exporter report\\n")
+    if os.environ["EXPORT_STATUS"] != "0":
+        raise ValueError("Synthetic protected exporter failure")
+''')
+    candidate = tmp_path/'candidate/tools/release'
+    candidate.mkdir(parents=True)
+    (candidate/'sonar_report.py').write_text('raise AssertionError("Candidate helper must never execute")\n')
+    receipt = tmp_path/'sonar-report/task/report-task.txt'
+    receipt.parent.mkdir(parents=True)
+    receipt.write_text('projectKey=Ryther_vomar\nceTaskId=task-A\n')
+    summary = tmp_path/'summary.md'
+    result = subprocess.run(['bash', '-e', '-c', step['run']], cwd=tmp_path,
+                            env={'PATH': str(Path(sys.executable).parent)+os.pathsep+os.defpath,
+                                 'SONAR_TOKEN': '', 'PR_NUMBER': '8', 'CANDIDATE_SHA': 'a'*40,
+                                 'SCAN_OUTCOME': 'success', 'EXPORT_STATUS': export_status,
+                                 'HOTSPOT_PARAMETER': hotspot_parameter,
+                                 'GITHUB_STEP_SUMMARY': str(summary)}, capture_output=True, text=True)
+    calls = [json.loads(line) for line in (tmp_path/'calls.jsonl').read_text().splitlines()]
+    assert [call['path'] for call in calls] == ['/api/hotspots/search', '/api/issues/search']
+    assert summary.read_text() == '# Protected exporter report\n'
+    assert result.returncode == int(export_status)

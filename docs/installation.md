@@ -9,7 +9,7 @@ client does not authorize that procedure.
 ## Before downloading
 
 - Choose Android or the native desktop package for your OS and architecture.
-  Desktop targets are Linux x64, Windows x64, macOS Intel and macOS arm64;
+  Desktop targets are Linux x64, Windows x64 and macOS Apple Silicon (arm64);
   target contracts and platform limitations are in [Desktop](desktop.md).
 - Obtain artifacts from a reviewed project distribution. Check its version,
   source commit, component versions, qualification scope and `SHA256SUMS`.
@@ -55,7 +55,7 @@ Use the package instructions in [Desktop → Install](desktop.md#install):
   the installed `vomar-gui` and `vomar` launchers under `~/.local/bin`.
 - **Windows x64:** run the per-user installer or extract the portable ZIP.
   Review the normal first-launch approval for the unsigned desktop application.
-- **macOS:** choose the matching Intel/arm64 DMG and copy Vomar to Applications.
+- **macOS Apple Silicon:** choose the arm64 DMG and copy Vomar to Applications.
   The current packaging uses ad-hoc signing, without trusted developer signing
   or notarization; review the normal OS approval rather than disabling platform
   protection globally.

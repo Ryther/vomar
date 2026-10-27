@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Vomar signed firmware updater and device management"
 requires-python = ">=3.13,<3.14"
 license = "MIT"
-dependencies = ["bleak==3.0.2", "cbor2==6.1.5", "cryptography==50.0.2", "intelhex==2.3.0", "platformdirs==4.13.5", "keyring==25.7.0", "paho-mqtt==2.1.0", "pyelftools==0.32"]
+dependencies = ["bleak==3.0.2", "cbor2==6.1.5", "cryptography==50.0.2", "intelhex==2.3.0", "platformdirs==4.13.5", "keyring==25.7.0", "paho-mqtt==2.1.0", "pyelftools==0.33"]
 
 [project.optional-dependencies]
 gui = ["PySide6-Essentials==6.12.0"]

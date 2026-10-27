@@ -9,5 +9,5 @@ ruff==0.17.2
 mypy==2.4.0
 mkdocs-material==9.8.0
 commitizen==4.19.3
-pyelftools==0.32
-gcovr==8.5
+pyelftools==0.33
+gcovr==8.7

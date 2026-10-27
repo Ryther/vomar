@@ -63,6 +63,8 @@ def notices(output):
 
 
 def build(output,version):
+    if platform.system()=='Darwin' and platform.machine() not in ('arm64','aarch64'):
+        raise ValueError('macOS builds require Apple Silicon (arm64)')
     if not __import__('re').fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',version):raise ValueError('Distribution SemVer required')
     output=output.absolute();output.mkdir(parents=True,exist_ok=False)
     probe=probe_tools(output);licenses=notices(output)

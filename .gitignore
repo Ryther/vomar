@@ -1102,6 +1102,8 @@
 !/tools/release/evidence.py
 !/tools/release/inventory.py
 !/tools/release/tests/test_protected_evidence.py
+!/tools/release/tests/test_native_package.py
+!/tools/release/tests/test_assemble.py
 !/.github/required-checks.json
 
 !/tools/dev/tests/test_docs_site.py

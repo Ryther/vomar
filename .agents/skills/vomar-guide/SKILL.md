@@ -37,7 +37,8 @@ A compatible upgrade retains package identity and signing continuity. Do not
 uninstall an existing app to bypass a signer mismatch or delete its recovery
 records as a first troubleshooting step.
 
-Desktop package targets are Linux x64, Windows x64, macOS Intel and macOS arm64.
+Desktop package targets are Linux x64, Windows x64 and macOS Apple Silicon (arm64).
+Intel Mac packages are not currently provided.
 The target OS contracts are Ubuntu 22.04+ x64, Windows 10 1809+/11 x64 and macOS
 14.4+ on the matching architecture. These are target contracts; do not claim
 that every native Bluetooth/USB path was physically qualified.
@@ -47,7 +48,7 @@ that every native Bluetooth/USB path was physically qualified.
   `vomar` and `vomar-gui` launchers live under `~/.local/bin`.
 - Windows: use the per-user installer or extracted portable ZIP. Review the
   normal first-launch approval for the unsigned desktop application.
-- macOS: choose the matching DMG and copy Vomar to Applications. Current packaging
+- macOS Apple Silicon: choose the arm64 DMG and copy Vomar to Applications. Current packaging
   has ad-hoc signing, without trusted developer signing/notarization. Use normal
   OS approval rather than disabling system protection globally.
 

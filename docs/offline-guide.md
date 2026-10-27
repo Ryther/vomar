@@ -4,6 +4,7 @@ This guide accompanies the coordinated Vomar distribution. It contains no device
 backup, household configuration, account credential or signing key.
 
 1. Choose the Android APK or native desktop package for your actual platform.
+   Desktop packages target Linux x64, Windows x64 and macOS Apple Silicon (arm64).
    Check SHA256SUMS against release-manifest.json. Desktop trusted OS signing is
    deferred; firmware/APK cryptographic signing remains mandatory.
 2. Choose the one `vomar-firmware-VERSION.zip`. The app independently verifies

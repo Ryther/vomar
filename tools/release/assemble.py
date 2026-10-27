@@ -52,7 +52,7 @@ def assemble(inputs,output,version,sha,firmware_candidate,qualification,private_
     with zipfile.ZipFile(firmware) as z:
         m=loads(z.read('manifest.json'));ota=output/f'vomar-firmware-{version}.ota';ota.write_bytes(z.read('main.ota'))
     records=[{'role':'firmware-common','filename':firmware.name,'componentVersion':m['main']['version']},{'role':'zigbee-ota','filename':ota.name,'componentVersion':m['main']['version']},{'role':'android-apk','filename':apk.name,'componentVersion':av,'androidVersionCode':ac}]
-    for platform,arch,extension in [('linux','x64','tar.gz'),('windows','x64','zip'),('macos','x64','dmg'),('macos','arm64','dmg')]:
+    for platform,arch,extension in [('linux','x64','tar.gz'),('windows','x64','zip'),('macos','arm64','dmg')]:
         name=f'vomar-desktop-{version}-{platform}-{arch}.{extension}';path=inputs/name
         if not path.is_file() or path.is_symlink():raise ValueError('Missing native platform artifact: '+name)
         shutil.copy2(path,output/name);records.append({'role':f'desktop-{platform}-{arch}','filename':name,'componentVersion':dv,'platform':platform,'architecture':arch})

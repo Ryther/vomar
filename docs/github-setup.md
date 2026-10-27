@@ -36,6 +36,13 @@ disable them to work around runner or product failures. Allow auto-merge only
 after the full required-check policy is verified; it does not approve arbitrary
 updates by itself.
 
+Infrastructure PRs execute report helpers from their protected base. Candidate
+helper improvements, including complete JSON/identity exports for failed gates,
+take effect after the reviewed baseline is merged. A bootstrap PR can therefore
+retain the older base's early failure behavior; scanner logs and task receipts
+remain available and a failed gate still fails the check. Never execute candidate
+helpers with reusable credentials to work around that boundary.
+
 Enable Dependabot vulnerability alerts, secret scanning, push protection and
 private vulnerability reporting. Keep the tracked advanced CodeQL workflow;
 do not replace it with GitHub's generated default setup. Verify successful
