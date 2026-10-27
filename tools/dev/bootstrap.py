@@ -122,7 +122,7 @@ def android(m):
             tools.parent.mkdir(parents=True,exist_ok=True);shutil.move(d/'out/cmdline-tools',tools)
             for p in (tools/'bin').iterdir(): p.chmod(p.stat().st_mode|0o111)
     print(f'Read/accept licenses: {tools}/bin/sdkmanager --sdk_root={base} --licenses')
-    print(f'Then: {tools}/bin/sdkmanager --sdk_root={base} "platforms;android-35" "build-tools;35.0.0" "platform-tools"')
+    print(f'Then: {tools}/bin/sdkmanager --sdk_root={base} "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"')
 
 
 def firmware(m):

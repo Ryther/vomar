@@ -2,7 +2,8 @@
 
 Open the repository in Dev Containers. The public Ubuntu image pins its base,
 Python 3.13.12, Node 24 and assistant packages; npm verifies package integrity.
-Java 21 runs the existing Kotlin toolchain; Java 17 remains the target. The
+Java 21 runs Gradle 9.6.0, AGP 9.4.1 and Kotlin 2.4.21; Java 17 remains
+the bytecode target. The
 normal profile has no host SSH, display, D-Bus or USB mounts. Authentication is
 interactive and optional; no assistant is contacted during bootstrap.
 
@@ -48,8 +49,8 @@ python tools/dev/bootstrap.py firmware
 ```
 
 Android setup downloads minimal command-line tools with a pinned checksum. Read
-and accept Google SDK licenses interactively, then run sdkmanager for android-35
-and build-tools 35.0.0. No emulator is installed by default. Firmware setup uses
+and accept Google SDK licenses interactively, then run sdkmanager for android-37.0
+and build-tools 36.0.0. No emulator is installed by default. Firmware setup uses
 the 55-project active frozen public west manifest, a separate Python environment and
 only the ARM Zephyr SDK toolchain. Nordic binary stack licenses remain applicable.
 SDK operations download source/tools and never access a physical target.

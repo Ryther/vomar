@@ -102,7 +102,7 @@ jobs:
           --version "$VERSION" --sha "$SHA" --firmware-candidate private/candidate.zip
           --qualification private/qualification.json --private-key private/firmware.pem
           --keystore private/android.jks --password-file private/password.txt
-          --android-tools "$ANDROID_HOME/build-tools/35.0.0"
+          --android-tools "$ANDROID_HOME/build-tools/36.0.0"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with: {name: 'complete-distribution-${{ needs.resolve.outputs.sha }}', path: assets, if-no-files-found: error}
       - name: Remove signer material
@@ -139,4 +139,4 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: >-
           PYTHONPATH=trusted python -m tools.release.publish --directory assets
-          --qualification qualification.json --native-qualification native-qualification.json --dependency-review dependency-review.json --public-key trusted/firmware/keys/dev-public.pem --android-tools "$ANDROID_HOME/build-tools/35.0.0" --publish
+          --qualification qualification.json --native-qualification native-qualification.json --dependency-review dependency-review.json --public-key trusted/firmware/keys/dev-public.pem --android-tools "$ANDROID_HOME/build-tools/36.0.0" --publish

@@ -8,8 +8,8 @@ from test_first_install_contract import ROOT, ISLAND, jar, kotlin, common_fixtur
 def programming(kotlin,tmp_path_factory):
     base=tmp_path_factory.mktemp('programming_kotlin')
     compiler=[jar('org.jetbrains.kotlin',name,version) for name,version in [
-        ('kotlin-compiler-embeddable','2.2.20'),('kotlin-stdlib','2.2.20'),('kotlin-script-runtime','2.2.20'),
-        ('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.2.20')]]
+        ('kotlin-compiler-embeddable','2.4.21'),('kotlin-build-tools-api','2.4.21'),('kotlin-stdlib','2.4.21'),('kotlin-script-runtime','2.4.21'),
+        ('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.4.21')]]
     compiler += [jar('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.8.0'),jar('org.jetbrains','annotations','23.0.0')]
     app=ROOT/'apps/android-updater/app/src/main/kotlin/org/openvimar/updater'
     sources=list((app/'installer').glob('*.kt'))
@@ -64,10 +64,10 @@ def test_service_admission_never_recreates_a_job_or_loses_cancel_before_worker_a
 
 def test_android_adapters_and_private_filesystem_instrumentation_compile_against_actual_sdk(programming,tmp_path):
     compiler=[jar('org.jetbrains.kotlin',name,version) for name,version in [
-        ('kotlin-compiler-embeddable','2.2.20'),('kotlin-stdlib','2.2.20'),('kotlin-script-runtime','2.2.20'),
-        ('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.2.20')]]
+        ('kotlin-compiler-embeddable','2.4.21'),('kotlin-build-tools-api','2.4.21'),('kotlin-stdlib','2.4.21'),('kotlin-script-runtime','2.4.21'),
+        ('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.4.21')]]
     compiler += [jar('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.8.0'),jar('org.jetbrains','annotations','23.0.0')]
-    sdk=ROOT/'work/android-sdk/platforms/android-35';app=ROOT/'apps/android-updater/app'
+    sdk=ROOT/'work/android-sdk/platforms/android-37.0';app=ROOT/'apps/android-updater/app'
     r=app/'build/intermediates/compile_and_runtime_not_namespaced_r_class_jar/release/processReleaseResources/R.jar'
     cp=programming[3]+':'+':'.join(map(str,[sdk/'android.jar',sdk/'optional/android.test.base.jar',sdk/'optional/android.test.runner.jar',jar('junit','junit','4.13.2'),r]))
     directory=app/'src/main/kotlin/org/openvimar/updater'

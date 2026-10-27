@@ -10,7 +10,7 @@ ISLAND=ROOT/'tools/android/first_install_resume_contract'
 @pytest.fixture(scope='module')
 def resume(kotlin,tmp_path_factory):
  base=tmp_path_factory.mktemp('resume_kotlin')
- compiler=[jar('org.jetbrains.kotlin',n,v) for n,v in [('kotlin-compiler-embeddable','2.2.20'),('kotlin-stdlib','2.2.20'),('kotlin-script-runtime','2.2.20'),('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.2.20')]]
+ compiler=[jar('org.jetbrains.kotlin',n,v) for n,v in [('kotlin-compiler-embeddable','2.4.21'),('kotlin-build-tools-api','2.4.21'),('kotlin-stdlib','2.4.21'),('kotlin-script-runtime','2.4.21'),('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.4.21')]]
  compiler += [jar('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.8.0'),jar('org.jetbrains','annotations','23.0.0')]
  output=base/'resume.jar';cp=kotlin[3];friend=cp.split(':')[0]
  args=['java','-cp',':'.join(map(str,compiler)),'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler','-no-stdlib','-no-reflect','-jvm-target','17','-Xfriend-paths='+friend,'-classpath',cp,'-d',str(output),*map(str,sorted((ISLAND/'src').glob('*.kt'))),*map(str,sorted((ISLAND/'tests').glob('*.kt')))]
