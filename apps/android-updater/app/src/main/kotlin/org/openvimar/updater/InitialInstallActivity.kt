@@ -36,6 +36,11 @@ class InitialInstallActivity:Activity() {
     private lateinit var chooseRelease:Button
     private lateinit var progress:ProgressBar
     private lateinit var progressText:TextView
+    private lateinit var overallProgress:ProgressBar
+    private lateinit var overallText:TextView
+    private lateinit var remainingText:TextView
+    private val progressHandler=android.os.Handler(android.os.Looper.getMainLooper())
+    private val progressTick=object:Runnable{override fun run(){if(foreground){if(::progress.isInitialized)renderProgress();progressHandler.postDelayed(this,1000)}}}
     private lateinit var recap:TextView
     private lateinit var stepText:TextView
     private lateinit var selectionPanel:LinearLayout
@@ -123,6 +128,10 @@ class InitialInstallActivity:Activity() {
         progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;isIndeterminate=false;visibility=View.GONE;tag="initial.progress"}
         statusPanel.addView(progress,LinearLayout.LayoutParams(-1,dp(8)).apply{topMargin=dp(12)})
         progressText=NativeUi.label(this,"",13,secondary=true);statusPanel.addView(progressText)
+        overallProgress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;isIndeterminate=false;progressTintList=android.content.res.ColorStateList.valueOf(getColor(R.color.ui_teal));tag="initial.overall.progress";visibility=View.GONE}
+        statusPanel.addView(overallProgress,LinearLayout.LayoutParams(-1,dp(8)).apply{topMargin=dp(12)})
+        overallText=NativeUi.label(this,"",13,secondary=true);statusPanel.addView(overallText)
+        remainingText=NativeUi.label(this,"",13,secondary=true);statusPanel.addView(remainingText)
         root.addView(statusPanel)
         val center=FrameLayout(this).apply{setBackgroundColor(getColor(R.color.ui_surface));addView(root,FrameLayout.LayoutParams(-1,-1,Gravity.TOP or Gravity.CENTER_HORIZONTAL))}
         center.addOnLayoutChangeListener{_,_,_,_,_,_,_,_,_->val width=minOf(center.width,dp(720));val params=root.layoutParams as FrameLayout.LayoutParams;if(width>0&&params.width!=width){params.width=width;root.layoutParams=params}}
@@ -230,9 +239,30 @@ class InitialInstallActivity:Activity() {
         val tone=when(snapshot.phase){InitialInstallPhase.FAILED->R.color.ui_error;InitialInstallPhase.CANCELLED->R.color.ui_available;InitialInstallPhase.AWAITING_REVIEW,InitialInstallPhase.VERIFIED_HALTED,InitialInstallPhase.STARTED->R.color.ui_current;else->R.color.ui_primary}
         val color=getColor(tone);statusPanel.background=NativeUi.shape(this,android.graphics.Color.argb(if(resources.configuration.uiMode and 0x30==0x20)48 else 22,android.graphics.Color.red(color),android.graphics.Color.green(color),android.graphics.Color.blue(color)))
         status.setTextColor(color)
-        val measured=snapshot.progressTotal>0&&snapshot.phase in setOf(InitialInstallPhase.CAPTURING,InitialInstallPhase.INSTALLING,InitialInstallPhase.STARTING)
-        progress.visibility=if(measured)View.VISIBLE else View.GONE;progressText.visibility=if(measured)View.VISIBLE else View.GONE
-        if(measured){val percent=(snapshot.progressDone.toLong()*100/snapshot.progressTotal).toInt();progress.progress=percent*10;progressText.text="${snapshot.progressLabel} · $percent%";progress.contentDescription=progressText.text}
+        renderProgress()
+    }
+    private fun renderProgress(){
+        val active=snapshot.phase in setOf(InitialInstallPhase.CAPTURING,InitialInstallPhase.INSTALLING,InitialInstallPhase.STARTING)
+        val measured=snapshot.progressTotal>0&&active
+        val completed=snapshot.phase in setOf(InitialInstallPhase.VERIFIED_HALTED,InitialInstallPhase.STARTED)
+        progress.visibility=if(measured)View.VISIBLE else View.GONE;progressText.visibility=progress.visibility
+        if(measured){val done=snapshot.stageDone?:snapshot.progressDone;val size=snapshot.stageTotal?:snapshot.progressTotal
+            val percent=(done.toLong()*100/size).toInt().coerceIn(0,100);progress.progress=percent*10
+            progressText.text="${snapshot.progressLabel} · $percent%";progress.contentDescription=progressText.text}
+        overallProgress.visibility=if(measured||completed)View.VISIBLE else View.GONE;overallText.visibility=overallProgress.visibility
+        remainingText.visibility=if(measured)View.VISIBLE else View.GONE
+        if(measured||completed){val total=if(completed)1000 else (snapshot.overallProgressPermille?:(snapshot.progressDone.toLong()*1000/snapshot.progressTotal).toInt()).coerceIn(0,999)
+            overallProgress.progress=total
+            val label=when{snapshot.phase in setOf(InitialInstallPhase.STARTING,InitialInstallPhase.STARTED)->"Overall verification";snapshot.resume->"Overall repair";snapshot.phase==InitialInstallPhase.CAPTURING->"Overall backup";else->"Overall installation"}
+            overallText.text="$label · ${total/10}%";overallProgress.contentDescription=overallText.text}
+        if(measured){val fresh=snapshot.progressMeasuredAtMillis?.let{System.nanoTime()/1_000_000-it in 0..14999}==true
+            val millis=snapshot.etaMillis?.takeIf{fresh&&it>0}
+            remainingText.text=if(millis==null)"Estimating remaining time…" else when{
+                millis<60000->"Less than a minute remaining"
+                millis<3600000->"About ${(millis+59999)/60000} min remaining"
+                else->{val minutes=(millis+59999)/60000;"About ${minutes/60} h ${minutes%60} min remaining"}
+            }
+        }
     }
     private fun renderActions(){
         if(!::actions.isInitialized)return
@@ -362,8 +392,8 @@ class InitialInstallActivity:Activity() {
     private fun newSession(){service?.newSession();pendingExportRequest=null;selectedDevice=null;resumeBindingId=null;resumeRelease=null;resumeDeviceName=null;resumeOriginalUri=null;render()}
     private fun leave(){if(active())AlertDialog.Builder(this).setTitle("Leave installation?").setMessage("The operation stays in the foreground service. Keep the USB connection in place; reopen this screen to continue.").setPositiveButton("Leave screen"){_,_->finish()}.setNegativeButton("Stay",null).show()else finish()}
     @Deprecated("Deprecated in Java")override fun onBackPressed()=leave()
-    override fun onResume(){super.onResume();foreground=true;if(pendingPermission!=null){val device=manager.deviceList.values.firstOrNull{it.deviceName==selectedDevice&&manager.hasPermission(it)};if(device!=null){pendingPermission=null;inspect(device.deviceName)}}}
-    override fun onPause(){foreground=false;super.onPause()}
+    override fun onResume(){super.onResume();foreground=true;progressHandler.removeCallbacks(progressTick);progressHandler.post(progressTick);if(pendingPermission!=null){val device=manager.deviceList.values.firstOrNull{it.deviceName==selectedDevice&&manager.hasPermission(it)};if(device!=null){pendingPermission=null;inspect(device.deviceName)}}}
+    override fun onPause(){foreground=false;progressHandler.removeCallbacks(progressTick);super.onPause()}
     override fun onSaveInstanceState(out:Bundle){super.onSaveInstanceState(out);selectedUri?.let{out.putString("uri",it.toString())};out.putString("digest",selectedDigest);out.putBoolean("candidate",candidate);out.putString("device",selectedDevice);out.putString("exportRequest",pendingExportRequest);out.putString("permissionRequest",pendingPermission)
         out.putString("resumeOriginal",resumeOriginalUri?.toString());out.putString("resumeBinding",resumeBindingId);out.putString("resumeRelease",resumeRelease);out.putString("resumeDevice",resumeDeviceName);out.putBoolean("resumeCandidate",resumeCandidate)}
     @Deprecated("Deprecated in Java")override fun onActivityResult(requestCode:Int,resultCode:Int,data:Intent?){super.onActivityResult(requestCode,resultCode,data)

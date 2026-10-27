@@ -1147,3 +1147,6 @@
 **/__pycache__/
 **/node_modules/
 **/.gradle/
+
+# Reviewed Android progress and transport-policy regressions.
+!/apps/android-updater/app/src/test/kotlin/org/openvimar/updater/InstallProgressTest.kt
