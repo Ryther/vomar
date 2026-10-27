@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from pathlib import Path
 import zipfile
 import pytest
@@ -57,6 +58,21 @@ def apk(tmp_path, entries):
 @pytest.mark.parametrize('name,data', [('assets/private.pem', b'-----BEGIN EC PRIVATE KEY-----'), ('assets/stock.bin', b'original'), ('assets/backup.dat',b'dump'), ('assets/key.der',b'private-DER'), ('DebugProbesKt.bin', b'forged'), ('classes.dex', b'prefix-----BEGIN PRIVATE KEY-----')])
 def test_apkHasNoPrivateKeyOrOriginalDump(tmp_path, name, data):
     with pytest.raises(ValueError): m.audit_entries(apk(tmp_path, {'res/raw/firmware_public.der':b'production',name:data}), b'production', b'fixture')
+
+def test_pinned_runtime_probe_is_accepted_but_changed_bytes_are_rejected(tmp_path):
+    cache = Path(os.environ.get('GRADLE_USER_HOME', m.ROOT / 'work/android-gradle-cache'))
+    jars = list((cache / 'caches/modules-2/files-2.1/org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm/1.11.0').glob('*/*.jar'))
+    if not jars:
+        pytest.skip('Optional verified coroutines 1.11.0 runtime archive is unavailable')
+    assert len(jars) == 1
+    with zipfile.ZipFile(jars[0]) as runtime:
+        probe = runtime.read('DebugProbesKt.bin')
+    assert probe.startswith(b'\xca\xfe\xba\xbe')
+    entries = {'res/raw/firmware_public.der': b'production', 'DebugProbesKt.bin': probe}
+    m.audit_entries(apk(tmp_path, entries), b'production', b'fixture')
+    entries['DebugProbesKt.bin'] = probe[:-1] + bytes([probe[-1] ^ 1])
+    with pytest.raises(ValueError, match='Unexpected sensitive/firmware'):
+        m.audit_entries(apk(tmp_path, entries), b'production', b'fixture')
 
 def test_fixtureSigningKeyNotTrustedByRelease(tmp_path):
     with pytest.raises(ValueError): m.audit_entries(apk(tmp_path, {'res/raw/firmware_public.der':b'fixture'}), b'production', b'fixture')

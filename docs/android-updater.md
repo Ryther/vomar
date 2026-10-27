@@ -115,8 +115,10 @@ qualification records.
 
 App0.6.3 explicitly queues the initial system pairing request after LE service
 discovery and before McuMgr's protected notification setup. This uses the pinned
-Ble2.11 supported legacy init queue because McuMgr2.7.4 makes `initialize()`
-final. Existing bonds are never removed and no automatic pairing retry is added.
+Ble2.11 supported legacy init queue because MCUmgr makes `initialize()`
+final. The coordinated migration uses MCUmgr3.4.1 with the same explicit
+pairing queue and chunk-upload adapter; it does not invoke its bootloader-mode
+scanner or automatic firmware-upgrade manager. Existing bonds are never removed and no automatic pairing retry is added.
 The real0.6.2 Android16 report established LE/MTU247 success, then disconnect22
 after notification setup was requested, without observed pairing events. The
 subsequent owner-reported legacy-bridge phone trial succeeded within its bounded
@@ -269,13 +271,22 @@ assets.
 
 ## Reproduce the Android checks and build
 
-Java 17 and Android SDK API35 are required. The checked-in Gradle wrapper and
-strict dependency verification pin the build dependencies. With dependencies
-available, run from `apps/android-updater`:
+Java 21 runs Gradle 9.6.0 and AGP 9.4.1; Java 17 remains the bytecode target.
+Install SDK platform `platforms;android-37.0` and Build Tools `36.0.0`. The app
+compiles against API37.0 while retaining minSdk26 and targetSdk35. AGP provides
+built-in Kotlin; the JVM and serialization plugins use Kotlin2.4.21. AndroidX
+Core1.19.1, serialization1.12.0 and MCUmgr3.4.1 are locked with strict artifact
+verification. With dependencies available, run from `apps/android-updater`:
 
 ```sh
-./gradlew :core:test :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
+./gradlew --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:assembleRelease :app:writeRuntimeInventory
 ```
+
+The toolchain migration follows [AGP compatibility](https://developer.android.com/build/releases/agp-9-4-0-release-notes)
+and [built-in Kotlin migration](https://developer.android.com/build/migrate-to-built-in-kotlin).
+It preserves app identity, firmware trust, saved records and explicit operation
+review. A dependency migration does not establish new Bluetooth, USB or
+power-cut qualification.
 
 These are source/build checks, not physical phone tests. A clean environment
 must obtain the pinned dependencies before an offline build can succeed. Host

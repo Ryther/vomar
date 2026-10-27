@@ -99,7 +99,11 @@ def _http_fetch(base_url: str, token: str) -> Fetch:
         raise ValueError("Unsupported Sonar API endpoint")
 
     def fetch(path: str, params: JsonObject) -> JsonObject:
-        url = base_url + path + "?" + urllib.parse.urlencode(params)
+        query = dict(params)
+        # Cloud and the pinned Community server use different hotspot selectors.
+        if base_url == "https://sonarcloud.io" and path == "/api/hotspots/search":
+            query["projectKey"] = query.pop("project")
+        url = base_url + path + "?" + urllib.parse.urlencode(query)
         headers = {"Accept": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"

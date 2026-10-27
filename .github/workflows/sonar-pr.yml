@@ -15,11 +15,14 @@ jobs:
     if: inputs.coverage-result == 'success' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    env:
+      SONAR_COMPAT_BASE_SHA: 6476b264542fa757e38aef66d541fc36c51feb27
+      SONAR_COMPAT_EXPORTER_SHA: 3447f132f7f16e9d97bf8b8f1dd2b2aefd02cdb5
     outputs:
       report_present: ${{ steps.report.outputs.artifact-id != '' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with: {ref: '${{ github.event.pull_request.base.sha }}', path: trusted, persist-credentials: false}
+        with: {ref: '${{ github.event.pull_request.base.sha }}', path: trusted, fetch-depth: 0, persist-credentials: false}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ inputs.sha }}', path: candidate, fetch-depth: 0, persist-credentials: false}
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
@@ -32,6 +35,37 @@ jobs:
           git -C candidate cat-file -e "$PR_BASE_SHA^{commit}"
           git -C candidate update-ref "refs/remotes/origin/$PR_BASE_REF" "$PR_BASE_SHA"
           git -C candidate merge-base HEAD "$PR_BASE_SHA"
+      - name: Select the protected Cloud exporter
+        id: select-exporter
+        env: {PR_BASE_SHA: '${{ github.event.pull_request.base.sha }}'}
+        run: |
+          test "$(git -C trusted rev-parse HEAD)" = "$PR_BASE_SHA"
+          exporter="$PR_BASE_SHA"
+          # This protected base changed the Community selector without retaining Cloud compatibility.
+          # Its reviewed predecessor retains the same receipt, gate and complete-report checks.
+          if test "$PR_BASE_SHA" = "$SONAR_COMPAT_BASE_SHA"; then
+            exporter="$SONAR_COMPAT_EXPORTER_SHA"
+          fi
+          git -C trusted merge-base --is-ancestor "$exporter" "$PR_BASE_SHA"
+          printf 'sha=%s\n' "$exporter" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ steps.select-exporter.outputs.sha }}', path: trusted-export, persist-credentials: false}
+      - name: Verify the protected exporter before exposing credentials
+        id: verify-exporter
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          EXPORTER_SHA: ${{ steps.select-exporter.outputs.sha }}
+        run: |
+          expected="$PR_BASE_SHA"
+          if test "$PR_BASE_SHA" = "$SONAR_COMPAT_BASE_SHA"; then
+            expected="$SONAR_COMPAT_EXPORTER_SHA"
+          fi
+          test "$EXPORTER_SHA" = "$expected"
+          test "$(git -C trusted rev-parse HEAD)" = "$PR_BASE_SHA"
+          test "$(git -C trusted-export rev-parse HEAD)" = "$EXPORTER_SHA"
+          git -C trusted merge-base --is-ancestor "$EXPORTER_SHA" "$PR_BASE_SHA"
+          mkdir -p sonar-report
+          printf '%s\n' "$EXPORTER_SHA" > sonar-report/exporter-source-sha.txt
       - name: Validate exact candidate reports without credentials
         env: {CANDIDATE_SHA: '${{ inputs.sha }}'}
         run: |
@@ -68,7 +102,7 @@ jobs:
             "-Dsonar.pullrequest.base=$PR_BASE" "-Dsonar.scm.revision=$CANDIDATE_SHA" \
             -Dsonar.qualitygate.wait=true > sonar-report/scanner.log 2>&1
       - name: Export complete PR findings
-        if: always()
+        if: always() && steps.verify-exporter.outcome == 'success'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -77,24 +111,7 @@ jobs:
         run: |
           test -s sonar-report/task/report-task.txt
           export_status=0
-          PYTHONPATH=trusted python - <<'PY' || export_status=$?
-          import os
-          from pathlib import Path
-          from tools.release.sonar_report import _http_fetch, export_candidate
-
-          fetch = _http_fetch("https://sonarcloud.io", os.environ.get("SONAR_TOKEN", ""))
-
-          def cloud_fetch(path, params):
-              # Adapt the protected base's Community parameter to Cloud only.
-              if path == "/api/hotspots/search" and "project" in params:
-                  params = dict(params)
-                  params["projectKey"] = params.pop("project")
-              return fetch(path, params)
-
-          export_candidate(cloud_fetch, "Ryther_vomar", Path("sonar-report"),
-                           os.environ["PR_NUMBER"], os.environ["CANDIDATE_SHA"],
-                           Path("sonar-report/task/report-task.txt"))
-          PY
+          PYTHONPATH="$GITHUB_WORKSPACE/trusted-export" python -P -m tools.release.sonar_report --project Ryther_vomar --pull-request "$PR_NUMBER" --sha "$CANDIDATE_SHA" --task-file sonar-report/task/report-task.txt || export_status=$?
           if test -s sonar-report/report.md; then
             cat sonar-report/report.md >> "$GITHUB_STEP_SUMMARY"
           fi

@@ -9,7 +9,7 @@ const SETTING_PRESENTATION = {
     min_level: ['Luminosità minima regolabile', 'Limite inferiore in modalità dimmable, scala 1–254. Non impedisce lo spegnimento.', 1],
     max_level: ['Luminosità massima regolabile', 'Limite superiore in modalità dimmable, scala 1–254. Il livello fisso ha un’impostazione indipendente.', 254],
     double_click_window_ms: ['Finestra doppio clic', 'Tempo massimo fra due pressioni sullo stesso lato. Ritarda la classificazione del clic singolo.', 150],
-    long_press_ms: ['Soglia pressione lunga', 'Tempo di pressione necessario per iniziare la regolazione locale della luminosità.', 500],
+    long_press_ms: ['Soglia pressione lunga', 'Tempo di pressione necessario per iniziare la regolazione locale della luminosità.', 300],
     level_step_period_ms: ['Intervallo regolazione tenendo premuto', 'Tempo tra incrementi di luminosità durante una pressione lunga.', 50],
     level_step: ['Passo di luminosità', 'Variazione su scala 1–254 per ogni incremento durante una pressione lunga.', 3],
     short_press_mode: ['Comportamento clic singolo', 'symmetric_toggle: entrambi i lati commutano; directional: UP accende, DOWN spegne; custom: usa le azioni separate.', 'symmetric_toggle'],
@@ -27,14 +27,14 @@ const SETTING_PRESENTATION = {
     output_mode: ['Modalità uscita lampada', 'dimmable regola la luminosità; fixed_level usa il livello fisso e lascia le pressioni lunghe come soli eventi.', 'dimmable'],
     reporting_mode: ['Origine dello stato riportato', 'Sul Vimar è disponibile optimistic: stato stimato dai comandi applicati, senza misura della luce o conferma dal circuito di potenza.', 'optimistic'],
     fixed_level: ['Livello nella modalità fissa', 'Luminosità usata per ogni accensione quando la modalità uscita è fixed_level; 254 corrisponde al massimo.', 254],
-    led_on_mode: ['Intensità LED a lampada accesa', 'fixed: intensità fissa, regolata dalla luce LED a lampada accesa. follow_level: aumenta con il dimming; inverse_level: diminuisce. Nei due modi dinamici il cursore della luce regola il massimo.', 'fixed'],
-    led_on_min_intensity: ['LED acceso: minimo dinamico', 'Intensità al minimo dimming in follow_level, al massimo dimming in inverse_level. Non deve superare il massimo dinamico; abbassare il cursore sotto questo valore riduce anche il minimo.', 0],
+    led_on_mode: ['Intensità LED a lampada accesa', 'fixed: intensità fissa, regolata dalla luce LED a lampada accesa. follow_level: aumenta con il dimming; inverse_level: diminuisce. Nei due modi dinamici il cursore della luce regola il massimo.', 'follow_level'],
+    led_on_min_intensity: ['LED acceso: minimo dinamico', 'Intensità al minimo dimming in follow_level, al massimo dimming in inverse_level. Non deve superare il massimo dinamico; abbassare il cursore sotto questo valore riduce anche il minimo.', 10],
     led_on_max_intensity: ['LED acceso: massimo dinamico', 'Limite superiore nei modi follow_level e inverse_level; coincide con il cursore della luce LED a lampada accesa nei modi dinamici. Non usato in fixed.', 100],
 };
-for (const [profile, state, rgb] of [['on', 'accesa', [0, 255, 0]], ['off', 'spenta', [0, 0, 255]]]) {
+for (const [profile, state, rgb] of [['on', 'accesa', [255, 254, 250]], ['off', 'spenta', [255, 110, 84]]]) {
     for (const [i, color] of ['red', 'green', 'blue'].entries()) SETTING_PRESENTATION[`led_${profile}_${color}`] =
         [`LED a lampada ${state}: ${['rosso', 'verde', 'blu'][i]}`, `Componente del colore automatico del LED a lampada ${state}, scala 0–255.`, rgb[i]];
-    SETTING_PRESENTATION[`led_${profile}_intensity`] = [`LED a lampada ${state}: intensità`, `Intensità del profilo automatico LED a lampada ${state}. Un override temporaneo ha priorità.`, 10];
+    SETTING_PRESENTATION[`led_${profile}_intensity`] = [`LED a lampada ${state}: intensità`, `Intensità del profilo automatico LED a lampada ${state}. Un override temporaneo ha priorità.`, profile === 'off' ? 25 : 10];
 }
 for (const name of ['single_up_action', 'single_down_action', 'double_up_action', 'double_down_action']) {
     SETTING_PRESENTATION[name][1] += ' event_only pubblica l’evento classificato senza agire sulla lampada; disabled sopprime anche quell’evento Zigbee. timed_on è l’alias legacy del timer 1: accende e riavvia il conto alla rovescia senza rimappare la scelta salvata. timed_on_N accende e riavvia il timer N; timed_toggle_N accende da OFF, spegne e cancella da ON.';

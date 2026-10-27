@@ -3,9 +3,9 @@ package org.openvimar.updater.ble
 import org.junit.Assert.*
 import org.junit.Test
 import org.openvimar.updater.core.MigrationBootCommandUnavailable
-import io.runtime.mcumgr.*
-import io.runtime.mcumgr.response.McuMgrResponse
-import io.runtime.mcumgr.util.CBOR
+import no.nordicsemi.android.mcumgr.*
+import no.nordicsemi.android.mcumgr.response.McuMgrResponse
+import no.nordicsemi.android.mcumgr.util.CBOR
 
 class MigrationBootResponseTest {
     private fun response(payload:ByteArray):MigrationBootResponse {
@@ -32,13 +32,14 @@ class MigrationBootResponseTest {
             override fun <T:McuMgrResponse> send(bytes:ByteArray,timeout:Long,type:Class<T>):T=error("Synchronous send not requested")
             override fun <T:McuMgrResponse> send(bytes:ByteArray,timeout:Long,type:Class<T>,callback:McuMgrCallback<T>){packet=bytes}
             override fun connect(callback:McuMgrTransport.ConnectionCallback?){}
+            override fun changeMode(name:String,callback:McuMgrTransport.ModeChangeCallback?):Boolean=error("Implicit peer or mode change is not permitted")
             override fun release(){}
             override fun addObserver(observer:McuMgrTransport.ConnectionObserver){}
             override fun removeObserver(observer:McuMgrTransport.ConnectionObserver){}
         }
         MigrationBootManager(transport).boot("ab".repeat(32),object:McuMgrCallback<MigrationBootResponse>{
             override fun onResponse(response:MigrationBootResponse){}
-            override fun onError(error:io.runtime.mcumgr.exception.McuMgrException){}
+            override fun onError(error:no.nordicsemi.android.mcumgr.exception.McuMgrException){}
         })
         val bytes=packet!!;assertEquals(2,bytes[0].toInt() and 7);assertEquals(1,(bytes[0].toInt() shr 3) and 3)
         assertEquals(0x80,bytes[4].toInt() and 255);assertEquals(0x42,bytes[5].toInt() and 255);assertEquals(0,bytes[7].toInt())

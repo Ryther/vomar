@@ -8,7 +8,7 @@ from test_resume_contract import ROOT,ISLAND,resume,inputs,kotlin,jar
 @pytest.fixture(scope='module')
 def evidence(resume,tmp_path_factory):
  base=tmp_path_factory.mktemp('install_evidence')
- compiler=[jar('org.jetbrains.kotlin',n,v) for n,v in [('kotlin-compiler-embeddable','2.2.20'),('kotlin-stdlib','2.2.20'),('kotlin-script-runtime','2.2.20'),('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.2.20')]]
+ compiler=[jar('org.jetbrains.kotlin',n,v) for n,v in [('kotlin-compiler-embeddable','2.4.21'),('kotlin-build-tools-api','2.4.21'),('kotlin-stdlib','2.4.21'),('kotlin-script-runtime','2.4.21'),('kotlin-reflect','1.6.10'),('kotlin-daemon-embeddable','2.4.21')]]
  compiler += [jar('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.8.0'),jar('org.jetbrains','annotations','23.0.0')]
  cp=resume[3];output=base/'evidence.jar';app=ROOT/'apps/android-updater/app/src/main/kotlin/org/openvimar/updater/installer'
  sources=[app/'InitialInstallRetainedEvidence.kt',app/'InitialInstallResumeOption.kt',HERE/'EvidenceProbe.kt']

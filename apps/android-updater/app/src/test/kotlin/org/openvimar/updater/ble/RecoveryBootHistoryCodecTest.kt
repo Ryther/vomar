@@ -1,8 +1,8 @@
 package org.openvimar.updater.ble
 
-import io.runtime.mcumgr.util.CBOR
-import io.runtime.mcumgr.McuMgrScheme
-import io.runtime.mcumgr.response.McuMgrResponse
+import no.nordicsemi.android.mcumgr.util.CBOR
+import no.nordicsemi.android.mcumgr.McuMgrScheme
+import no.nordicsemi.android.mcumgr.response.McuMgrResponse
 import org.junit.Assert.*
 import org.junit.Test
 

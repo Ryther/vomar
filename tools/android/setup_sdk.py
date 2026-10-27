@@ -44,7 +44,7 @@ def main():
                     output.chmod(0o755 if relative.parts[0] == "bin" else 0o644)
     if args.install:
         subprocess.run([str(manager), f"--sdk_root={sdk}", "--licenses"], input="y\n" * 100, text=True, check=True)
-        subprocess.run([str(manager), f"--sdk_root={sdk}", "platforms;android-35", "build-tools;35.0.0"], check=True)
+        subprocess.run([str(manager), f"--sdk_root={sdk}", "platforms;android-37.0", "build-tools;36.0.0"], check=True)
     subprocess.run([str(manager), f"--sdk_root={sdk}", "--list_installed"], check=True)
     print(f"SDK: {sdk}")
     print(f"GRADLE_USER_HOME: {ROOT / 'work/android-gradle-cache'}")

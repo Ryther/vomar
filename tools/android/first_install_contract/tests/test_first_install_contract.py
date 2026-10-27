@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 import struct
+import sys
 import subprocess
 import zlib
 import io
@@ -11,6 +12,7 @@ import zipfile
 
 import pytest
 from cryptography.hazmat.primitives import hashes, serialization
+from tools.firmware.tests.local_inputs import local_input
 from cryptography.hazmat.primitives.asymmetric import ec
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -29,22 +31,22 @@ def jar(group, name, version):
 def kotlin(tmp_path_factory):
     base = tmp_path_factory.mktemp('first_install_kotlin')
     compiler = [jar('org.jetbrains.kotlin', name, version) for name, version in [
-        ('kotlin-compiler-embeddable', '2.2.20'), ('kotlin-stdlib', '2.2.20'),
-        ('kotlin-script-runtime', '2.2.20'), ('kotlin-reflect', '1.6.10'),
-        ('kotlin-daemon-embeddable', '2.2.20')]]
+        ('kotlin-compiler-embeddable', '2.4.21'), ('kotlin-build-tools-api', '2.4.21'), ('kotlin-stdlib', '2.4.21'),
+        ('kotlin-script-runtime', '2.4.21'), ('kotlin-reflect', '1.6.10'),
+        ('kotlin-daemon-embeddable', '2.4.21')]]
     compiler += [jar('org.jetbrains.kotlinx', 'kotlinx-coroutines-core-jvm', '1.8.0'),
                  jar('org.jetbrains', 'annotations', '23.0.0')]
-    libraries = [jar('org.jetbrains.kotlin', 'kotlin-stdlib', '2.2.20')]
+    libraries = [jar('org.jetbrains.kotlin', 'kotlin-stdlib', '2.4.21')]
     libraries += [jar(group, name, version) for group, name, version in [
-        ('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.10.2'),
-        ('org.jetbrains.kotlinx','kotlinx-serialization-core-jvm','1.9.0'),
-        ('org.jetbrains.kotlinx','kotlinx-serialization-json-jvm','1.9.0'),
+        ('org.jetbrains.kotlinx','kotlinx-coroutines-core-jvm','1.11.0'),
+        ('org.jetbrains.kotlinx','kotlinx-serialization-core-jvm','1.12.0'),
+        ('org.jetbrains.kotlinx','kotlinx-serialization-json-jvm','1.12.0'),
         ('org.apache.commons','commons-compress','1.28.0'),('commons-io','commons-io','2.20.0'),
         ('commons-codec','commons-codec','1.19.0'),('org.apache.commons','commons-lang3','3.18.0')]]
     output = base / 'installer.jar'
     args = ['java', '-cp', ':'.join(map(str, compiler)), 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
             '-no-stdlib', '-no-reflect', '-jvm-target', '17', '-classpath', ':'.join(map(str, libraries)),
-            '-Xplugin='+str(jar('org.jetbrains.kotlin','kotlin-serialization-compiler-plugin-embeddable','2.2.20')),
+            '-Xplugin='+str(jar('org.jetbrains.kotlin','kotlin-serialization-compiler-plugin-embeddable','2.4.21')),
             '-d', str(output), *map(str, sorted((ISLAND / 'src').glob('*.kt'))),
             *map(str, sorted((ROOT/'apps/android-updater/core/src/main/kotlin/org/openvimar/updater/core').glob('*.kt'))),
             str(ROOT/'apps/android-updater/app/src/main/kotlin/org/openvimar/updater/DkBackupArchive.kt'),
@@ -389,7 +391,7 @@ def test_quiescent_backup_contract_truthfully_records_halt_and_optional_reset(ko
     m['acquisition']=dict(cpuHalted=True,method=method,originalCpuControl=0)
     source=tmp_path/'quiescent.zip';source.write_bytes(archive(regions,m));output=tmp_path/'material';output.mkdir()
     subprocess.run([*kotlin,'backup',str(source),str(tmp_path/'export.zip'),str(output),'good'],check=True)
-    verified=subprocess.run([str(ROOT/'work/ncs-venv/bin/python'),str(ROOT/'tools/firmware/verify_android_backup.py'),'--backup',str(source)],capture_output=True,text=True)
+    verified=subprocess.run([sys.executable,str(ROOT/'tools/firmware/verify_android_backup.py'),'--backup',str(source)],capture_output=True,text=True)
     assert verified.returncode==0,verified.stderr
     result=json.loads(verified.stdout)
     assert result['producerReported']['scope']==m['scope']
@@ -410,7 +412,7 @@ def test_actual_quiescent_kotlin_producer_requires_two_equal_complete_passes(kot
         m=json.loads(z.read('manifest.json'));assert m['acquisition']['method']==('debug-halt' if method=='paused-watchdog' else method)
         if method=='paused-watchdog':assert m['acquisition']['watchdog']==dict(runStatus=1,config=1,crv=0x50000,rren=1)
         for name,expected in regions.items():assert z.read(name)==expected
-    subprocess.run([str(ROOT/'work/ncs-venv/bin/python'),str(ROOT/'tools/firmware/verify_android_backup.py'),'--backup',str(backup)],check=True,capture_output=True)
+    subprocess.run([sys.executable,str(ROOT/'tools/firmware/verify_android_backup.py'),'--backup',str(backup)],check=True,capture_output=True)
 
 
 def test_signed_candidate_is_separate_from_qualified_release_and_keeps_false_flags(kotlin,tmp_path):
@@ -466,12 +468,14 @@ def test_signed_unknown_watchdog_handoff_is_rejected(kotlin,tmp_path,policy):
 
 def test_independent_python_watchdog_descriptor_fixtures_preserve_exact_signed_capability(kotlin,tmp_path):
     fixtures=ROOT/'experiments/inherited-watchdog-contract-20261023'
+    local_input(fixtures/'synthetic-public.der')
+    for purpose in ['qualified','candidate']:local_input(fixtures/f'synthetic-{purpose}.zip')
     for purpose in ['qualified','candidate']:
         subprocess.run([*kotlin,'watchdog-authority',str(fixtures/f'synthetic-{purpose}.zip'),str(fixtures/'synthetic-public.der'),purpose],check=True)
 
 
 def test_real_signed_watchdog_candidate_has_capability_but_normal_release_still_rejects(kotlin,tmp_path):
-    fixture=ROOT/'experiments/common-candidate-0.6.2-20261023-watchdog-v1/vimar-30805-0.6.2-qualification-candidate.zip'
+    fixture=local_input(ROOT/'experiments/common-candidate-0.6.2-20261023-watchdog-v1/vimar-30805-0.6.2-qualification-candidate.zip')
     assert hashlib.sha256(fixture.read_bytes()).hexdigest()=='665dba4b5ad4a852f384522e7133c2488b04e28b8ccd946bb012a7fb0eb3f40b'
     key=serialization.load_pem_public_key((ROOT/'firmware/keys/dev-public.pem').read_bytes())
     public=tmp_path/'public.der';public.write_bytes(key.public_bytes(serialization.Encoding.DER,serialization.PublicFormat.SubjectPublicKeyInfo))
@@ -488,7 +492,7 @@ def test_quiescent_watchdog_observation_rejects_malformed_or_unsafe_active_shape
     m['acquisition']=dict(cpuHalted=True,method='debug-halt',originalCpuControl=0,watchdog=w)
     source=tmp_path/'invalid.zip';source.write_bytes(archive(regions,m));output=tmp_path/'out';output.mkdir()
     for command in [[*kotlin,'backup',str(source),str(tmp_path/'export.zip'),str(output),'good'],
-                    [str(ROOT/'work/ncs-venv/bin/python'),str(ROOT/'tools/firmware/verify_android_backup.py'),'--backup',str(source)]]:
+                    [sys.executable,str(ROOT/'tools/firmware/verify_android_backup.py'),'--backup',str(source)]]:
         assert subprocess.run(command,capture_output=True).returncode!=0
 
 

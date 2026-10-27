@@ -59,7 +59,7 @@ python tools/dev/bootstrap.py research
 ```
 
 Android setup downloads minimal command tools with a pinned checksum. Accept SDK
-licenses interactively, then install android-35 and build-tools 35.0.0 as printed
+licenses interactively, then install android-37.0 and build-tools 36.0.0 as printed
 by the helper. Firmware setup uses the 55-project frozen public west manifest,
 a separate Python environment and only the ARM Zephyr SDK toolchain. Research
 setup installs gdb-multiarch, binwalk and wireshark-common; install a reviewed

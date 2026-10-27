@@ -254,8 +254,14 @@ test('documents Vimar factory defaults without replacing saved device values', (
         assert.ok(item.label?.length > 3, item.name);
         assert.ok(item.description.includes('Default:'), item.name);
     }
-    assert.equal(settings.find((m) => m.name === 'long_press_ms').default, 500);
+    assert.equal(settings.find((m) => m.name === 'long_press_ms').default, 300);
     assert.equal(settings.find((m) => m.name === 'level_step').default, 3);
+    const defaults = Object.fromEntries(settings.map((m) => [m.name, m.default]));
+    assert.deepEqual([defaults.led_on_red, defaults.led_on_green, defaults.led_on_blue, defaults.led_on_intensity], [255, 254, 250, 10]);
+    assert.deepEqual([defaults.led_off_red, defaults.led_off_green, defaults.led_off_blue, defaults.led_off_intensity], [255, 110, 84, 25]);
+    assert.equal(defaults.led_on_mode, 'follow_level');
+    assert.equal(defaults.led_on_min_intensity, 10);
+    assert.equal(defaults.led_on_max_intensity, 100);
 });
 
 test('limits physical Vimar exposes to supported modes while preserving DK wire enums', () => {

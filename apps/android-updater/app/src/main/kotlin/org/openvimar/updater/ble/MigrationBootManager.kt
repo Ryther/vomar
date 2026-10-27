@@ -1,7 +1,7 @@
 package org.openvimar.updater.ble
 
-import io.runtime.mcumgr.*
-import io.runtime.mcumgr.response.McuMgrResponse
+import no.nordicsemi.android.mcumgr.*
+import no.nordicsemi.android.mcumgr.response.McuMgrResponse
 import org.openvimar.updater.core.*
 
 /** Authenticated project group0x8042 WRITE0; no ordinary-reset alias. */
