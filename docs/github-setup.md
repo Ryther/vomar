@@ -79,6 +79,16 @@ Restrict changes to workflow files and treat every pending signing/publication
 approval as a review of the exact workflow revision and candidate. A branch
 policy alone does not restrict an environment to one particular workflow file.
 
+## Configure automatic assembly
+
+Set repository variables `FIRMWARE_CANDIDATE_URL` and
+`FIRMWARE_CANDIDATE_SHA256` together when the exact signed candidate is ready.
+Without both variables, an automatic run after main validation records
+"not configured" and skips assembly. It produces no release assets. Setting
+only one variable is a configuration error, rather than a successful skip.
+Manual requests require complete valid inputs. Repository firmware defaults are reserved for automatic runs. Configuring a URL and hash does
+not waive signing continuity, physical qualification or publication checks.
+
 ## Provide project credentials
 
 These values are missing until a credential owner supplies them. GitHub returns
