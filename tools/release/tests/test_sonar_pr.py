@@ -282,3 +282,80 @@ def test_cloud_workflow_summarizes_reports_even_when_export_fails(
                             capture_output=True, text=True)
     assert summary.read_text() == '# Synthetic gate report\n'
     assert result.returncode == expected
+
+
+@pytest.mark.parametrize('backend,project_parameter', [('cloud', 'projectKey'), ('community', 'project')])
+def test_hotspot_export_uses_backend_protocol_and_retains_every_page(tmp_path, backend, project_parameter):
+    report = importlib.import_module('tools.release.sonar_report')
+    hotspots = [{'key': f'hotspot-{number}', 'component': 'project:apps/main.py',
+                 'securityCategory': 'weak-cryptography', 'message': f'Finding {number}',
+                 'textRange': {'startLine': number, 'endLine': number}}
+                for number in range(1, 504)]
+    def fetch(path, params):
+        if path.endswith('/project_status'):
+            return {'projectStatus': {'status': 'OK', 'conditions': []}}
+        if path.endswith('/component'):
+            return {'component': {'key': 'project', 'measures': []}}
+        if path.endswith('/hotspots/search'):
+            assert params == {project_parameter: 'project', 'p': params['p'], 'ps': 500}
+            start = (params['p']-1)*500
+            return {'paging': {'pageIndex': params['p'], 'pageSize': 500, 'total': 503},
+                    'hotspots': hotspots[start:start+500]}
+        field = 'issues' if path.endswith('/issues/search') else 'components'
+        return {'paging': {'pageIndex': 1, 'pageSize': 500, 'total': 0}, field: []}
+    result = report.export_analysis(fetch, 'project', tmp_path/backend, backend=backend)
+    assert result['hotspots'] == hotspots
+    assert json.loads((tmp_path/backend/'hotspots.json').read_text()) == hotspots
+    assert 'Security hotspots: **503**' in (tmp_path/backend/'report.md').read_text()
+    def missing(path, params):
+        response = fetch(path, params)
+        if path.endswith('/hotspots/search') and params['p'] == 2:
+            response['hotspots'] = []
+        return response
+    with pytest.raises(ValueError, match='Incomplete Sonar pagination'):
+        report.export_analysis(missing, 'project', tmp_path/'missing', backend=backend)
+
+
+def test_hotspot_export_rejects_unknown_backend(tmp_path):
+    report = importlib.import_module('tools.release.sonar_report')
+    def fetch(path, params):
+        raise RuntimeError('An unknown backend must fail before any API call')
+    with pytest.raises(ValueError, match='backend'):
+        report.export_analysis(fetch, 'project', tmp_path, backend='unsupported')
+
+
+@pytest.mark.parametrize('backend_flags,project_parameter', [([], 'projectKey'), (['--backend', 'community'], 'project')])
+def test_report_cli_selects_hotspot_protocol_explicitly_for_custom_host(tmp_path, monkeypatch, backend_flags, project_parameter):
+    report = importlib.import_module('tools.release.sonar_report')
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv('SONAR_TOKEN', raising=False)
+    def fetch(path, params):
+        if path.endswith('/project_status'):
+            return {'projectStatus': {'status': 'OK', 'conditions': []}}
+        if path.endswith('/component'):
+            return {'component': {'key': 'project', 'measures': []}}
+        if path.endswith('/hotspots/search'):
+            assert params == {project_parameter: 'project', 'p': 1, 'ps': 500}
+            return {'paging': {'pageIndex': 1, 'pageSize': 500, 'total': 1},
+                    'hotspots': [{'key': 'synthetic-hotspot'}]}
+        field = 'issues' if path.endswith('/issues/search') else 'components'
+        return {'paging': {'pageIndex': 1, 'pageSize': 500, 'total': 0}, field: []}
+    def http_fetch(host, token):
+        assert host == 'http://127.0.0.1:43210' and token == ''
+        return fetch
+    monkeypatch.setattr(report, '_http_fetch', http_fetch)
+    monkeypatch.setattr('sys.argv', ['sonar_report', '--host', 'http://127.0.0.1:43210',
+                                    '--project', 'project', *backend_flags])
+    report.main()
+    assert json.loads((tmp_path/'sonar-report/hotspots.json').read_text()) == [{'key': 'synthetic-hotspot'}]
+
+
+def test_report_cli_rejects_community_pr_export(tmp_path, monkeypatch, capsys):
+    report = importlib.import_module('tools.release.sonar_report')
+    monkeypatch.setattr('sys.argv', ['sonar_report', '--backend', 'community',
+                                    '--project', 'project', '--pull-request', '8',
+                                    '--sha', 'a'*40, '--task-file', str(tmp_path/'receipt')])
+    with pytest.raises(SystemExit) as stopped:
+        report.main()
+    assert stopped.value.code == 2
+    assert 'PR export requires Cloud backend' in capsys.readouterr().err

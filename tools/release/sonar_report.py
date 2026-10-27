@@ -60,9 +60,13 @@ def introduced_issues(before: list[JsonObject], after: list[JsonObject]) -> list
 
 
 def export_analysis(
-    fetch: Fetch, project: str, directory: Path, *, pull_request: str = "", page_size: int = 500
+    fetch: Fetch, project: str, directory: Path, *, pull_request: str = "", page_size: int = 500,
+    backend: str = "cloud",
 ) -> JsonObject:
     """Write unabridged raw data and a readable index; reject missing PR analyses."""
+    if backend not in {"cloud", "community"}:
+        raise ValueError("Unsupported Sonar report backend")
+    hotspot_project_parameter = "projectKey" if backend == "cloud" else "project"
     directory.mkdir(parents=True, exist_ok=True)
     scope: JsonObject = {"pullRequest": pull_request} if pull_request else {}
     gate = fetch("/api/qualitygates/project_status", {"projectKey": project, **scope})
@@ -71,7 +75,7 @@ def export_analysis(
     measures = fetch("/api/measures/component", {"component": project, "metricKeys": METRICS, **scope})
     issues = _pages(fetch, "/api/issues/search", {"componentKeys": project, "resolved": "false", **scope}, "issues", page_size)
     files = _pages(fetch, "/api/measures/component_tree", {"component": project, "metricKeys": FILE_METRICS, "qualifiers": "FIL", **scope}, "components", page_size)
-    hotspots = _pages(fetch, "/api/hotspots/search", {"projectKey": project, **scope}, "hotspots", page_size)
+    hotspots = _pages(fetch, "/api/hotspots/search", {hotspot_project_parameter: project, **scope}, "hotspots", page_size)
     for name, value in (("gate.json", gate), ("measures.json", measures), ("issues.json", issues), ("files.json", files), ("hotspots.json", hotspots)):
         _write_json(directory, name, value)
     status = gate["projectStatus"]["status"]
@@ -150,11 +154,14 @@ def export_candidate(fetch: Fetch, project: str, directory: Path, pull_request: 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default="https://sonarcloud.io")
+    parser.add_argument("--backend", choices=("cloud", "community"), default="cloud")
     parser.add_argument("--project", required=True)
     parser.add_argument("--pull-request", default="")
     parser.add_argument("--sha")
     parser.add_argument("--task-file", type=Path)
     args = parser.parse_args()
+    if args.pull_request and args.backend != "cloud":
+        parser.error("PR export requires Cloud backend")
     fetch = _http_fetch(args.host, os.environ.get("SONAR_TOKEN", ""))
     if args.pull_request:
         if not args.sha or not args.task_file:
@@ -167,6 +174,7 @@ def main() -> None:
         args.project,
         Path("sonar-report"),
         pull_request=args.pull_request,
+        backend=args.backend,
     )
 
 
