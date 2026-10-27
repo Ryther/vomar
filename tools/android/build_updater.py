@@ -46,9 +46,9 @@ def audit_entries(apk, public, fixture, anchor_path='res/raw/firmware_public.der
         if anchor_path not in names or z.read(anchor_path) != public: raise ValueError('Release trust anchor mismatch')
         for name in names:
             data=z.read(name)
-            # Published coroutines 1.10.2 ships one JVM class with a .bin name.
+            # Published coroutines 1.11.0 ships one JVM class with a .bin name.
             approved_runtime_bin=(name=='DebugProbesKt.bin' and hashlib.sha256(data).hexdigest()==
-                                  'cd3da36122413f84be484c77cde4a77729f9e8f81a285408d073300c8385ca3a')
+                                  '065bd792b8527764f33147188302af5bf9e2a8da40fde0830dc111ad26dae40e')
             if (name.endswith(('.pem','.p12','.pfx','.jks','.keystore','.bin','.zip','.dat','.hex','.apk','.dump','.key')) and not approved_runtime_bin) or 'test-fixture' in name.lower():
                 raise ValueError('Unexpected sensitive/firmware archive entry: '+name)
             if name.endswith('.der') and name!=anchor_path: raise ValueError('Unexpected DER key in APK')
