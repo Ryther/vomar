@@ -181,7 +181,12 @@ and reports an output fault. No automatic retry or restart is performed.
 Settings record v5 appends the phase choice and reads v1–v4 without discarding
 their values. Older firmware cannot decode v5: a downgrade is not a settings
 migration and must not be assumed to preserve configuration. Warm recovery
-returns preserve P0.19; cold starts load the saved choice before enabling output.
+returns preserve P0.19 when it matches the loaded choice; cold starts load that
+choice before enabling output. If a warm ON return inherits a different phase
+(for example from older settings without a phase field), startup inhibits the
+output and reports a fault without switching phase under load. The failed
+adapter does not authorize ON. A fresh OFF initialization is required after
+review; there is no automatic retry.
 
 The standard Identify command controls a temporary green LED flash at 5 Hz.
 The converter's Identify button requests 15 seconds; IdentifyTime=0 cancels it.

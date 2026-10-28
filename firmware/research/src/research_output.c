@@ -38,7 +38,12 @@ int research_output_init_at_level_phase(int32_t level, uint8_t phase)
 {
     if (level < -32768 || level > 32767 || phase > 1) return -EINVAL;
     int phase_error = research_output_check_phase_cut(phase);
-    if (phase_error && level != -32768) return phase_error;
+    if (phase_error && level != -32768) {
+        /* Startup cannot preserve ON with a different durable phase choice.
+         * Inhibit before the adapter latches failure; never change phase live. */
+        nrf_gpio_pin_clear(14);
+        return phase_error;
+    }
     if (phase_error) {
         /* An explicit OFF startup can release the gate before selecting a mode. */
         nrf_gpio_pin_clear(14);

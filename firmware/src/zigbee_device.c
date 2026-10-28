@@ -1200,6 +1200,11 @@ int zigbee_device_start(void)
     if (error == 0) error = platform_io_init(controller.model.state.on,controller.model.state.level);
     if (error != 0) {
         LOG_ERR("Platform I/O initialization failed: %d",error);
+        if (platform_io_startup_inhibited()) {
+            /* Proven gate inhibition, not an assumption about generic I/O errors.
+             * Startup reconciliation must not schedule ZBOSS callbacks. */
+            application_controller_restore_handoff(&controller,false,controller.model.state.level);
+        }
         controller.model.state.fault=(struct dimmer_fault){.code=DIMMER_FAULT_SECONDARY_UNAVAILABLE,.active=true};
         /* Keep Zigbee and periodic button recovery running even if output init failed. */
     }

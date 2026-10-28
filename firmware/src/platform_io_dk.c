@@ -41,6 +41,8 @@ int platform_io_init(bool on, uint8_t level)
     return error;
 }
 
+bool platform_io_startup_inhibited(void){return false;}
+
 void platform_io_render(bool on)
 {
     dk_set_led(DK_LED1, on ? 1 : 0);

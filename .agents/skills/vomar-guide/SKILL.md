@@ -339,3 +339,7 @@ Identify is a diagnostic button: it flashes green rapidly for 15 seconds without
 changing the lamp. Fault indications take priority; automatic profiles or an
 unexpired override resume afterward. Settings v5 preserves v1–v4 values while
 adding phase selection; older firmware cannot decode v5 after a downgrade.
+A warm ON return with a phase different from the loaded choice inhibits output
+and reports a fault; it never switches phase under load or retries automatically.
+Stop the trial and inspect the firmware, selected phase and retained settings
+before another attempt; do not repeatedly retry ON or bypass the output fault.

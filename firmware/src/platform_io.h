@@ -8,6 +8,8 @@
 
 int platform_io_restore(bool *on, uint8_t *level);
 int platform_io_init(bool on, uint8_t level);
+/* Failed startup explicitly disabled the gate; not physical feedback. */
+bool platform_io_startup_inhibited(void);
 int platform_io_apply(bool on, uint8_t level);
 int platform_io_check_phase_cut(enum dimmer_phase_cut_mode);
 int platform_io_set_phase_cut(enum dimmer_phase_cut_mode);

@@ -21,7 +21,7 @@ static const struct gpio_dt_spec up=GPIO_DT_SPEC_GET(DT_ALIAS(sw0),gpios);
 static const struct gpio_dt_spec down=GPIO_DT_SPEC_GET(DT_ALIAS(sw1),gpios);
 static const struct device *marker=DEVICE_DT_GET(DT_NODELABEL(gpregret2));
 static struct vimar_buttons buttons;
-static bool have_handoff,ready,failed,recovering,input_valid;
+static bool have_handoff,ready,failed,recovering,input_valid,startup_inhibited;
 static int32_t handoff_raw,last_raw=-32768;
 static enum dimmer_phase_cut_mode phase_cut = DIMMER_PHASE_TRAILING_EDGE;
 static int load(void *ctx,uint8_t *p,size_t n){ARG_UNUSED(ctx);ssize_t count=settings_load_one("vimar/handoff",p,n);return count==(ssize_t)n?0:(count<0?(int)count:-EINVAL);}
@@ -57,6 +57,7 @@ int platform_io_restore(bool *on,uint8_t *level)
 }
 int platform_io_init(bool on,uint8_t level)
 {
+ startup_inhibited=false;
  int32_t raw;if(!vimar_level_encode(on,level,&raw))return-EINVAL;
  if(have_handoff)raw=handoff_raw; /* Preserve exact signed value across BLE->Zigbee migration. */
  int error;
@@ -68,11 +69,14 @@ int platform_io_init(bool on,uint8_t level)
  ready=true;input_valid=true; /* Keep recovery input usable after an output failure. */
  if(vimar_power_protection_blocked())raw=-32768;
  error=research_output_init_at_level_phase(raw,(uint8_t)phase_cut);
+ /* This specific research initializer failure has already cleared the gate. */
+ startup_inhibited=error==-EBUSY;
  failed=error!=0;last_raw=failed?-32768:raw;
  if(error)return error;
  int led_error=vimar_led_init();if(led_error)LOG_WRN("LED init:%d",led_error);
  return 0;
 }
+bool platform_io_startup_inhibited(void){return startup_inhibited;}
 int platform_io_check_phase_cut(enum dimmer_phase_cut_mode phase)
 {
  if(phase<DIMMER_PHASE_TRAILING_EDGE||phase>=DIMMER_PHASE_MODE_COUNT)return-EINVAL;
