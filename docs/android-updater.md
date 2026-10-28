@@ -1,11 +1,11 @@
-# Vomar Android 1.1.2
+# Vomar Android 1.1.4
 
 The Android launcher displays **Vomar** with the amber V/open-switch icon.
 Settings shows the same symbol, application name and installed version. The
 application ID remains `org.openvimar.updater`, so an upgrade with the same signer
 retains the existing application data.
 
-App 1.1.2 (versionCode 32) includes native Vomar branding, device association,
+App 1.1.4 (versionCode 34) includes native Vomar branding, device association,
 automatic broker reconnection and explicit Zigbee pairing from Bluetooth. Pairing
 requires compatible signed MAIN and recovery, fresh inspection and confirmation;
 it forgets the previous Zigbee network and opens a two-minute window. See
@@ -13,6 +13,26 @@ it forgets the previous Zigbee network and opens a two-minute window. See
 firmware operation after reconnection. Upgrade with the existing signing identity
 without uninstalling or clearing data. Software checks do not qualify physical
 phone, radio or DK operations.
+
+## Project releases and experimental firmware
+
+Open **Settings → Firmware updates → Check for updates** to check the configured
+GitHub source. A published project release may contain experimental firmware.
+Updates shows **Project release VERSION is available.** and
+**Firmware NATIVE_VERSION · Experimental**, with **Open release notes**. Bundle
+and firmware versions are independent. The notice does not claim physical
+qualification or a verified firmware download.
+
+Read the release notes and known issues, download the experimental ZIP, then use
+**Choose local ZIP…** for the existing manual import/review flow. Merely checking
+for updates does not download/select experimental firmware, select its Zigbee
+OTA carrier, create a fleet job or start a device operation. A previously selected
+qualified package stays selected. Fresh review and the existing package, signer,
+identity and operation checks remain mandatory.
+
+If the repository has no published release, a draft alone is not available to
+the app. An incomplete or failed metadata check shows an error without retaining
+a stale availability notice.
 
 ## Device association introduced in 1.0.9
 

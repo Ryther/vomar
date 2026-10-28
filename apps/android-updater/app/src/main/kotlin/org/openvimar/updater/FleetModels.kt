@@ -9,6 +9,11 @@ internal data class ZigbeeOtaReference(val manufacturerCode:Int,val imageType:In
 /** Immutable organisation reference. Executors independently revalidate bytes/signatures. */
 internal data class FleetReleaseRef(val digest:String,val version:String,val mainHash:String,val cachePath:String,
     val schemaVersion:Int=2,val zigbeeOta:ZigbeeOtaReference?=null,val targetRecoveryHash:String?=null)
+/** Project metadata is availability information, never package or operation admission. */
+internal sealed interface FleetReleaseLookup {
+    data class Downloaded(val firmware:FleetReleaseRef):FleetReleaseLookup
+    data class Experimental(val distributionVersion:String,val firmwareVersion:String,val releasePage:String):FleetReleaseLookup
+}
 internal data class FleetJob(val id:String,val device:DeviceRecord,val route:FleetRoute,
     val state:FleetJobState=FleetJobState.QUEUED,val nearbyReady:Boolean=false,val progress:Int?=null,
     val message:String="Queued",val resumeRequested:Boolean=false,val remoteSubmissionMayHaveStarted:Boolean=false)

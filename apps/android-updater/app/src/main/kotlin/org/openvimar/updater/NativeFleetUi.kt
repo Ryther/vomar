@@ -107,6 +107,7 @@ internal class NativeFleetUi(
     private var bootstrapPending=false
     private var currentServiceStatus=""
     private var sourceMessage=""
+    private var experimentalRelease:FleetReleaseLookup.Experimental?=null
     private var releasesChecked=false
     private var deviceRows:LinearLayout?=null
     private var historyReader:((DeviceRecord)->Unit)?=null
@@ -574,6 +575,11 @@ internal class NativeFleetUi(
             val bar=ProgressBar(activity,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;progressTintList=ColorStateList.valueOf(color(R.color.ui_primary))}
             downloadProgress=bar;add(bar,gap=12);updateDownloadProgress()
         }else if(sourceMessage.isNotBlank())copy(sourceMessage).accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
+        experimentalRelease?.let{available->
+            copy("Firmware ${available.firmwareVersion} · Experimental",secondary=false)
+            copy("Review the known issues in the release notes, then download its ZIP and choose it below. This firmware is not qualified for automatic updates.")
+            action("Open release notes"){activity.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(available.releasePage)))}
+        }
         release?.zigbeeOta?.let{ota->
             if(ota.source.isBlank())action("Set Zigbee download URL"){val input=NativeUi.field(activity,"https://…/firmware.ota",input=NativeUi.Input.ADDRESS);AlertDialog.Builder(activity).setTitle("Zigbee download URL").setView(input).setNegativeButton("Cancel",null).setPositiveButton("Verify URL"){_,_->perform("Verify download"){release=runtime.releases.setOtaSource(checkNotNull(release),input.text.toString().trim())}}.show()}
         }
@@ -587,17 +593,19 @@ internal class NativeFleetUi(
         val dialog=AlertDialog.Builder(activity).setTitle("GitHub release source").setView(input).setNegativeButton("Cancel",null).setNeutralButton("Use project default"){_,_->setSource(ReleaseSource.DEFAULT)}.setPositiveButton("Save",null).create()
         dialog.setOnShowListener{dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener{val parsed=ReleaseSource.parse(input.text.toString());if(parsed==null)input.error="Enter a public GitHub owner/repository URL" else{setSource("https://github.com/$parsed");dialog.dismiss()}}};dialog.show()
     }
-    private fun setSource(source:String){releaseFetch?.cancel();sourceBusy=false;store.preferences.edit().putString("source",source).apply();sourceMessage="Source saved. Check for updates to download firmware.";releasesChecked=true;renderPage()}
+    private fun setSource(source:String){releaseFetch?.cancel();sourceBusy=false;experimentalRelease=null;store.preferences.edit().putString("source",source).apply();sourceMessage="Source saved. Check for updates to download firmware.";releasesChecked=true;renderPage()}
     private fun checkReleases(){
         if(sourceBusy)return
         val source=store.preferences.getString("source",ReleaseSource.DEFAULT)?:ReleaseSource.DEFAULT
-        sourceBusy=true;sourceBytes=0;sourceTotal=null;releasesChecked=true;sourceMessage="";if(pageId=="updates")renderPage()
+        sourceBusy=true;sourceBytes=0;sourceTotal=null;releasesChecked=true;sourceMessage="";experimentalRelease=null;if(pageId=="updates")renderPage()
         releaseFetch=scope.launch{
             val result=try{Result.success(runtime.releases.fetchLatest(source,onProgress={bytes->scope.launch{sourceBytes=bytes;updateDownloadProgress()}},onTotal={total->scope.launch{sourceTotal=total;updateDownloadProgress()}}))}catch(e:CancellationException){throw e}catch(e:Exception){Result.failure(e)}
             sourceBusy=false
             if(source==store.preferences.getString("source",ReleaseSource.DEFAULT)){
-                result.onSuccess{release=it}
-                sourceMessage=result.fold({"Release ${it.version} downloaded and signature verified."},{when{it.message?.contains("HTTP 404")==true->"The repository or a published release is not available yet. Choose a local ZIP or change the source.";it.message?.contains("HTTP 403")==true||it.message?.contains("HTTP 429")==true->"GitHub’s request limit was reached. Try later or choose a local ZIP.";else->it.message?:"Cannot fetch this release. Try again or choose a local ZIP."}})
+                sourceMessage=result.fold({found->when(found){
+                    is FleetReleaseLookup.Downloaded->{release=found.firmware;"Release ${found.firmware.version} downloaded and signature verified."}
+                    is FleetReleaseLookup.Experimental->{experimentalRelease=found;"Project release ${found.distributionVersion} is available."}
+                }},{when{it.message?.contains("HTTP 404")==true->"The repository or a published release is not available yet. Choose a local ZIP or change the source.";it.message?.contains("HTTP 403")==true||it.message?.contains("HTTP 429")==true->"GitHub’s request limit was reached. Try later or choose a local ZIP.";else->it.message?:"Cannot fetch this release. Try again or choose a local ZIP."}})
                 if(pageId=="updates")renderPage()
             }
         }
