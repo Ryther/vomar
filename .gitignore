@@ -1260,3 +1260,10 @@
 !/tools/dev/tests/test_desktop_runtime.py
 !/apps/desktop-updater/src/vomar_updater/runtime_info.py
 !/apps/desktop-updater/tests/test_runtime_info.py
+!/firmware/src/vimar_attachment.h
+!/firmware/src/vimar_attachment.c
+!/firmware/src/vimar_attachment_gpio.h
+!/firmware/src/vimar_attachment_gpio.c
+!/tools/firmware/tests/test_vimar_attachment.py
+!/tools/firmware/tests/test_attachment_gpio.py
+!/tools/firmware/tests/test_attachment_controller.py

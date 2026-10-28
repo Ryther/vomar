@@ -265,6 +265,18 @@ The existing 60-second ordinary Bluetooth idle return remains; exceptional or
 partial-update recovery remains active, with blue/red rather than ordinary
 blue/green. Physical qualification of this new feature is pending.
 
+## Wired auxiliary push buttons
+
+Traditional push buttons on terminal P are one wired control input, even when
+several buttons control the same light. They are separate from the dimmer's
+front UP/DOWN keys and from associated radio controls. The source candidate adds
+short-press toggle and alternating long-press dimming while the light is ON;
+release stops dimming. An operator confirmed these functions with all four wired
+buttons on one installed device running the signed MAIN 1.1.3 candidate. This
+bounded trial does not establish support in other installed or released packages.
+Confirm the exact installed firmware before claiming support. There is no
+updater setting that can add an input handler absent from that firmware.
+
 ## Diagnose without guessing
 
 | Symptom | Next checks |

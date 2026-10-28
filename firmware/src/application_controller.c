@@ -116,17 +116,71 @@ static void classified(const struct gesture_event *e,void *ctx)
  }
  switch(a){case DIMMER_ACTION_TOGGLE:ordinary_request(c,!c->model.state.on,c->model.state.level,DIMMER_SOURCE_PHYSICAL,c->now_ms);break;case DIMMER_ACTION_ON:ordinary_request(c,true,c->model.state.level,DIMMER_SOURCE_PHYSICAL,c->now_ms);break;case DIMMER_ACTION_OFF:ordinary_request(c,false,c->model.state.level,DIMMER_SOURCE_PHYSICAL,c->now_ms);break;case DIMMER_ACTION_TIMED_ON:timed_on(c,c->now_ms,c->model.config.timer_duration_s);break;case DIMMER_ACTION_BYPASS_ON:bypass_on(c,c->now_ms);break;default:break;}
 }
+void application_controller_cancel_attachment(struct application_controller *c)
+{
+ /* Keep the logical assertion until release, so cancellation cannot turn the
+  * remaining hold or duplicate asserted edges into a fresh click. */
+ if(c->attachment_pressed)c->attachment_cancelled=true;
+}
+void application_controller_attachment_settled(struct application_controller *c,bool settled)
+{c->attachment_settled=settled;}
+static void attachment_step(struct application_controller *c,uint64_t now)
+{
+ int level=(int)c->model.state.level+
+     (c->attachment_down?-(int)c->model.config.level_step:(int)c->model.config.level_step);
+ if(level<c->model.config.min_level)level=c->model.config.min_level;
+ if(level>c->model.config.max_level)level=c->model.config.max_level;
+ ordinary_request(c,true,(uint8_t)level,DIMMER_SOURCE_PHYSICAL_HOLD,now);
+}
+static void attachment_tick(struct application_controller *c,uint64_t now)
+{
+ if(!c->attachment_settled||!c->attachment_pressed||c->attachment_cancelled||c->protection_blocked)return;
+ if(!c->attachment_long){
+  if(now-c->attachment_pressed_ms<c->model.config.long_press_ms)return;
+  c->attachment_long=true;
+  /* Stock wired LONG does not turn an OFF light on. RELEASE still reverses
+   * direction, independently of whether this hold produced output. */
+  if(!c->model.state.on||c->model.config.output_mode!=DIMMER_OUTPUT_DIMMABLE)return;
+  if(c->model.state.level<=c->model.config.min_level)c->attachment_down=false;
+  if(c->model.state.level>=c->model.config.max_level)c->attachment_down=true;
+  attachment_step(c,now);
+  c->attachment_next_step_ms=now+c->model.config.level_step_period_ms;
+ }else if(c->model.state.on&&c->model.config.output_mode==DIMMER_OUTPUT_DIMMABLE&&
+          now>=c->attachment_next_step_ms&&c->attachment_next_step_ms){
+  attachment_step(c,now);
+  c->attachment_next_step_ms=now+c->model.config.level_step_period_ms;
+ }
+}
+void application_controller_attachment_edge(struct application_controller *c,bool pressed,uint64_t now)
+{
+ c->now_ms=now;
+ if(pressed){
+  if(c->attachment_pressed)return;
+  application_controller_cancel_gestures(c);
+  dimmer_model_cancel_restore(&c->model);
+  c->attachment_pressed=true;c->attachment_cancelled=c->protection_blocked;
+  c->attachment_long=false;c->attachment_pressed_ms=now;c->attachment_next_step_ms=0;
+  return;
+ }
+ if(!c->attachment_pressed)return;
+ c->attachment_pressed=false;
+ if(c->attachment_cancelled){c->attachment_cancelled=false;return;}
+ bool was_long=c->attachment_long||now-c->attachment_pressed_ms>=c->model.config.long_press_ms;
+ if(was_long)c->attachment_down=!c->attachment_down;
+ else ordinary_request(c,!c->model.state.on,c->model.state.level,DIMMER_SOURCE_PHYSICAL,now);
+}
 void application_controller_init(struct application_controller *c,const struct dimmer_config *cfg,bool on,uint8_t level,const struct application_callbacks *cb,void *ctx,uint64_t now)
-{memset(c,0,sizeof(*c));c->callbacks=*cb;c->context=ctx;dimmer_model_init_at(&c->model,cfg,on,level,now);c->output_on=c->model.state.on;c->output_level=c->model.state.level;gesture_classifier_init(&c->gestures,cfg,classified,c);led_controller_init(&c->leds,cfg);}
-void application_controller_button_edge(struct application_controller *c,enum gesture_side side,bool pressed,uint64_t now){c->now_ms=now;if(pressed)dimmer_model_cancel_restore(&c->model);gesture_classifier_edge(&c->gestures,side,pressed,now);}
+{memset(c,0,sizeof(*c));c->callbacks=*cb;c->context=ctx;dimmer_model_init_at(&c->model,cfg,on,level,now);c->output_on=c->model.state.on;c->output_level=c->model.state.level;c->attachment_settled=true;gesture_classifier_init(&c->gestures,cfg,classified,c);led_controller_init(&c->leds,cfg);}
+void application_controller_button_edge(struct application_controller *c,enum gesture_side side,bool pressed,uint64_t now){c->now_ms=now;if(pressed){application_controller_cancel_attachment(c);dimmer_model_cancel_restore(&c->model);}gesture_classifier_edge(&c->gestures,side,pressed,now);}
 void application_controller_command(struct application_controller *c,bool on,uint8_t level,enum dimmer_request_source source,uint64_t now){c->now_ms=now;if(source==DIMMER_SOURCE_ZIGBEE||source==DIMMER_SOURCE_ZIGBEE_LEVEL)application_controller_cancel_gestures(c);ordinary_request(c,on,level,source,now);}
 void application_controller_bypass_on(struct application_controller *c,uint64_t now){c->now_ms=now;bypass_on(c,now);}
-void application_controller_tick_input(struct application_controller *c,uint64_t now,bool settled){c->now_ms=now;if(c->model.config.output_mode!=DIMMER_OUTPUT_DIMMABLE)memset(c->hold_active,0,sizeof(c->hold_active));if(settled){gesture_classifier_tick(&c->gestures,now);for(enum gesture_side side=GESTURE_SIDE_UP;side<GESTURE_SIDE_COUNT;side++){if(c->hold_active[side]&&now>=c->next_level_step_ms[side]){int level=(int)c->model.state.level+local_action_level_delta(&c->model.config,side);if(level<1)level=1;if(level>254)level=254;ordinary_request(c,true,(uint8_t)level,DIMMER_SOURCE_PHYSICAL_HOLD,now);c->next_level_step_ms[side]+=c->model.config.level_step_period_ms;}}}bool timer=c->model.state.off_timer_active;bool restore=c->model.state.restore_waiting;if(dimmer_model_tick(&c->model,now)){if(c->callbacks.system_event)c->callbacks.system_event(c->context,timer?APPLICATION_EVENT_TIMER_EXPIRED:APPLICATION_EVENT_STATE_CORRECTION,0);schedule_output(c,now,false);}else if(restore&&!c->model.state.restore_waiting&&c->callbacks.system_event)c->callbacks.system_event(c->context,APPLICATION_EVENT_STATE_CORRECTION,0);advance_output(c,now);}
+void application_controller_tick_input(struct application_controller *c,uint64_t now,bool settled){c->now_ms=now;attachment_tick(c,now);if(c->model.config.output_mode!=DIMMER_OUTPUT_DIMMABLE)memset(c->hold_active,0,sizeof(c->hold_active));if(settled){gesture_classifier_tick(&c->gestures,now);for(enum gesture_side side=GESTURE_SIDE_UP;side<GESTURE_SIDE_COUNT;side++){if(c->hold_active[side]&&now>=c->next_level_step_ms[side]){int level=(int)c->model.state.level+local_action_level_delta(&c->model.config,side);if(level<1)level=1;if(level>254)level=254;ordinary_request(c,true,(uint8_t)level,DIMMER_SOURCE_PHYSICAL_HOLD,now);c->next_level_step_ms[side]+=c->model.config.level_step_period_ms;}}}bool timer=c->model.state.off_timer_active;bool restore=c->model.state.restore_waiting;if(dimmer_model_tick(&c->model,now)){if(c->callbacks.system_event)c->callbacks.system_event(c->context,timer?APPLICATION_EVENT_TIMER_EXPIRED:APPLICATION_EVENT_STATE_CORRECTION,0);schedule_output(c,now,false);}else if(restore&&!c->model.state.restore_waiting&&c->callbacks.system_event)c->callbacks.system_event(c->context,APPLICATION_EVENT_STATE_CORRECTION,0);advance_output(c,now);}
 void application_controller_feedback(struct application_controller *c,uint32_t op,bool on,uint8_t level){if(c->protection_blocked&&on)return;if(c->emitting_output){if(op==c->model.state.operation_id){c->output_on=on;if(on)c->output_level=level;}return;}bool correction=op==c->model.state.operation_id&&(on!=c->model.state.target_on||level!=c->model.state.target_level);if(dimmer_model_apply_effective(&c->model,op,on,level)&&correction&&c->callbacks.system_event)c->callbacks.system_event(c->context,APPLICATION_EVENT_STATE_CORRECTION,0);}
 const struct dimmer_state *application_controller_state(const struct application_controller *c){return dimmer_model_state(&c->model);}
 
 void application_controller_cancel_gestures(struct application_controller *c)
 {
+ application_controller_cancel_attachment(c);
  memset(c->gestures.sides,0,sizeof(c->gestures.sides));
  memset(c->queued_press_count,0,sizeof(c->queued_press_count));
  memset(c->hold_active,0,sizeof(c->hold_active));

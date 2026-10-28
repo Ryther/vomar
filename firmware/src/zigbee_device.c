@@ -242,6 +242,7 @@ static void custom_write_hook(zb_uint8_t endpoint, zb_uint16_t attr_id,
     if (zigbee_custom_write_config(&candidate, attr_id,
         custom_value(attr_id, value)) &&
         dimmer_model_modes_supported(&candidate, platform_io_capabilities())) {
+        zigbee_device_cancel_gestures();
         controller.model.config = candidate;
         controller.gestures.config = candidate;
         controller.leds.config = candidate;
@@ -286,12 +287,14 @@ static zb_bool_t custom_command_handler(zb_uint8_t buffer)
         request_snapshot();
     } else if (header.cmd_id == VIMAR_COMMAND_BYPASS_ON &&
                zb_buf_len(buffer) == 0) {
+        zigbee_device_cancel_gestures();
         application_controller_bypass_on(&controller, k_uptime_get());
     } else if(header.cmd_id==VIMAR_COMMAND_SET_OUTPUT) {
         bool on;uint8_t level;
         if(!zigbee_custom_decode_set_output(payload,zb_buf_len(buffer),&on,&level)) {
             result=RET_INVALID_PARAMETER;
         } else {
+            zigbee_device_cancel_gestures();
             application_controller_command(&controller,on,level,DIMMER_SOURCE_ZIGBEE,k_uptime_get());
         }
     } else if(header.cmd_id==VIMAR_COMMAND_ENTER_RECOVERY && zb_buf_len(buffer)==0) {
@@ -857,8 +860,18 @@ static void publish_model(void)
     app_settings_schedule_state(state->on, state->level, now_ms);
 }
 
+void zigbee_device_cancel_attachment(void)
+{
+    application_controller_cancel_attachment(&controller);
+    platform_io_cancel_attachment();
+    application_controller_attachment_edge(&controller,false,k_uptime_get());
+}
 void zigbee_device_cancel_gestures(void)
-{ application_controller_cancel_gestures(&controller); }
+{
+    application_controller_cancel_gestures(&controller);
+    platform_io_cancel_attachment();
+    application_controller_attachment_edge(&controller,false,k_uptime_get());
+}
 
 void zigbee_device_local_edge_at(uint8_t encoded_edge,uint64_t timestamp_ms)
 {
@@ -868,6 +881,11 @@ void zigbee_device_local_edge_at(uint8_t encoded_edge,uint64_t timestamp_ms)
 }
 void zigbee_device_local_edge(uint8_t encoded_edge)
 { zigbee_device_local_edge_at(encoded_edge,k_uptime_get()); }
+
+void zigbee_device_attachment_edge_at(bool pressed,uint64_t timestamp_ms)
+{ application_controller_attachment_edge(&controller,pressed,timestamp_ms); }
+void zigbee_device_attachment_settled(bool settled)
+{ application_controller_attachment_settled(&controller,settled); }
 
 static void state_changed(void *unused)
 {
@@ -991,6 +1009,7 @@ static void zcl_callback(zb_bufid_t buffer)
 #endif
     if (param->device_cb_id == ZB_ZCL_LEVEL_CONTROL_SET_VALUE_CB_ID) {
         uint8_t level = param->cb_param.level_control_set_value_param.new_value;
+        zigbee_device_cancel_gestures();
         application_controller_command(&controller, level != 0,
             level == 0 ? 1 : level, DIMMER_SOURCE_ZIGBEE_LEVEL, k_uptime_get());
         return;
@@ -999,6 +1018,7 @@ static void zcl_callback(zb_bufid_t buffer)
         param->cb_param.set_attr_value_param.cluster_id == ZB_ZCL_CLUSTER_ID_ON_OFF &&
         param->cb_param.set_attr_value_param.attr_id == ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID) {
         const struct dimmer_state *state = application_controller_state(&controller);
+        zigbee_device_cancel_gestures();
         application_controller_command(&controller,
             param->cb_param.set_attr_value_param.values.data8 != 0,
             state->level, DIMMER_SOURCE_ZIGBEE, k_uptime_get());

@@ -58,3 +58,5 @@ bool platform_io_input_settled(void){return true;}
 #include <errno.h>
 int platform_io_request_recovery(void){return-ENOTSUP;}
 int platform_io_request_pairing(void){return-ENOTSUP;}
+
+void platform_io_cancel_attachment(void){}

@@ -1,6 +1,7 @@
 #include "platform_io.h"
 #include "vimar_level.h"
 #include "vimar_buttons.h"
+#include "vimar_attachment_gpio.h"
 #include "vimar_led.h"
 #include "research_output.h"
 #include "research_handoff.h"
@@ -61,6 +62,8 @@ int platform_io_init(bool on,uint8_t level)
  if(!gpio_is_ready_dt(&up)||!gpio_is_ready_dt(&down))return-ENODEV;
  error=gpio_pin_configure_dt(&up,GPIO_INPUT);if(error)return error;
  error=gpio_pin_configure_dt(&down,GPIO_INPUT);if(error)return error;
+ int attachment_error=vimar_attachment_gpio_init();
+ if(attachment_error)LOG_WRN("Wired input init:%d",attachment_error);
  ready=true;input_valid=true; /* Keep recovery input usable after an output failure. */
  if(vimar_power_protection_blocked())raw=-32768;
  error=research_output_init_at_level(raw);
@@ -90,6 +93,7 @@ void platform_io_tick(uint64_t now)
  int u=gpio_pin_get_dt(&up),d=gpio_pin_get_dt(&down);
  if(u<0||d<0){
   input_valid=false;zigbee_device_cancel_gestures();buttons.blocked=true;
+  vimar_attachment_gpio_tick(now,true);
   buttons.enabled=false;buttons.chord=false;buttons.selecting=false;
   zigbee_device_connection_selector(false,now);return;
  }
@@ -97,10 +101,12 @@ void platform_io_tick(uint64_t now)
  bool was_selecting=buttons.selecting;
  struct vimar_button_sample sample=vimar_buttons_tick(&buttons,now,(u?1:0)|(d?2:0));
  if(sample.cancel)zigbee_device_cancel_gestures();
+ vimar_attachment_gpio_tick(now,buttons.blocked||buttons.selecting||vimar_power_protection_blocked());
  if(sample.selector)zigbee_device_connection_selector(true,now);
  if(was_selecting&&!buttons.selecting)zigbee_device_connection_selector(false,now);
  if(sample.pairing){(void)platform_io_request_pairing();return;}
  if(sample.recovery){(void)vimar_boot_trace_request(BOOT_REASON_CHORD);(void)platform_io_request_recovery();return;}
+ if(sample.changed&sample.pressed)zigbee_device_cancel_attachment();
  if(sample.changed&1)zigbee_device_local_edge_at((sample.pressed&1)?2:0,buttons.raw_since);
  if(sample.changed&2)zigbee_device_local_edge_at(1|((sample.pressed&2)?2:0),buttons.raw_since);
 }
@@ -136,3 +142,5 @@ static int request_connection(bool bluetooth)
 }
 int platform_io_request_recovery(void){return request_connection(true);}
 int platform_io_request_pairing(void){return request_connection(false);}
+
+void platform_io_cancel_attachment(void){vimar_attachment_gpio_cancel();}

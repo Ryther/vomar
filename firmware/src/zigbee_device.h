@@ -7,8 +7,11 @@
 int zigbee_device_start(void);
 int zigbee_device_prepare_recovery(void);
 void zigbee_device_cancel_gestures(void);
+void zigbee_device_cancel_attachment(void);
 void zigbee_device_connection_selector(bool active,uint64_t since_ms);
 void zigbee_device_local_edge_at(uint8_t encoded_edge, uint64_t timestamp_ms);
 void zigbee_device_local_edge(uint8_t encoded_edge);
+void zigbee_device_attachment_edge_at(bool pressed, uint64_t timestamp_ms);
+void zigbee_device_attachment_settled(bool settled);
 
 #endif

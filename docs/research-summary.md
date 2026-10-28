@@ -81,6 +81,7 @@ trace. Assertions, fault recording and automatic reset behavior remain enabled.
 | Interface | Confirmed nRF-side behavior | Remaining limit |
 | --- | --- | --- |
 | Local UP / DOWN | P0.26 / P0.04, active-low with pull-ups | Board assembly and behavior still need acceptance on each supported hardware scope. |
+| Wired auxiliary input | Stock index2 uses pull-up P1.09, both-edge capture and qualified LOW pulses; stock Zigbee maps it to one-button toggle/dimming. On one installed Vimar with signed MAIN 1.1.3, the operator reported toggle, dimming, release-to-stop and alternating direction working with all four wired buttons. | Physical pin-to-terminal routing and waveforms remain unmeasured. This bounded observation does not establish broader hardware or release qualification. |
 | Color LED | PWM0 on P0.12, P0.06, P0.08 | Physical color order and polarity were not established by the stock trace. |
 | Dimmer output | PWM1 channel 3 on P0.13, 8 MHz clock, COUNTERTOP 1024; P0.14 high for valid level, low for OFF sentinel −32768 | Downstream electrical role and complete controller/protection contract remain unproven. |
 | Configuration output | P0.19 follows a persistent configuration byte | Physical endpoint/meaning remains unresolved. |

@@ -13,6 +13,7 @@ bool platform_io_input_settled(void);
 int platform_io_request_recovery(void);
 int platform_io_request_pairing(void);
 void platform_io_tick(uint64_t now);
+void platform_io_cancel_attachment(void);
 void platform_io_led(const struct led_output *output, uint64_t now);
 const struct dimmer_secondary_capabilities *platform_io_capabilities(void);
 void platform_io_render(bool on);

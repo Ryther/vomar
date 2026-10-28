@@ -138,3 +138,26 @@ to make such a test run. SDK-dependent checks cover actual imgtool/zcbor,
 compression decoding and reviewed ZBOSS headers; set `VIMAR_NCS_WORKSPACE` for
 a prepared local SDK workspace. These optional checks and historical artifact
 checks remain separate from physical qualification.
+
+## Wired auxiliary push-button candidate
+
+The source now includes the previously omitted wired-input path. Conventional
+push buttons connected to terminal P share one auxiliary input; they are separate
+from front UP/DOWN buttons and from Bluetooth Mesh/radio accessories. The stock
+Zigbee trace uses a pulse-qualified input and one-button dimmer behavior. The
+candidate provides short-press toggle, long-press dimming while already ON,
+alternating direction after long release, and stop on release. Configured level
+limits, hold timing, step size, auto-off and output protection still apply.
+
+A button held at startup, through connection selection or across an external
+command must release before another action. Auxiliary presses never enter the
+connection selector. They do not masquerade as front UP/DOWN gesture events or
+add a new persistent setting. Mesh scene assignment and radio accessory pairing
+are separate features and are not implemented by this change.
+
+On one installed Vimar running the exact signed MAIN 1.1.3 candidate, the
+operator reported successful short toggle, long-press dimming, release-to-stop
+and alternating direction with all four wired buttons. The preceding OTA and
+correlated readback verified the version, unchanged recovery and all 40 settings.
+This is bounded operator-observed acceptance; no terminal waveform or physical
+MAIN hash was measured, and broader hardware/release qualification remains open.
