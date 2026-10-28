@@ -13,6 +13,11 @@ import android.widget.EditText
 import android.widget.ScrollView
 import kotlinx.coroutines.*
 import java.io.File
+import java.io.ByteArrayInputStream
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONArray
+import org.json.JSONObject
 
 /** Actual production views with isolated synthetic metadata. No network/radio/update executor runs. */
 @Suppress("DEPRECATION")
@@ -21,17 +26,18 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
     private var ui:NativeFleetUi?=null
     private var imports=0
     private var executions=0
+    private var projectPreferences:android.content.SharedPreferences?=null
     private val target=FleetReleaseRef("a".repeat(64),"0.6.1","b".repeat(64),"/synthetic/never-opened.zip")
     private var priorTheme:String?=null
     override fun setUp(){super.setUp();setActivityInitialTouchMode(true);instrumentation.setInTouchMode(true);val p=instrumentation.targetContext.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE);priorTheme=p.getString("theme",null);p.edit().putString("theme","Dark").commit()}
     override fun tearDown(){instrumentation.runOnMainSync{ui?.close()};testScope.cancel();instrumentation.targetContext.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE).edit().apply{if(priorTheme==null)remove("theme")else putString("theme",priorTheme)}.commit();super.tearDown()}
     private fun record(i:Int,version:String?="0.6.0")=DeviceRecord("fixture-$i",when(i){1->"Bathroom · Ceiling light";2->"Studio · Reading light";else->"Room $i · Main light"},"Ground floor",address="C0:00:00:00:00:${"%02X".format(i)}",uid=listOf("12345678","%08x".format(i)),installedVersion=version,firmwareKind=FirmwareKind.CUSTOM,observedAt=1234,observationSource="Synthetic instrumentation observation")
-    private fun fixture(records:List<DeviceRecord>,groups:List<FleetGroup> = emptyList()):NativeFleetUi{
+    private fun fixture(records:List<DeviceRecord>,groups:List<FleetGroup> = emptyList(),releaseSource:((Context)->AndroidFleetReleases)?=null):NativeFleetUi{
         val context=object:ContextWrapper(activity){override fun getSharedPreferences(name:String,mode:Int)=super.getSharedPreferences("native-ui-test-$name",mode)}
         context.getSharedPreferences("fleet-ui",Context.MODE_PRIVATE).edit().clear().commit()
         val store=FleetStore(context);store.preferences.edit().putBoolean("autoCheck",false).commit();records.forEach(store::upsert)
         val persistence=object:FleetQueuePersistence{var data=groups;override fun load()=data;override fun save(groups:List<FleetGroup>){data=groups}}
-        val runtime=FleetRuntime(store,AndroidFleetReleases(context),testScope,persistence,FleetJobExecutor{_,_->executions++;error("A UI review must never execute updates")},{it},{},{error("No BLE in UI review")})
+        val runtime=FleetRuntime(store,releaseSource?.invoke(context)?:AndroidFleetReleases(context),testScope,persistence,FleetJobExecutor{_,_->executions++;error("A UI review must never execute updates")},{it},{},{error("No BLE in UI review")})
         instrumentation.runOnMainSync{ui?.close();ui=NativeFleetUi(activity,FrameLayout(activity),{imports++},{},{},{},{},{},runtime);activity.setContentView(ui!!.root)}
         instrumentation.waitForIdleSync()
         val initialised=NativeFleetUi::class.java.getDeclaredField("releaseInitialised").apply{isAccessible=true}
@@ -42,6 +48,160 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         instrumentation.waitForIdleSync();return ui!!
     }
     private fun nodes(view:View=ui!!.root):List<View> = listOf(view)+if(view is ViewGroup)(0 until view.childCount).flatMap{nodes(view.getChildAt(it))}else emptyList()
+    private class MetadataConnection(url:URL,private val payload:ByteArray,private val status:Int=200):HttpURLConnection(url){
+        override fun connect(){}
+        override fun disconnect(){}
+        override fun usingProxy()=false
+        override fun getResponseCode()=status
+        override fun getContentLengthLong()=payload.size.toLong()
+        override fun getInputStream()=ByteArrayInputStream(payload)
+    }
+    private class ProjectMetadata {
+        val requests=java.util.Collections.synchronizedList(mutableListOf<String>())
+        var omitApk=false
+        var latestStatus=200
+        var emptyNetworkFailure=false
+        var qualifiedPayload:ByteArray?=null
+        var syntheticKey:ByteArray?=null
+        private val repo="Ryther/vomar"
+        private val prefix="https://github.com/$repo/releases/download/v1.0.0/"
+        private fun manifest():ByteArray {
+            val roles=listOf("firmware-common","zigbee-ota","android-apk","desktop-linux-x64","desktop-windows-x64","desktop-windows-setup","desktop-macos-arm64","zigbee2mqtt-converter","licenses","offline-guide","source-sbom")+if(qualifiedPayload==null)listOf("release-acceptance")else emptyList()
+            val rows=JSONArray()
+            for(role in roles){
+                val filename=when(role){
+                    "firmware-common"->if(qualifiedPayload==null)"vomar-firmware-1.0.0-qualification-candidate.zip"else "vomar-firmware-1.0.0.zip"
+                    "zigbee-ota"->"vomar-firmware-1.0.0-qualification-candidate.ota"
+                    "release-acceptance"->"vomar-release-acceptance-1.0.0.json"
+                    else->"$role.bin"
+                }
+                val firmwareVersion=if(qualifiedPayload==null)"1.1.2"else "0.6.0"
+                val native=when{role=="firmware-common"||role=="zigbee-ota"->firmwareVersion;role=="android-apk"->"1.1.4";role.startsWith("desktop-")->"1.1.1";role=="zigbee2mqtt-converter"->"1.0.1";else->"1.0.0"}
+                val row=JSONObject().put("role",role).put("filename",filename).put("size",1).put("sha256","ab".repeat(32)).put("componentVersion",native)
+                if(role=="firmware-common"&&qualifiedPayload!=null)row.put("size",qualifiedPayload!!.size).put("sha256",java.security.MessageDigest.getInstance("SHA-256").digest(qualifiedPayload!!).joinToString(""){"%02x".format(it.toInt() and 255)})
+                if(role=="android-apk")row.put("androidVersionCode",34)
+                if(role.startsWith("desktop-")){val parts=role.split('-');row.put("platform",parts[1]).put("architecture",if(parts[2]=="setup")"x64" else parts[2])}
+                rows.put(row)
+            }
+            return JSONObject().put("schemaVersion",1).put("distributionVersion","1.0.0").put("tag","v1.0.0").put("commit","a".repeat(40))
+                .put("components",JSONObject().put("firmware",if(qualifiedPayload==null)"1.1.2"else "0.6.0").put("android","1.1.4").put("desktop","1.1.1").put("zigbee2mqtt","1.0.1")).put("artifacts",rows).toString().toByteArray()
+        }
+        fun connect(url:URL):HttpURLConnection {
+            requests.add(url.toString())
+            if(emptyNetworkFailure)throw java.io.IOException()
+            val metadata=manifest()
+            val bytes=when(url.toString()){
+                "https://api.github.com/repos/$repo/releases/latest"->{
+                    val assets=JSONArray().put(JSONObject().put("name","release-manifest.json").put("size",metadata.size).put("browser_download_url",prefix+"release-manifest.json"))
+                    val rows=JSONObject(String(metadata)).getJSONArray("artifacts")
+                    for(i in 0 until rows.length()){
+                        val r=rows.getJSONObject(i)
+                        if(!omitApk||r.getString("role")!="android-apk")assets.put(JSONObject().put("name",r.getString("filename")).put("size",r.getLong("size")).put("browser_download_url",prefix+r.getString("filename")))
+                    }
+                    JSONObject().put("draft",false).put("prerelease",false).put("tag_name","v1.0.0").put("assets",assets).toString().toByteArray()
+                }
+                prefix+"release-manifest.json"->metadata
+                prefix+"vomar-firmware-1.0.0.zip"->checkNotNull(qualifiedPayload)
+                else->error("Discovery must not request firmware, OTA or any other payload: $url")
+            }
+            return MetadataConnection(url,bytes,latestStatus)
+        }
+    }
+    private fun projectSource(metadata:ProjectMetadata):(Context)->AndroidFleetReleases={context->
+        val isolated=object:ContextWrapper(context){
+            override fun getApplicationContext():Context=this
+            override fun getSharedPreferences(name:String,mode:Int)=super.getSharedPreferences("project-discovery-$name",mode)
+            override fun getResources():android.content.res.Resources {
+                val original=super.getResources();val synthetic=metadata.syntheticKey ?: return original
+                return object:android.content.res.Resources(original.assets,original.displayMetrics,original.configuration){
+                    override fun openRawResource(id:Int):java.io.InputStream=if(id==R.raw.firmware_public)ByteArrayInputStream(synthetic)else super.openRawResource(id)
+                }
+            }
+        }
+        projectPreferences=isolated.getSharedPreferences("fleet-releases",Context.MODE_PRIVATE)
+        projectPreferences!!.edit().clear().putString("selected","c".repeat(64)).commit()
+        AndroidFleetReleases(isolated,metadata::connect)
+    }
+    private fun awaitProjectNotice(predicate:(List<String>)->Boolean){
+        val end=System.currentTimeMillis()+10000
+        while(System.currentTimeMillis()<end){
+            instrumentation.waitForIdleSync();var ready=false
+            instrumentation.runOnMainSync{ready=predicate(texts())}
+            if(ready)return
+            Thread.sleep(50)
+        }
+        var observed="";instrumentation.runOnMainSync{observed=texts().joinToString(" | ")}
+        capture("project-release-missing-result")
+        fail("Project release result did not reach the real Updates screen: $observed")
+    }
+    fun testProjectReleaseIsVisibleWithoutDownloadingOrSelectingExperimentalFirmware(){
+        val metadata=ProjectMetadata();val native=fixture(listOf(record(1)),releaseSource=projectSource(metadata))
+        instrumentation.runOnMainSync{native.navigate("updates")};click("Check for updates")
+        awaitProjectNotice{it.contains("Project release 1.0.0 is available.")}
+        assertTrue(texts().contains("Firmware 1.1.2 · Experimental"))
+        assertTrue(texts().contains("Open release notes"))
+        assertTrue(texts().contains("Firmware ${target.version}"))
+        assertEquals(listOf("https://api.github.com/repos/Ryther/vomar/releases/latest","https://github.com/Ryther/vomar/releases/download/v1.0.0/release-manifest.json"),metadata.requests.toList())
+        assertEquals("c".repeat(64),projectPreferences!!.getString("selected",null))
+        assertEquals(0,imports);assertEquals(0,executions)
+        val notes=android.content.IntentFilter(android.content.Intent.ACTION_VIEW).apply{
+            addDataScheme("https");addDataAuthority("github.com",null)
+            addDataPath("/Ryther/vomar/releases/tag/v1.0.0",android.os.PatternMatcher.PATTERN_LITERAL)
+        }
+        val monitor=instrumentation.addMonitor(notes,null,true)
+        try{click("Open release notes");assertEquals(1,monitor.hits)}finally{instrumentation.removeMonitor(monitor)}
+        capture("experimental-project-release-dark")
+    }
+    fun testAnIncompleteProjectReleaseDoesNotLeaveAnAvailabilityClaim(){
+        val metadata=ProjectMetadata();val native=fixture(emptyList(),releaseSource=projectSource(metadata))
+        instrumentation.runOnMainSync{native.navigate("updates")};click("Check for updates")
+        awaitProjectNotice{it.contains("Project release 1.0.0 is available.")}
+        metadata.omitApk=true;click("Check for updates")
+        awaitProjectNotice{it.any{v->v.contains("Missing, duplicate or size-mismatched distribution asset")}}
+        assertFalse(texts().contains("Open release notes"));assertFalse(texts().contains("Project release 1.0.0 is available."))
+        assertEquals(0,imports);assertEquals(0,executions)
+    }
+    fun testQualifiedFirmwareStillDownloadsVerifiesAndSelectsWithoutStartingAnUpdate(){
+        val metadata=ProjectMetadata().apply{
+            qualifiedPayload=instrumentation.context.assets.open("synthetic-common-v3.zip").use{it.readBytes()}
+            syntheticKey=instrumentation.context.assets.open("synthetic-common-v3-public.der").use{it.readBytes()}
+        }
+        val native=fixture(emptyList(),releaseSource=projectSource(metadata))
+        instrumentation.runOnMainSync{native.navigate("updates")};click("Check for updates")
+        awaitProjectNotice{it.contains("Release 0.6.0 downloaded and signature verified.")}
+        assertTrue(texts().contains("Firmware 0.6.0"));assertFalse(texts().contains("Open release notes"))
+        val expected=java.security.MessageDigest.getInstance("SHA-256").digest(metadata.qualifiedPayload!!).joinToString(""){"%02x".format(it.toInt() and 255)}
+        assertEquals(expected,projectPreferences!!.getString("selected",null))
+        assertEquals("https://github.com/Ryther/vomar/releases/download/v1.0.0/vomar-firmware-1.0.0.zip",metadata.requests.last())
+        assertEquals(3,metadata.requests.size);assertEquals(0,imports);assertEquals(0,executions)
+    }
+    fun testGithubAndNetworkErrorsClearAvailabilityWithoutReplacingTheSelectedFirmware(){
+        val metadata=ProjectMetadata();val native=fixture(emptyList(),releaseSource=projectSource(metadata))
+        instrumentation.runOnMainSync{native.navigate("updates")}
+        val unavailable="The repository or a published release is not available yet. Choose a local ZIP or change the source."
+        val limited="GitHub’s request limit was reached. Try later or choose a local ZIP."
+        for((code,message) in listOf(404 to unavailable,403 to limited,429 to limited,500 to "Release download returned HTTP 500",0 to "Cannot fetch this release. Try again or choose a local ZIP.")){
+            metadata.latestStatus=200;metadata.emptyNetworkFailure=false;click("Check for updates")
+            awaitProjectNotice{it.contains("Project release 1.0.0 is available.")}
+            metadata.latestStatus=if(code==0)200 else code;metadata.emptyNetworkFailure=code==0
+            click("Check for updates");awaitProjectNotice{it.contains(message)}
+            assertFalse(texts().contains("Open release notes"));assertEquals("c".repeat(64),projectPreferences!!.getString("selected",null))
+            assertTrue(texts().contains("Firmware ${target.version}"));assertEquals(0,imports);assertEquals(0,executions)
+        }
+    }
+    fun testChangingTheProjectSourceClearsThePreviousReleaseNotice(){
+        val metadata=ProjectMetadata();val native=fixture(emptyList(),releaseSource=projectSource(metadata))
+        instrumentation.runOnMainSync{native.navigate("updates")};click("Check for updates")
+        awaitProjectNotice{it.contains("Project release 1.0.0 is available.")};click("Update source settings")
+        val field=windowNodes{it.any{n->n.className=="android.widget.EditText"}}.first{it.className=="android.widget.EditText"}
+        val replacement=android.os.Bundle().apply{putCharSequence(android.view.accessibility.AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,"https://github.com/other/project")}
+        assertTrue(field.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_SET_TEXT,replacement))
+        val save=windowNodes{it.any{n->n.text?.toString().equals("Save",ignoreCase=true)}}.first{it.text?.toString().equals("Save",ignoreCase=true)}
+        assertTrue(save.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+        awaitProjectNotice{it.contains("Source saved. Check for updates to download firmware.")}
+        assertFalse(texts().contains("Open release notes"));assertEquals(2,metadata.requests.size)
+        assertEquals(0,imports);assertEquals(0,executions)
+    }
     private fun dialogTexts():List<String>{
         val dialog=NativeFleetUi::class.java.getDeclaredField("jobDialog").apply{isAccessible=true}.get(ui) as? android.app.AlertDialog
         return dialog?.takeIf{it.isShowing}?.window?.decorView?.let{nodes(it).filterIsInstance<TextView>().map{v->v.text.toString()}}.orEmpty()

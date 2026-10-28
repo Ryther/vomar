@@ -5,19 +5,19 @@ from Conventional Commits and creates drafts with vMAJOR.MINOR.PATCH tags.
 Firmware, Android versionName/versionCode, desktop and converter versions are
 independent native owners; no release step resets them to the distribution tag.
 
-The planned first official distribution is **2.0.0**. Put `Release-As: 2.0.0`
+The planned first official distribution is **1.0.0**. Put `Release-As: 1.0.0`
 in the actual integration squash commit body on main, then review the generated
 Release Please proposal. The footer must survive the squash; a PR comment alone
 cannot select the release version. Release Please continues to own `VERSION`,
 the release manifest state, changelog and tag. Do not hand-edit those files.
 
-Distribution filenames use 2.0.0 while embedded native versions remain independent.
-For example, a distribution can contain firmware 1.1.2, Android 1.1.3/code33,
+Distribution filenames use 1.0.0 while embedded native versions remain independent.
+For example, a distribution can contain firmware 1.1.2, Android 1.1.4/code34,
 desktop 1.1.1 and converter 1.0.1. This example does not qualify those binaries
 for publication. Android upgrade ordering uses its monotonically increasing
 versionCode; signed firmware admission uses the firmware identity and version,
 never the distribution tag. Compare each native candidate with the installed
-versions before qualification; calling the distribution 2.0.0 cannot make an older
+versions before qualification; calling the distribution 1.0.0 cannot make an older
 native image an upgrade.
 
 The distribution manifest requires all four component owners and binds every
@@ -81,7 +81,7 @@ or qualification result.
 
 An official application distribution may include experimental firmware after
 the owner accepts its actual known issues and unverified physical checks.
-For the planned 2.0.0 release, the known firmware issue is **APS-105-5241**:
+For the planned 1.0.0 release, the known firmware issue is **APS-105-5241**:
 the Zigbee stack can assert and restart. Its cause remains unresolved. An
 accepted distribution is not an overall physical qualification statement.
 The standard qualified route above remains unchanged.
@@ -103,7 +103,7 @@ the pinned development environment:
 ```sh
 python -m tools.release.assemble --accepted-with-known-issues \
   --inputs "$RELEASE_INPUTS" --output "$STAGED_ASSETS" \
-  --version 2.0.0 --sha "$CANDIDATE_SHA" \
+  --version 1.0.0 --sha "$CANDIDATE_SHA" \
   --firmware-candidate "$FIRMWARE_CANDIDATE" \
   --keystore "$ANDROID_KEYSTORE" --password-file "$ANDROID_PASSWORD_FILE" \
   --android-tools "$ANDROID_TOOLS"
@@ -134,7 +134,7 @@ python -m tools.release.assemble --finalize-accepted "$STAGED_ASSETS" \
   --acceptance "$OWNER_ACCEPTANCE"
 ```
 
-This adds `vomar-release-acceptance-2.0.0.json` unchanged as role
+This adds `vomar-release-acceptance-1.0.0.json` unchanged as role
 `release-acceptance`, then refreshes the manifest/checksums. The complete set is
 twelve payload roles and fourteen files. Acceptance binds the eleven other
 payload hashes; the manifest and checksums bind acceptance itself. Payloads are
@@ -164,9 +164,14 @@ immediately before publication:
 Experimental firmware: APS-105-5241 remains unresolved; firmware and native physical qualification checks are unverified.
 ```
 
-All release assets remain individually downloadable. Android and desktop
-firmware catalogues recognise this distribution but refuse automatic firmware
-admission with **Firmware is experimental; import ZIP through Bluetooth trial**.
+All release assets remain individually downloadable. Android Updates reports the
+project release version and native firmware version
+with an explicit **Experimental** label and an **Open release notes** action.
+This metadata check does not download or select candidate firmware, change a
+previously selected qualified package, or start a device operation. Download its
+ZIP from the release notes and use the existing local firmware chooser for a
+manual trial. Desktop catalogues continue to refuse automatic firmware admission
+with **Firmware is experimental; import ZIP through Bluetooth trial**.
 Use the explicit existing manual trial path and fresh device-operation review;
 the acceptance file does not authorise a device write. The experimental OTA
 carrier is not automatically selected from the normal firmware catalogue.
@@ -176,7 +181,7 @@ For protected hosted verification/publication, use the separate manual
 the Release Please draft and tag to the exact final source SHA and upload the
 fourteen already frozen files. Configure `OWNER_ACCEPTANCE_JSON` and
 `DEPENDENCY_REVIEW_JSON` in `release-publication`, then dispatch with `sha`,
-`version=2.0.0` and `publish=false`. It authenticates private-draft downloads,
+`version=1.0.0` and `publish=false`. It authenticates private-draft downloads,
 verifies the same bytes and performs no rebuild. A later explicitly authorised
 `publish=true` dispatch rechecks the complete candidate and mutable publication
 gates. See [GitHub setup](github-setup.md#retain-existing-signing-identities-and-qualification)

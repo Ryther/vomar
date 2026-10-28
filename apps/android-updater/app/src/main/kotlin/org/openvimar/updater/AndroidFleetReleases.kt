@@ -12,7 +12,7 @@ import java.security.KeyFactory
 import java.security.spec.X509EncodedKeySpec
 
 /** App-private verified release source, independent of currently selected BLE target. */
-internal class AndroidFleetReleases(context:Context) {
+internal class AndroidFleetReleases(context:Context,private val openConnection:(URL)->HttpURLConnection={it.openConnection() as HttpURLConnection}) {
     private val app=context.applicationContext
     private val preferences=app.getSharedPreferences("fleet-releases",Context.MODE_PRIVATE)
     private val directory=File(app.filesDir,"fleet-releases")
@@ -50,7 +50,7 @@ internal class AndroidFleetReleases(context:Context) {
         val coroutine=currentCoroutineContext();val input=app.contentResolver.openInputStream(uri) ?: error("Release document unavailable")
         val ref=cache.import(input,{coroutine.ensureActive()});coroutine.ensureActive();select(ref)
     }
-    suspend fun fetchLatest(repository:String,onProgress:(Long)->Unit={},onTotal:(Long)->Unit={}):FleetReleaseRef=withContext(Dispatchers.IO){
+    suspend fun fetchLatest(repository:String,onProgress:(Long)->Unit={},onTotal:(Long)->Unit={}):FleetReleaseLookup=withContext(Dispatchers.IO){
         val repo=ReleaseSource.parse(repository) ?: error("Use a public GitHub owner/repository")
         val coroutine=currentCoroutineContext()
         val json=download("https://api.github.com/repos/$repo/releases/latest",2*1024*1024){input->
@@ -76,8 +76,12 @@ internal class AndroidFleetReleases(context:Context) {
             while(true){coroutine.ensureActive();val count=input.read(buffer);if(count<0)break;require(count<=65536-out.size());out.write(buffer,0,count)}
             out.toByteArray().also{require(it.size==metadataAsset.getInt("size"))}
         }
-        val selection=DistributionAssets.parse(metadata,tag).requireAutomaticFirmware()
+        val selection=DistributionAssets.parse(metadata,tag)
         selection.assets.forEach{asset(it.filename,it.size)}
+        coroutine.ensureActive()
+        if(selection.experimentalFirmware)return@withContext FleetReleaseLookup.Experimental(
+            selection.tag.removePrefix("v"),selection.firmware.componentVersion,"https://github.com/$repo/releases/tag/${selection.tag}")
+        selection.requireAutomaticFirmware()
         val firmware=asset(selection.firmware.filename,selection.firmware.size)
         onTotal(firmware.getLong("size"));onProgress(0)
         val ref=download(firmware.getString("browser_download_url"),PackageReader.MAX_ZIP){cache.import(it,{coroutine.ensureActive()},onProgress)}
@@ -87,9 +91,9 @@ internal class AndroidFleetReleases(context:Context) {
         if(ota!=null) {
             require(selection.ota.sha256==ota.sha256&&selection.ota.size.toLong()==ota.size){"Distribution carrier differs from signed firmware metadata"}
             val carrier=asset(selection.ota.filename,selection.ota.size)
-            return@withContext select(setOtaSource(ref,carrier.getString("browser_download_url")))
+            return@withContext FleetReleaseLookup.Downloaded(select(setOtaSource(ref,carrier.getString("browser_download_url"))))
         }
-        select(ref)
+        FleetReleaseLookup.Downloaded(select(ref))
     }
     suspend fun setOtaSource(ref:FleetReleaseRef,url:String):FleetReleaseRef=withContext(Dispatchers.IO){
         val pkg=load(ref);val metadata=pkg.manifest.zigbeeOta ?: error("This signed release contains no Zigbee OTA carrier")
@@ -107,7 +111,7 @@ internal class AndroidFleetReleases(context:Context) {
         var current=url
         repeat(5){
             val parsed=URL(current);require(parsed.protocol=="https"&&parsed.userInfo==null&&parsed.ref==null){"Only HTTPS public release URLs are accepted"}
-            val connection=parsed.openConnection() as HttpURLConnection
+            val connection=openConnection(parsed)
             connection.connectTimeout=5000;connection.readTimeout=2000;connection.instanceFollowRedirects=false
             connection.setRequestProperty("Accept","application/vnd.github+json, application/octet-stream")
             try {

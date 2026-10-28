@@ -93,6 +93,14 @@ mandatory. An unsigned descriptor cannot grant active-watchdog capability. This
 manual exception neither qualifies a package nor approves a device write.
 Desktop candidate handling remains a separate explicit qualification route.
 
+Android 1.1.4 can announce **Project release VERSION is available.** in Updates
+while labelling its firmware **Experimental**. **Open release notes** opens the
+configured project's exact release page. This is metadata availability, not
+firmware qualification or a signature-verified download. It preserves any
+selected qualified package. Read the known issues, download the ZIP and use
+**Choose local ZIP…** for the existing explicit manual review; the notice grants
+no update or fleet authority. A draft is not a published release.
+
 A complete distribution may contain an explicitly accepted experimental firmware
 ZIP named `vomar-firmware-VERSION-qualification-candidate.zip` and a
 `vomar-release-acceptance-VERSION.json` record. Read its known issues, exact

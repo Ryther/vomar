@@ -52,6 +52,7 @@ class DistributionContractTest {
     @Test fun distributionPreservesIndependentNativeComponentVersions() {
         val selected=DistributionAssets.parse(independentDistribution().toString().toByteArray(),"v2.0.0")
         assertEquals("v2.0.0",selected.tag)
+        assertEquals("1.1.1",selected.firmware.componentVersion)
         assertEquals("vomar-firmware-2.0.0.zip",selected.firmware.filename)
         assertEquals("vomar-zigbee-1.1.1.ota",selected.ota.filename)
         assertEquals("vomar-android-1.1.2.apk",selected.assets.single{it.role=="android-apk"}.filename)
@@ -88,6 +89,7 @@ class DistributionContractTest {
         val accepted=JsonObject(manifest+("artifacts" to JsonArray(artifacts)))
         val selected=DistributionAssets.parse(accepted.toString().toByteArray(),"v2.0.0")
         assertTrue(selected.experimentalFirmware)
+        assertEquals("1.1.1",selected.firmware.componentVersion)
         val failure=assertThrows(IllegalArgumentException::class.java){selected.requireAutomaticFirmware()}
         assertEquals("Firmware is experimental; import ZIP through Bluetooth trial",failure.message)
     }

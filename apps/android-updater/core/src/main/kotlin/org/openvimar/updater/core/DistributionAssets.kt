@@ -4,7 +4,7 @@ import org.openvimar.installer.StrictJson
 
 /** Download identity only. Existing signed common-package admission is still mandatory. */
 object DistributionAssets {
-    data class Asset(val role:String,val filename:String,val size:Int,val sha256:String)
+    data class Asset(val role:String,val filename:String,val size:Int,val sha256:String,val componentVersion:String)
     data class Selection(val tag:String,val firmware:Asset,val ota:Asset,val assets:List<Asset>,val experimentalFirmware:Boolean=false) {
         fun requireAutomaticFirmware():Selection {
             require(!experimentalFirmware){"Firmware is experimental; import ZIP through Bluetooth trial"}
@@ -43,7 +43,7 @@ object DistributionAssets {
             if(role.startsWith("desktop-")) {
                 val parts=role.split('-');require(a["platform"]==parts[1]&&a["architecture"]==if(parts[2]=="setup")"x64" else parts[2])
             } else require("platform" !in a&&"architecture" !in a)
-            Asset(role,name,size.toInt(),sha)
+            Asset(role,name,size.toInt(),sha,a["componentVersion"] as String)
         }
         require(roles.containsAll(required))
         val firmware=assets.single{it.role=="firmware-common"};val ota=assets.single{it.role=="zigbee-ota"}

@@ -204,8 +204,8 @@ before any authorised remote upload or publication.
 
 The separate **Publish accepted experimental distribution** workflow
 (`publish-accepted.yml`) is manual, main-only and defaults to `publish=false`.
-Before dispatch, Release Please must have selected 2.0.0 and the draft's
-`target_commitish` and `v2.0.0` tag must already name the exact final reviewed
+Before dispatch, Release Please must have selected 1.0.0 and the draft's
+`target_commitish` and `v1.0.0` tag must already name the exact final reviewed
 main SHA. Upload the fourteen frozen files to that draft; do not rebuild or
 replace payloads after their hashes have been accepted. Its body must contain
 the exact experimental-firmware sentence in the release guide.
@@ -226,13 +226,15 @@ verbatim. Follow the [physical-risk contract](releasing.md#delivered-dependencie
 The qualified publisher rejects this status, and the exception cannot admit a
 different advisory or waive software/remote vulnerability review.
 
-Dispatch with `sha` set to that full source SHA, `version=2.0.0` and
+Dispatch with `sha` set to that full source SHA, `version=1.0.0` and
 `publish=false` first. The workflow downloads only the existing fourteen assets,
 checks their manifest/checksums, and invokes the accepted publisher; it performs
 no builds or firmware promotion. Review that result before the final authorised
 dispatch with `publish=true`. Native/firmware qualification remains unverified
-as disclosed; normal firmware catalogues still refuse the candidate and direct
-the user to explicit Bluetooth-trial import.
+as disclosed; Android can announce project-release availability with an
+Experimental label;
+normal automatic firmware admission still refuses the candidate and directs the
+user to explicit manual import.
 
 ## Enable documentation and immutable releases
 
