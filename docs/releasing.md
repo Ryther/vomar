@@ -169,8 +169,9 @@ project release version and native firmware version
 with an explicit **Experimental** label and an **Open release notes** action.
 This metadata check does not download or select candidate firmware, change a
 previously selected qualified package, or start a device operation. Download its
-ZIP from the release notes and use the existing local firmware chooser for a
-manual trial. Desktop catalogues continue to refuse automatic firmware admission
+ZIP from the release notes and use **Devices → dimmer → Update firmware → Choose
+firmware** for a manual trial. The **Updates → Choose local ZIP…** action accepts
+qualified packages. Desktop catalogues continue to refuse automatic firmware admission
 with **Firmware is experimental; import ZIP through Bluetooth trial**.
 Use the explicit existing manual trial path and fresh device-operation review;
 the acceptance file does not authorise a device write. The experimental OTA

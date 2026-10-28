@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0](https://github.com/Ryther/vomar/compare/v2.0.0...v1.0.0) (2026-10-28)
+
+
+### Features
+
+* **android:** show project releases with experimental firmware ([#24](https://github.com/Ryther/vomar/issues/24)) ([dff2d70](https://github.com/Ryther/vomar/commit/dff2d7027c01e9c38a7ac12f7f276deff599d295))
+
 ## 2.0.0 (2026-10-28)
 
 

@@ -77,16 +77,17 @@ TLS self-test does not qualify Bluetooth/USB or physical firmware operation.
 
 ## Select a package and configure optional connections
 
-In Settings → Updates, choose the common firmware ZIP or configured release
-source. Android 1.0.6 uses a single firmware chooser that detects qualified,
-beta and local packages and requests confirmation for manual local/beta use. Desktop archives are application installers; the canonical
+Use **Settings → Firmware updates** for the configured GitHub release source or
+a qualified common firmware ZIP. For a manual beta/local trial use
+**Devices → dimmer → Update firmware → Choose firmware** and review that device
+explicitly. Desktop archives are application installers; the canonical
 `vomar-firmware-VERSION.zip` is a firmware package selected by role and verified
 bytes. Do not unpack it into images to bypass validation.
 
 A distribution checksum detects changed downloads; the client's independent
 public trust anchor verifies signed firmware. A different GitHub source never
-approves a new image signer. An accepted package does not start an update. Online
-release/fleet/Zigbee paths reject qualification candidates. In Android 1.0.6,
+approves a new image signer. An accepted package does not start an update. Automatic
+firmware/fleet/Zigbee admission rejects qualification candidates. In Android 1.0.6,
 manual local/beta review may admit missing outer artifact/descriptor signatures;
 component image signatures, hashes, model/layout and loader compatibility remain
 mandatory. An unsigned descriptor cannot grant active-watchdog capability. This
@@ -98,15 +99,16 @@ while labelling its firmware **Experimental**. **Open release notes** opens the
 configured project's exact release page. This is metadata availability, not
 firmware qualification or a signature-verified download. It preserves any
 selected qualified package. Read the known issues, download the ZIP and use
-**Choose local ZIP…** for the existing explicit manual review; the notice grants
-no update or fleet authority. A draft is not a published release.
+**Devices → dimmer → Update firmware → Choose firmware** for the existing manual
+trial. **Updates → Choose local ZIP…** accepts qualified packages. The notice
+grants no update or fleet authority. A draft is not a published release.
 
 A complete distribution may contain an explicitly accepted experimental firmware
 ZIP named `vomar-firmware-VERSION-qualification-candidate.zip` and a
 `vomar-release-acceptance-VERSION.json` record. Read its known issues, exact
 payload hashes and unverified checks. APS-105-5241 remains an unresolved restart
-defect when listed. Android uses its manual firmware chooser and desktop uses
-the separate Bluetooth trial tool; online catalog/fleet/OTA admission stays
+defect when listed. Android uses the selected device's **Update firmware** chooser;
+desktop uses the separate Bluetooth trial tool. Automatic firmware/fleet/OTA admission stays
 closed for candidates. Distribution acceptance is distinct from the fresh review
 needed for each physical device operation.
 

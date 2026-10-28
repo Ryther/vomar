@@ -24,7 +24,8 @@ and firmware versions are independent. The notice does not claim physical
 qualification or a verified firmware download.
 
 Read the release notes and known issues, download the experimental ZIP, then use
-**Choose local ZIP…** for the existing manual import/review flow. Merely checking
+**Devices → dimmer → Update firmware → Choose firmware** for the existing manual
+trial. **Updates → Choose local ZIP…** accepts qualified packages. Merely checking
 for updates does not download/select experimental firmware, select its Zigbee
 OTA carrier, create a fleet job or start a device operation. A previously selected
 qualified package stays selected. Fresh review and the existing package, signer,

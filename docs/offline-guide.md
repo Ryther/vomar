@@ -12,7 +12,9 @@ backup, household configuration, account credential or signing key.
    `vomar-firmware-VERSION-qualification-candidate.zip` and
    `vomar-release-acceptance-VERSION.json`. Read the acceptance record and known
    issues before selecting those bytes through manual candidate import. Android
-   uses its firmware chooser; desktop uses the separate Bluetooth trial tool.
+   uses **Devices → dimmer → Update firmware → Choose firmware**; its normal
+   **Updates → Choose local ZIP…** action accepts qualified packages. Desktop uses
+   the separate Bluetooth trial tool.
    Automatic firmware catalog/fleet/Zigbee selection rejects the experimental
    package. The app independently verifies signatures, roles, layout and loader.
    Desktop ZIPs are installers. Do not unpack firmware to bypass admission.
