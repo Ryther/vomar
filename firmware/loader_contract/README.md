@@ -148,3 +148,20 @@ that defect; the independent reproducer rejected the mismatch afterward, with
 nine regressions covering invalid and valid overlap. This is historical
 host/object evidence, not proof that a linked production loader fits or that
 physical installation/restoration is qualified.
+
+## Version-independent recovery admission and exact operation identity
+
+`loader_pair_authenticate` admits a signed RECOVERY role2/profile2 image after
+loader/anchor, project-key, model/profile, extent and vector validation. Recovery
+SemVer and file hash are outputs, not compatibility selectors. Profile2 denotes
+the stable split-staging/journalV2/32KiB LZMA2+ARMThumb update ABI; breaking that
+ABI requires a distinct signed profile and migration. It grants no write action.
+
+`loader_pair_verify` is the separate exact operation check. It requires a
+non-null expected full signed-file hash and rejects a different otherwise valid
+recovery. Recovery installation still calls that exact API using journalV2;
+there is no fallback to contract admission on mismatch. Both paths stage results
+before publication and clear outputs on failure. MAIN freezes its boot recovery
+extent and actual recovery/loader hashes, rechecking them before staging writes
+and before publishing the pending transaction. Ordinary MAIN OTA changes neither
+recovery nor loader. Legacy full48KiB loader authority retains its exact meaning.

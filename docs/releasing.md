@@ -37,6 +37,19 @@ accepted publication do not qualify the firmware or establish working lights.
    separately protected source/component/loader evidence with all thirteen
    literal physical flags true. Host tests cannot populate those flags.
 
+Firmware source candidate 1.1.6 separates recovery compatibility from exact
+operation identity. A common MAIN authenticates the stable RECOVERY/profile2
+split-staging/journalV2/32KiB LZMA2+ARMThumb ABI without a recovery-version list.
+The candidate builder validates the actual recovery configuration before
+signing that profile. Breaking the ABI requires a new authenticated profile
+and an explicit migration; increasing SemVer alone does not change the ABI.
+Run the real-crypto multi-version pair, transport-worker and installer tests
+in `tools/firmware/tests`: an admitted older recovery must remain usable after
+a MAIN upgrade, and a changed in-flight recovery or loader must be rejected.
+Existing artifact hashes, journals and exact installer checks retain their
+meaning. No software result supplies the physical qualification below.
+
+
 ## Complete immutable draft
 
 The normal set has eleven payload roles: common firmware, its exact OTA carrier,

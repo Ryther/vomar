@@ -50,3 +50,26 @@ def test_diagnostic_build_identity_changes_with_source_version_and_pair():
     assert identity(sources, {**versions, 'main': '1.0.1'}, inputs) != first
     for name in inputs:
         assert identity(sources, versions, {**inputs, name: inputs[name] + b'changed'}) != first
+
+
+RECOVERY_ABI_CONFIG={
+ 'CONFIG_VIMAR_OTA_INSTALLER':'y','CONFIG_VIMAR_OTA_SPLIT_STAGING':'y',
+ 'CONFIG_VIMAR_P031_PROTECTION':'y','CONFIG_NRF_COMPRESS_DECOMPRESSION':'y',
+ 'CONFIG_NRF_COMPRESS_LZMA_VERSION_LZMA2':'y','CONFIG_NRF_COMPRESS_ARM_THUMB':'y',
+ 'CONFIG_NRF_COMPRESS_LZMA_MAX_DICT_SIZE':'32768',
+ 'CONFIG_NRF_COMPRESS_LZMA_MAX_LC_LP':'3','CONFIG_NRF_COMPRESS_LZMA_LP':'0',
+ 'CONFIG_DISABLE_FLASH_PATCH':'n',
+}
+
+def test_release_recovery_contract_is_independent_of_semver():
+ validate=getattr(builder,'validate_recovery_contract',None)
+ assert callable(validate),'Profile2 signing must enforce its stable recovery ABI'
+ assert validate(RECOVERY_ABI_CONFIG)=='vimar30805-split-v2'
+
+@pytest.mark.parametrize('field',list(RECOVERY_ABI_CONFIG))
+def test_recovery_cannot_reuse_profile2_with_an_incompatible_build(field):
+ validate=getattr(builder,'validate_recovery_contract',None)
+ assert callable(validate)
+ config={**RECOVERY_ABI_CONFIG,field:'y' if field=='CONFIG_DISABLE_FLASH_PATCH' else 'unsupported'}
+ with pytest.raises(ValueError,match='recovery contract'):
+  validate(config)

@@ -37,6 +37,8 @@ static bool pair_ready,download_pair_checked;
 static uint8_t pair_loader_digest[32];
 static struct ota_image_info pair_recovery;
 static uint8_t boot_verified_recovery_digest[32];
+static uint8_t boot_recovery_file_digest[32],boot_loader_digest[32];
+static uint32_t boot_recovery_size;
 #else
 static struct ota_stage_transfer transfer;
 #endif
@@ -119,13 +121,21 @@ static int split_read(void*ctx,uint32_t off,uint8_t*p,size_t n){
  size_t take=MIN(n,available);rc=stage_read(NULL,physical,p,take);if(rc)return rc;
  off+=take;p+=take;n-=take;}return 0;
 }
-static int verify_pair(void){
+static int authenticate_pair(void)
+{
 #if defined(CONFIG_VIMAR_LOADER_RUNTIME_V2)
- return loader_pair_verify_zephyr(ota_expected_recovery_digest,pair_loader_digest,&pair_recovery);
+ return loader_pair_authenticate_zephyr(pair_loader_digest,&pair_recovery);
 #else
- return ota_pair_verify((const uint8_t*)0,0x100000,ota_allowed_loaders,ota_allowed_loader_count,
- ota_expected_recovery_digest,pair_loader_digest,&pair_recovery);
+ return ota_pair_authenticate((const uint8_t*)0,0x100000,ota_allowed_loaders,ota_allowed_loader_count,
+ pair_loader_digest,&pair_recovery);
 #endif
+}
+static int verify_pair(void)
+{
+ int rc=authenticate_pair();
+ if(!rc&&(memcmp(pair_recovery.output_digest,boot_recovery_file_digest,32)||
+           memcmp(pair_loader_digest,boot_loader_digest,32)))rc=-EACCES;
+ return rc;
 }
 #endif
 static int check_image(void)
@@ -195,7 +205,7 @@ void zigbee_ota_callback(zb_bufid_t buffer)
 #if defined(CONFIG_VIMAR_OTA_SPLIT_STAGING)
   if(!pair_ready)rc=-EACCES;
   if(!rc)rc=ota_split_plan(OTA_PRIMARY_START+size,v->upgrade.start.file_length-sizeof(header),OTA_PRIMARY_START+size,
-   0xb0000+pair_recovery.output_size,&transfer.bounds);
+   0xb0000+boot_recovery_size,&transfer.bounds);
   download_pair_checked=false;
 #else
   if(!rc)rc=ota_stage_plan(OTA_PRIMARY_START+size,v->upgrade.start.file_length-sizeof(header),OTA_PRIMARY_START+size,&transfer.bounds);
@@ -234,9 +244,15 @@ bool zigbee_ota_recovery_snapshot(uint8_t digest[32])
 void zigbee_ota_init(void)
 {
 #if defined(CONFIG_VIMAR_OTA_SPLIT_STAGING)
- pair_ready=verify_pair()==0;
- if(pair_ready)memcpy(boot_verified_recovery_digest,pair_recovery.signed_digest,32);
- else memset(boot_verified_recovery_digest,0,32);
+ pair_ready=authenticate_pair()==0;
+ if(pair_ready){
+  memcpy(boot_verified_recovery_digest,pair_recovery.signed_digest,32);
+  memcpy(boot_recovery_file_digest,pair_recovery.output_digest,32);
+  memcpy(boot_loader_digest,pair_loader_digest,32);boot_recovery_size=pair_recovery.output_size;
+ }else{
+  memset(boot_verified_recovery_digest,0,32);memset(boot_recovery_file_digest,0,32);
+  memset(boot_loader_digest,0,32);boot_recovery_size=0;
+ }
 #endif
  memset(&attrs,0,sizeof(attrs));memset(attrs.upgrade_server,0xff,8);
  attrs.file_version=((uint32_t)APP_VERSION_MAJOR<<24)|((uint32_t)APP_VERSION_MINOR<<16)|((uint32_t)APP_PATCHLEVEL<<8)|APP_TWEAK;

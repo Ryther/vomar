@@ -248,3 +248,32 @@ and journal setup; earlier errors, lost SRAM on power failure and failures befor
 callback entry can remain unobservable. This diagnostic change cannot recover
 missing origins from old `116:81` records or establish their relationship to an
 APS ownership error.
+
+## Recovery compatibility across releases
+
+From source candidate 1.1.6, MAIN admits the stable signed RECOVERY/profile2
+update contract independently of recovery version or file hash. The same MAIN
+image works with compatible older and newer recoveries; no per-device package
+or enumerated recovery-version list is needed. The temporary 1.1.5 pin list is
+superseded. Existing signed artifacts and installed recoveries are unchanged.
+
+Admission still requires the approved loader/anchor, pinned project signing key,
+model `VIMAR30805`, authenticated role RECOVERY, profile2, slot bounds and valid
+recovery vectors. Profile2 freezes the split-staging layout, journalV2 and
+32 KiB LZMA2/ARMThumb update format. An incompatible ABI requires another signed
+profile and an explicit migration. Unsupported or roleless experimental
+recoveries do not gain admission by version comparison.
+
+Each boot captures the actual authenticated recovery and loader identities.
+First-block admission and final CHECK reject a change to either; the immutable
+boot recovery extent defines staging bounds. JournalV2 then pins the actual
+full-file recovery and full48KiB loader hashes, which the installer verifies
+again before writing. Exact operation verification never falls back to generic
+contract admission. Read-only runtime identity continues to use the distinct
+signed-region/SMP hash.
+
+The canonical candidate builder checks the actual recovery configuration before
+signing profile2 and emits MAIN bindings without a recovery-version pin. Host
+regressions exercise different signed recovery versions, unknown/wrong contract
+rejection, changed in-flight identities and exact journal preservation. These
+checks do not establish physical power-cut or electrical qualification.

@@ -229,3 +229,14 @@ Desktop vomar --runtime-info reports runtime/CA metadata without app-state or
 service access. The explicit --tls-self-test uses disposable loopback certificates
 only and does not qualify BLE/USB. User guides and current source:
 https://github.com/Ryther/vomar/tree/main/docs.
+
+## Recovery compatibility across firmware versions
+
+Source candidate MAIN 1.1.6 uses the signed recovery update contract rather than
+an exact recovery-version list. A common image can preserve compatible older or
+newer recoveries without a device-specific package. Unsupported layouts or
+experimental recoveries still require an explicit supported migration. The
+loader, signature, model, role and profile remain checked; each OTA operation
+then preserves the exact authenticated recovery it observed. This changes MAIN
+admission, not recovery firmware, and is not deployed or physically qualified
+merely because host tests pass. Verify the actual installed release first.

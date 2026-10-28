@@ -47,7 +47,7 @@ int loader_runtime_zephyr_snapshot(struct loader_runtime_identity*out)
  if(rc)memset(out,0,sizeof(*out));else memcpy(out,&snapshot,sizeof(snapshot));
  return rc;
 }
-int loader_pair_verify_zephyr(const uint8_t expected_recovery_file_sha256[32],uint8_t loader_full_sha256[32],struct ota_image_info*recovery)
+static int pair_snapshot(const uint8_t expected_recovery_file_sha256[32],uint8_t loader_full_sha256[32],struct ota_image_info*recovery)
 {
  if(!loader_full_sha256||!recovery)return-EINVAL;
  struct loader_pair_result verified;struct loader_contract_live live;
@@ -56,10 +56,25 @@ int loader_pair_verify_zephyr(const uint8_t expected_recovery_file_sha256[32],ui
   struct crypto crypto;const struct loader_contract_hash hash={&crypto,begin,update,finish,abort_hash};
   const struct loader_contract_reader reader={NULL,LOADER_CONTRACT_LOADER_SIZE,read_loader};
   const uint8_t*recovery_image=(const uint8_t*)0xb0000u;
-  rc=loader_pair_verify(&reader,vimar_loader_contracts,VIMAR_LOADER_CONTRACT_COUNT,&live,&hash,
-   recovery_image,0x34000,expected_recovery_file_sha256,&verified);
+  if(expected_recovery_file_sha256)
+   rc=loader_pair_verify(&reader,vimar_loader_contracts,VIMAR_LOADER_CONTRACT_COUNT,&live,&hash,
+    recovery_image,0x34000,expected_recovery_file_sha256,&verified);
+  else
+   rc=loader_pair_authenticate(&reader,vimar_loader_contracts,VIMAR_LOADER_CONTRACT_COUNT,&live,&hash,
+    recovery_image,0x34000,&verified);
  }
  if(rc){memset(loader_full_sha256,0,32);memset(recovery,0,sizeof(*recovery));}
  else{memcpy(loader_full_sha256,verified.loader_full_sha256,32);memcpy(recovery,&verified.recovery,sizeof(*recovery));}
  return rc;
+}
+int loader_pair_authenticate_zephyr(uint8_t loader_full_sha256[32],struct ota_image_info*recovery)
+{return pair_snapshot(NULL,loader_full_sha256,recovery);}
+int loader_pair_verify_zephyr(const uint8_t expected_recovery_file_sha256[32],uint8_t loader_full_sha256[32],struct ota_image_info*recovery)
+{
+ if(!expected_recovery_file_sha256){
+  if(loader_full_sha256)memset(loader_full_sha256,0,32);
+  if(recovery)memset(recovery,0,sizeof(*recovery));
+  return-EINVAL;
+ }
+ return pair_snapshot(expected_recovery_file_sha256,loader_full_sha256,recovery);
 }
