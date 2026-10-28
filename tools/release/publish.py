@@ -17,6 +17,7 @@ import urllib.error
 import zipfile
 from .manifest import loads,validate,digest
 from .security_gate import check as security_check
+from .codeql_gate import check_remote as codeql_check
 from tools.firmware.package_common_android_update_v3 import validate_common_v3_bundle
 from tools.firmware.ota_release import REQUIRED_CHECKS,SPLIT_REQUIRED_CHECKS
 from cryptography.hazmat.primitives import serialization
@@ -159,6 +160,10 @@ class GitHub:
     def download(self,asset):return self.request(f'releases/assets/{asset["id"]}',raw=True)
     def upload(self,release,name,raw):return self.request(f'releases/{release}/assets?name='+urllib.parse.quote(name,safe=''),'POST',raw,upload=True)
     def checks(self,sha):return GitHub(self.repo,self.checks_token).request(f'commits/{sha}/check-runs?per_page=100&filter=latest')
+    def code_scanning(self,path):
+        if not self.checks_token:raise ValueError('Code scanning read credential required')
+        if not path.startswith('code-scanning/'):raise ValueError('Expected CodeQL API path')
+        return GitHub(self.repo,self.checks_token).request(path)
     def tag_sha(self,tag):
         value=self.request('git/ref/tags/'+urllib.parse.quote(tag,safe=''))['object']
         if value['type']=='tag':value=self.request('git/tags/'+value['sha'])['object']
@@ -206,6 +211,7 @@ def main():
     token=os.environ.get('GH_TOKEN')
     if not token:raise ValueError('Protected publication credential required')
     remote=GitHub(a.repo,token,checks_token=os.environ.get('GH_CHECKS_TOKEN'));verify_checks(remote.checks(manifest['commit']),manifest['commit'])
+    codeql_check(remote.code_scanning,manifest['commit'])
     sonar_token=os.environ.get('SONAR_TOKEN')
     if not sonar_token:raise ValueError('Exact Sonar security verification credential required')
     def fetch(path,params):
@@ -221,6 +227,7 @@ def main():
     if remote.tag_sha(manifest['tag'])!=manifest['commit']:raise ValueError('Tag changed during upload')
     security_check(fetch,manifest['commit'],'Ryther_vomar')
     if a.accepted_with_known_issues:verify_candidate(manifest,a.directory,a.qualification,a.public_key,a.android_tools,**verify_options)
+    codeql_check(remote.code_scanning,manifest['commit'])
     remote.publish(draft['id'])
 
 if __name__=='__main__':main()

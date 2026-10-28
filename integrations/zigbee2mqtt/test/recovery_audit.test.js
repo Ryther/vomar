@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import fs, {mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import RecoveryAudit from '../extensions/vimar_recovery_audit.mjs';
@@ -98,4 +98,45 @@ test('normalizes and deduplicates explicitly configured IEEE targets', async (t)
     assert.deepEqual(f.records().filter((r) => r.kind.startsWith('command')).map((r) => r.kind),
         ['command_start', 'command_ack']);
     await f.audit.stop();
+});
+
+
+test('file logging refuses symlinks without changing their target', (t) => {
+    const f = fixture(t); const victim = path.join(path.dirname(f.audit.auditPath), 'private.txt');
+    writeFileSync(victim, 'private original'); symlinkSync(victim, f.audit.auditPath);
+    f.audit.record({kind: 'synthetic'});
+    assert.equal(readFileSync(victim, 'utf8'), 'private original');
+    assert.ok(f.logs.some((line) => line.includes('file unavailable')));
+});
+
+test('a swapped pathname cannot redirect the descriptor append', (t) => {
+    const f = fixture(t); const victim = path.join(path.dirname(f.audit.auditPath), 'private.txt');
+    writeFileSync(victim, 'private original'); writeFileSync(f.audit.auditPath, '');
+    const original = fs.fstatSync;
+    fs.fstatSync = (...args) => {
+        const result = original(...args);
+        rmSync(f.audit.auditPath); symlinkSync(victim, f.audit.auditPath);
+        return result;
+    };
+    try { f.audit.record({kind: 'synthetic'}); } finally { fs.fstatSync = original; }
+    assert.equal(readFileSync(victim, 'utf8'), 'private original');
+    assert.ok(fs.lstatSync(f.audit.auditPath).isSymbolicLink());
+});
+
+
+test('rotation keeps a bounded previous log and restrictive permissions', (t) => {
+    const f = fixture(t); const before = 'x'.repeat(1024 * 1024);
+    writeFileSync(f.audit.auditPath, before, {mode: 0o666});
+    f.audit.record({kind: 'after-rotation'});
+    assert.equal(readFileSync(f.audit.auditPath + '.1', 'utf8'), before);
+    assert.equal(f.records()[0].kind, 'after-rotation');
+    assert.equal(fs.statSync(f.audit.auditPath).mode & 0o777, 0o600);
+});
+
+test('existing hard links cannot receive audit records', (t) => {
+    const f = fixture(t); const victim = path.join(path.dirname(f.audit.auditPath), 'private.txt');
+    writeFileSync(victim, 'private original'); fs.linkSync(victim, f.audit.auditPath);
+    f.audit.record({kind: 'synthetic'});
+    assert.equal(readFileSync(victim, 'utf8'), 'private original');
+    assert.ok(f.logs.some((line) => line.includes('file unavailable')));
 });

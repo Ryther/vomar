@@ -1272,3 +1272,9 @@
 !/firmware/src/phase_cut_control.c
 !/firmware/src/phase_cut_control.h
 !/tools/firmware/tests/test_phase_cut_control.py
+
+# Block findings in addition to requiring successful CodeQL execution.
+!/tools/release/codeql_gate.py
+!/tools/release/tests/test_codeql_gate.py
+!/apps/android-updater/obtainium.json
+!/.github/code-scanning-ruleset.json

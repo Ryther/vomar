@@ -25,7 +25,10 @@ The source ignore policy denies new files by default. Review each authored path
 and add a narrow exception; never force-add private/generated files. Quality
 analysis covers authored product code; secret scanning covers all public files
 and reachable history. Preserve pinned Actions and trust-separated PR/release
-jobs. Release Please alone proposes distribution versions/changelogs/tags.
+jobs. Scanner completion is not a clean result: block CodeQL high/critical
+security findings and error results in CI and recheck exact-revision analyses
+and open blocking alerts before publication. Release Please alone proposes
+distribution versions/changelogs/tags.
 Do not regenerate production signing identities, replace immutable assets or
 publish a candidate as qualified without matching physical evidence.
 
