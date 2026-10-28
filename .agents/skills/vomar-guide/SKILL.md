@@ -75,6 +75,18 @@ creates temporary synthetic certificates and a bounded local TLS listener on
 cleans up. It never contacts a broker/device or changes CA preferences. A passing
 TLS self-test does not qualify Bluetooth/USB or physical firmware operation.
 
+## Install the Android client with Obtainium
+
+Use `https://github.com/Ryther/vomar` as the GitHub source. The reviewed import
+configuration is `apps/android-updater/obtainium.json`; the Android guide links
+its Obtainium import. It restricts APKs to `vomar-android-*.apk`, excludes drafts
+and prereleases, and disables `versionDetection` because Obtainium tracks the
+bundle tag while Android has its own native version/versionCode. Keep install
+mode enabled. Android still verifies the package and signer. Install over the
+existing client to retain its data; client installation never programs a dimmer.
+If the client is updated outside Obtainium, its tracked status may need manual
+correction. A new bundle may contain the same APK.
+
 ## Select a package and configure optional connections
 
 Use **Settings → Firmware updates** for the configured GitHub release source or
@@ -265,6 +277,18 @@ The existing 60-second ordinary Bluetooth idle return remains; exceptional or
 partial-update recovery remains active, with blue/red rather than ordinary
 blue/green. Physical qualification of this new feature is pending.
 
+## Wired auxiliary push buttons
+
+Traditional push buttons on terminal P are one wired control input, even when
+several buttons control the same light. They are separate from the dimmer's
+front UP/DOWN keys and from associated radio controls. The source candidate adds
+short-press toggle and alternating long-press dimming while the light is ON;
+release stops dimming. An operator confirmed these functions with all four wired
+buttons on one installed device running the signed MAIN 1.1.3 candidate. This
+bounded trial does not establish support in other installed or released packages.
+Confirm the exact installed firmware before claiming support. There is no
+updater setting that can add an input handler absent from that firmware.
+
 ## Diagnose without guessing
 
 | Symptom | Next checks |
@@ -299,3 +323,23 @@ restores stock device firmware nor cancels an already submitted remote OTA.
 Later source documentation is at https://github.com/Ryther/vomar/tree/main/docs.
 These steps require no repository access. Verify the installed version's guide
 when its controls differ; do not invent UI or claim tests exercised that setup.
+
+## Schema 8 dimmer controls
+
+A front UP/DOWN long press while the lamp is OFF leaves it OFF; dimming requires
+an already ON applied output. The separate wired auxiliary behavior is unchanged.
+With matching schema 8 firmware and converter, `phase_cut_mode` offers TE
+(`trailing_edge`, default) and LE (`leading_edge`). Ask the operator to switch
+the lamp OFF and wait for any ramp/delay before changing it. The backend saves
+and applies it through a guarded command and the converter checks readback;
+read-only attribute 0x0305 must not be used as a raw write bypass. Do not infer
+load compatibility or electrical qualification from a successful software test.
+
+Identify is a diagnostic button: it flashes green rapidly for 15 seconds without
+changing the lamp. Fault indications take priority; automatic profiles or an
+unexpired override resume afterward. Settings v5 preserves v1–v4 values while
+adding phase selection; older firmware cannot decode v5 after a downgrade.
+A warm ON return with a phase different from the loaded choice inhibits output
+and reports a fault; it never switches phase under load or retries automatically.
+Stop the trial and inspect the firmware, selected phase and retained settings
+before another attempt; do not repeatedly retry ON or bypass the output fault.

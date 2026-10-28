@@ -13,16 +13,35 @@ export default class VimarRecoveryAudit {
     }
     record(data) {
         const record = {at: new Date().toISOString(), ...data};
+        let descriptor;
         try {
-            if (fs.existsSync(this.auditPath) && fs.statSync(this.auditPath).size >= 1024 * 1024) {
+            // Check and write the opened file, never a separately checked path.
+            // Refuse links and special files; audit failure cannot fail a command.
+            const open = () => {
+                if (!Number.isInteger(fs.constants.O_NOFOLLOW)) throw new Error('Safe file open unavailable');
+                const fd = fs.openSync(this.auditPath, fs.constants.O_WRONLY | fs.constants.O_APPEND |
+                    fs.constants.O_CREAT | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK, 0o600);
+                try {
+                    const info = fs.fstatSync(fd);
+                    if (!info.isFile() || info.nlink !== 1) throw new Error('Audit requires a private regular file');
+                    fs.fchmodSync(fd, 0o600);
+                    return {fd, size: info.size};
+                } catch (error) {fs.closeSync(fd); throw error;}
+            };
+            let opened = open(); descriptor = opened.fd;
+            if (opened.size >= 1024 * 1024) {
+                fs.closeSync(descriptor); descriptor = undefined;
                 fs.renameSync(this.auditPath, `${this.auditPath}.1`);
+                opened = open(); descriptor = opened.fd;
             }
-            fs.appendFileSync(this.auditPath, `${JSON.stringify(record)}\n`, {mode: 0o600});
+            fs.appendFileSync(descriptor, `${JSON.stringify(record)}\n`);
         } catch {
             if (!this.fileWarning) {
                 this.fileWarning = true;
                 try {this.logger.warning('VIMAR_RECOVERY_AUDIT file unavailable; console trace only');} catch {}
             }
+        } finally {
+            if (descriptor !== undefined) {try {fs.closeSync(descriptor);} catch {}}
         }
         try {this.logger.info(`VIMAR_RECOVERY_AUDIT ${JSON.stringify(record)}`);} catch {}
     }

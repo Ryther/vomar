@@ -10,7 +10,7 @@ config RESEARCH_STOCK_OUTPUT
 config RESEARCH_STOCK_CONFIG19
     int
     range 0 1
-    default 1
+    default 0
 
 config VIMAR_ZIGBEE_OTA
     bool "Authenticated compressed Zigbee OTA for Vimar"

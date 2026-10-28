@@ -5,6 +5,11 @@
 struct dimmer_config dimmer_config_defaults(void)
 {
     return (struct dimmer_config) {
+#if defined(CONFIG_RESEARCH_STOCK_CONFIG19)
+        .phase_cut_mode = CONFIG_RESEARCH_STOCK_CONFIG19,
+#else
+        .phase_cut_mode = DIMMER_PHASE_TRAILING_EDGE,
+#endif
         .initial_on_delay_ms = 0,
         .rise_transition_ms = 0,
         .fall_transition_ms = 0,
@@ -67,7 +72,9 @@ bool dimmer_config_validate(const struct dimmer_config *config)
     if (config == NULL) {
         return false;
     }
-    return in_range_u32(config->initial_on_delay_ms, 0, 60000) &&
+    return config->phase_cut_mode >= DIMMER_PHASE_TRAILING_EDGE &&
+        config->phase_cut_mode < DIMMER_PHASE_MODE_COUNT &&
+        in_range_u32(config->initial_on_delay_ms, 0, 60000) &&
         in_range_u32(config->rise_transition_ms, 0, 60000) &&
         in_range_u32(config->fall_transition_ms, 0, 60000) &&
         in_range_u32(config->min_level, 1, 254) &&

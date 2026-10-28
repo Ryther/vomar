@@ -5,6 +5,13 @@
 / {
     aliases {
         /delete-property/ mcuboot-led0;
+        vimar-attachment = &wired_button;
+    };
+};
+&{/buttons} {
+    /* Stock index2: pulse-qualified wired input, separate from front keys. */
+    wired_button: wired-button {
+        gpios = <&gpio1 9 GPIO_PULL_UP>;
     };
 };
 &led0 { status = "disabled"; };

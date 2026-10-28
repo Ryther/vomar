@@ -68,6 +68,12 @@ enum dimmer_led_intensity_mode {
     DIMMER_LED_INTENSITY_MODE_COUNT,
 };
 
+enum dimmer_phase_cut_mode {
+    DIMMER_PHASE_TRAILING_EDGE = 0,
+    DIMMER_PHASE_LEADING_EDGE = 1,
+    DIMMER_PHASE_MODE_COUNT,
+};
+
 struct dimmer_led_profile {
     uint8_t r;
     uint8_t g;
@@ -107,6 +113,7 @@ struct dimmer_config {
     enum dimmer_led_intensity_mode led_on_intensity_mode;
     uint8_t led_on_min_intensity;
     uint8_t led_on_max_intensity;
+    enum dimmer_phase_cut_mode phase_cut_mode;
 };
 
 struct dimmer_config dimmer_config_defaults(void);

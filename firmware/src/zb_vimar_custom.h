@@ -42,6 +42,7 @@ void vimar_custom_cluster_init_server(void);
  VIMAR_RW(VIMAR_ATTR_RESTORE_TIMEOUT, ZB_ZCL_ATTR_TYPE_U16, &(c)->restore_timeout_s), \
  VIMAR_RW(VIMAR_ATTR_OUTPUT_MODE, ZB_ZCL_ATTR_TYPE_U8, &(c)->output_mode), \
  VIMAR_RW(VIMAR_ATTR_REPORTING_MODE, ZB_ZCL_ATTR_TYPE_U8, &(c)->reporting_mode), \
+ VIMAR_RO(VIMAR_ATTR_PHASE_CUT_MODE, ZB_ZCL_ATTR_TYPE_U8, &(c)->phase_cut_mode), \
  VIMAR_RW(VIMAR_ATTR_FIXED_LEVEL, ZB_ZCL_ATTR_TYPE_U8, &(c)->fixed_level), \
  VIMAR_RW(VIMAR_ATTR_LED_ON_R, ZB_ZCL_ATTR_TYPE_U8, &(c)->led_on_r), \
  VIMAR_RW(VIMAR_ATTR_LED_ON_G, ZB_ZCL_ATTR_TYPE_U8, &(c)->led_on_g), \

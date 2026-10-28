@@ -5,7 +5,7 @@ on:
       sha: {description: Exact reviewed source SHA of the complete frozen draft, required: true, type: string}
       version: {description: Release Please distribution version, required: true, type: string}
       publish: {description: Publish the verified accepted draft, required: true, type: boolean, default: false}
-permissions: {contents: read, checks: read}
+permissions: {contents: read, checks: read, security-events: read}
 concurrency: {group: accepted-distribution-publication, cancel-in-progress: false}
 jobs:
   publish:

@@ -141,7 +141,7 @@ jobs:
     if: needs.resolve.outputs.publish == 'true'
     runs-on: ubuntu-24.04
     environment: release-publication
-    permissions: {contents: read, actions: read, checks: read}
+    permissions: {contents: read, actions: read, checks: read, security-events: read}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {ref: '${{ github.workflow_sha }}', path: trusted, persist-credentials: false}

@@ -5,6 +5,8 @@ void led_controller_init(struct led_controller *controller, const struct dimmer_
 { memset(controller, 0, sizeof(*controller)); controller->config = *config; }
 void led_controller_set_fault(struct led_controller *controller, bool active)
 { controller->fault_active = active; }
+void led_controller_set_identifying(struct led_controller *controller, bool active)
+{ controller->identify_active = active; }
 static void set_layer(struct led_layer *layer, const struct led_output *output,
     uint64_t now_ms, uint32_t duration_ms)
 { layer->active = true; layer->output = *output; layer->expires_ms = duration_ms ? now_ms + duration_ms : 0; }
@@ -26,6 +28,7 @@ static uint8_t scaled(const struct dimmer_config *config, uint8_t level)
 struct led_output led_controller_resolve(struct led_controller *controller, bool on, uint8_t level, uint64_t now_ms)
 {
     if (controller->fault_active) return (struct led_output){255, 0, 0, 100, LED_EFFECT_SLOW_BLINK};
+    if (controller->identify_active) return (struct led_output){0, 255, 0, 100, LED_EFFECT_FAST_BLINK};
     if (active(&controller->override, now_ms)) return controller->override.output;
     if (active(&controller->temporary, now_ms)) return controller->temporary.output;
     struct dimmer_led_profile profile = on ? controller->config.led_on : controller->config.led_off;

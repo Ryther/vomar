@@ -14,6 +14,32 @@ firmware operation after reconnection. Upgrade with the existing signing identit
 without uninstalling or clearing data. Software checks do not qualify physical
 phone, radio or DK operations.
 
+## Install and track with Obtainium
+
+[Add Vomar in Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22org.openvimar.updater%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FRyther%2Fvomar%22%2C%22author%22%3A%22Ryther%22%2C%22name%22%3A%22Vomar%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Evomar-android-%5B0-9%5D%2B%5C%5C%5C%5C.%5B0-9%5D%2B%5C%5C%5C%5C.%5B0-9%5D%2B%5C%5C%5C%5C.apk%24%5C%22%2C%5C%22versionDetection%5C%22%3Afalse%2C%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22includeDrafts%5C%22%3Afalse%2C%5C%22trackOnly%5C%22%3Afalse%7D%22%7D) to import the repository's
+[Obtainium configuration](https://github.com/Ryther/vomar/blob/main/apps/android-updater/obtainium.json).
+Review the import, add the app and confirm the Android installation. The source is
+`https://github.com/Ryther/vomar`; no GitHub account or token is required for public
+releases, subject to GitHub's anonymous API rate limits.
+
+For manual setup, add that GitHub URL, filter APK filenames with
+`^vomar-android-[0-9]+\.[0-9]+\.[0-9]+\.apk$` and disable **version detection**
+(the `versionDetection` setting). Keep prereleases and drafts disabled. Do not
+select tracking-only mode: Obtainium must download and install the APK.
+
+Vomar's bundle tag and Android version are independent: bundle `1.0.0` contains
+Android `1.1.4` / versionCode `34`. Obtainium tracks the bundle tag and remembers
+which bundle it installed. Comparing that tag with Android's native version would
+produce incorrect update decisions. With version detection disabled, an update
+installed outside Obtainium may need its tracked status corrected manually. A new
+bundle can contain an unchanged Android APK. Android still enforces the package
+ID, signing identity and version-code upgrade rules.
+
+Install over the existing Vomar app without uninstalling or clearing data. This
+updates the Android client only; it never installs dimmer firmware. See
+[Obtainium version detection](https://wiki.obtainium.imranr.dev/app_tracking/#version-detection)
+for the upstream tracking behavior.
+
 ## Project releases and experimental firmware
 
 Open **Settings → Firmware updates → Check for updates** to check the configured

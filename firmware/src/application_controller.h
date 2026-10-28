@@ -11,10 +11,14 @@ enum application_system_event { APPLICATION_EVENT_TIMER_EXPIRED,
 typedef void (*application_system_callback)(void *,enum application_system_event,uint16_t);
 struct application_callbacks { secondary_request_callback secondary_request;
     application_gesture_callback gesture_event; application_system_callback system_event; void (*state_changed)(void *); };
-struct application_controller { struct dimmer_model model;struct gesture_classifier gestures;struct led_controller leds;struct application_callbacks callbacks;void *context;uint64_t now_ms;struct gesture_event queued_press[GESTURE_SIDE_COUNT][2];uint8_t queued_press_count[GESTURE_SIDE_COUNT];bool hold_active[GESTURE_SIDE_COUNT];uint64_t next_level_step_ms[GESTURE_SIDE_COUNT]; bool protection_blocked, output_on, output_pending, emitting_output, ramp_target_on, ramp_cross_min; uint8_t output_level, ramp_from, ramp_to; uint64_t output_start_ms; uint32_t output_duration_ms; };
+struct application_controller { struct dimmer_model model;struct gesture_classifier gestures;struct led_controller leds;struct application_callbacks callbacks;void *context;uint64_t now_ms;struct gesture_event queued_press[GESTURE_SIDE_COUNT][2];uint8_t queued_press_count[GESTURE_SIDE_COUNT];bool hold_active[GESTURE_SIDE_COUNT];uint64_t next_level_step_ms[GESTURE_SIDE_COUNT]; bool protection_blocked, output_on, output_pending, emitting_output, ramp_target_on, ramp_cross_min; bool attachment_settled, attachment_pressed, attachment_cancelled, attachment_long, attachment_down; uint64_t attachment_pressed_ms, attachment_next_step_ms; uint8_t output_level, ramp_from, ramp_to; uint64_t output_start_ms; uint32_t output_duration_ms; };
 enum dimmer_request_source { DIMMER_SOURCE_ZIGBEE, DIMMER_SOURCE_PHYSICAL, DIMMER_SOURCE_ZIGBEE_LEVEL, DIMMER_SOURCE_PHYSICAL_HOLD };
 void application_controller_init(struct application_controller *,const struct dimmer_config *,bool,uint8_t,const struct application_callbacks *,void *,uint64_t);
 void application_controller_button_edge(struct application_controller *,enum gesture_side,bool,uint64_t);
+/* Normalized wired-input edges; never published as front-button gestures. */
+void application_controller_attachment_edge(struct application_controller *,bool,uint64_t);
+void application_controller_cancel_attachment(struct application_controller *);
+void application_controller_attachment_settled(struct application_controller *,bool);
 void application_controller_command(struct application_controller *,bool,uint8_t,enum dimmer_request_source,uint64_t);
 void application_controller_bypass_on(struct application_controller *,uint64_t);
 void application_controller_set_protection(struct application_controller *,bool,uint64_t);

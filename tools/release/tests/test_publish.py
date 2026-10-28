@@ -159,3 +159,51 @@ def test_accepted_publisher_binds_physical_risk_to_the_actual_public_approval(ac
     with pytest.raises(ValueError,match='match the public unresolved'):
         verify_candidate(m,d,None,key,d/'synthetic-android-tools',dependency_evidence=review,
             accepted_with_known_issues=True,acceptance_path=approval)
+
+
+def test_publication_reads_code_scanning_only_with_workflow_reader(monkeypatch):
+    import io,json,types,urllib.request
+    from tools.release.publish import GitHub
+    requests=[]
+    def open_request(request,timeout):
+        requests.append(request)
+        return io.BytesIO(b'[]')
+    monkeypatch.setattr(urllib.request,'build_opener',lambda *args:types.SimpleNamespace(open=open_request))
+    remote=GitHub('Ryther/vomar','release-writer',checks_token='workflow-reader')
+    assert callable(getattr(remote,'code_scanning',None)), 'Publication has no CodeQL alert reader'
+    assert remote.code_scanning('code-scanning/alerts?state=open')==[]
+    assert requests[-1].get_header('Authorization')=='Bearer workflow-reader'
+    with pytest.raises(ValueError,match='Code scanning read credential required'):
+        GitHub('Ryther/vomar','release-writer').code_scanning('code-scanning/alerts?state=open')
+
+
+@pytest.mark.parametrize('blocked_at',[1,2])
+def test_codeql_alerts_block_publication_before_any_publish_mutation(accepted_candidate,monkeypatch,blocked_at):
+    import sys
+    from tools.release import publish
+    manifest,directory,acceptance,review,key=accepted_candidate
+    events=[];checks=[]
+    class CandidateRemote:
+        def __init__(self,*args,**kwargs):pass
+        def checks(self,sha):return {'total_count':len(publish.CHECKS),'check_runs':[
+            {'name':name,'head_sha':sha,'status':'completed','conclusion':'success','app':{'slug':'github-actions'}} for name in publish.CHECKS]}
+        def code_scanning(self,path):raise AssertionError('Gate uses the injected remote reader')
+        def pin_draft(self,*args):events.append('pin');return {'id':1,'draft':True,'tag_name':manifest['tag'],'target_commitish':manifest['commit'],'body':publish.ACCEPTED_RELEASE_NOTICE}
+        def releases(self):return [self.pin_draft()]
+        def tag_sha(self,tag):return manifest['commit']
+        def publish(self,*args):events.append('publish')
+    def reject(fetch,sha):
+        checks.append(sha)
+        if len(checks)==blocked_at:raise ValueError('CodeQL blocking findings')
+    assert hasattr(publish,'codeql_check'), 'Publisher never inspects CodeQL findings'
+    monkeypatch.setattr(publish,'codeql_check',reject)
+    monkeypatch.setattr(publish,'GitHub',CandidateRemote)
+    monkeypatch.setattr(publish,'security_check',lambda *args:True)
+    monkeypatch.setattr(publish,'reconcile_assets',lambda *args:events.append('assets'))
+    for name in ['GH_TOKEN','GH_CHECKS_TOKEN','SONAR_TOKEN']:monkeypatch.setenv(name,'synthetic-token')
+    monkeypatch.setattr(sys,'argv',['publish','--directory',str(directory),'--public-key',str(key),
+        '--android-tools',str(directory/'synthetic-android-tools'),'--dependency-review',str(review),
+        '--accepted-with-known-issues','--acceptance',str(acceptance),'--publish'])
+    with pytest.raises(ValueError,match='CodeQL blocking findings'):publish.main()
+    assert len(checks)==blocked_at and 'publish' not in events
+    if blocked_at==1:assert events==[]

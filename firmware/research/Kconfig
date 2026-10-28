@@ -19,10 +19,11 @@ config RESEARCH_STOCK_OUTPUT
 config RESEARCH_STOCK_CONFIG19
     int "Initial stock configuration output P0.19"
     range 0 1
-    default 1
+    default 0
     depends on RESEARCH_STOCK_OUTPUT
     help
       Stock argument comes from EEPROM block 0x24 payload byte 0, default 1.
+      Vomar defaults to TE (0); an explicit build override remains supported.
       This compile-time value does not read or preserve existing EEPROM settings.
 config RESEARCH_SOFTWARE_RECOVERY
     bool "Matching MCUboot supports retained software recovery request"

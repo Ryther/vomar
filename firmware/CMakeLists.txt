@@ -5,6 +5,7 @@ project(vimar_30805_platform)
 target_sources(app PRIVATE
     src/main.c
     src/dimmer_config.c
+    src/phase_cut_control.c
     src/dimmer_model.c
     src/gesture_classifier.c
     src/local_action_mapper.c
@@ -75,7 +76,7 @@ if(CONFIG_VIMAR_FAULT_DIAGNOSTICS)
 endif()
 
 if(CONFIG_VIMAR_HARDWARE)
-    target_sources(app PRIVATE src/platform_io_vimar.c src/vimar_identity.c src/vimar_level.c src/vimar_led.c src/vimar_buttons.c
+    target_sources(app PRIVATE src/platform_io_vimar.c src/vimar_identity.c src/vimar_level.c src/vimar_led.c src/vimar_buttons.c src/vimar_attachment.c src/vimar_attachment_gpio.c
         research/src/research_output.c research/src/research_protocol.c research/src/research_handoff.c)
     target_include_directories(app PRIVATE research/src)
 else()

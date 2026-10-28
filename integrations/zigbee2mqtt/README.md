@@ -1,5 +1,8 @@
 # Zigbee2MQTT external converter
 
+Converter **1.1.0** adds schema 8 phase-cut selection and standard Identify. Its
+native version is independent of the distribution and firmware versions.
+
 `dist/vimar_30805.js` is the standalone ESM external converter for the custom DK firmware identity
 `Vimar30805-DK` and Vimar hardware identity `Vimar30805`. It registers cluster `0xFC00`, retains the standard dimmable-light
 exposure, publishes gesture/system events as `action`, and provides individually
@@ -155,3 +158,25 @@ HA automation, distinguish frontend WebSocket from broker MQTT, or observe local
 button/boot-selector/OTA installer recovery entry. An absent entry alone does
 not establish the cause. Device-side reset/recovery reason logging is planned
 with the shared P0.31 protection work.
+
+## Schema 8 phase selection and Identify
+
+Use the matching converter and schema 8 firmware for `phase_cut_mode`:
+`trailing_edge` (TE, default) or `leading_edge` (LE). The converter exposes the
+setting only after reading schema 8. Switch the lamp OFF and wait for any delay
+or ramp to finish before changing it. The setting is a guarded `setPhaseCut`
+command (ID 6), followed by a matching `phaseCutMode` readback (attribute 0x0305).
+The attribute itself is read-only; raw attribute writes cannot bypass admission.
+A rejected command or mismatched readback is an error, not an optimistic success.
+Send this setting separately from other settings.
+
+Identify appears as a diagnostic press button in Home Assistant. MQTT
+`{"identify":"identify"}` sends standard `genIdentify.identify` with
+`identifytime: 15`: the LED flashes green rapidly while the lamp stays unchanged.
+`press` and boolean `true` are accepted aliases; `false` does nothing. Faults have
+priority. `led_runtime_effect=fast_blink` describes this temporary indication;
+it is not a new manual LED effect. Configured profiles and manual overrides are
+restored when Identify ends. A front long press while OFF now keeps the lamp OFF.
+
+See the [firmware guide](../../firmware/README.md) for v5 settings migration,
+downgrade limits and remaining physical qualification.

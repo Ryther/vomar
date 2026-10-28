@@ -1,0 +1,7 @@
+{
+  "id": "org.openvimar.updater",
+  "url": "https://github.com/Ryther/vomar",
+  "author": "Ryther",
+  "name": "Vomar",
+  "additionalSettings": "{\"apkFilterRegEx\":\"^vomar-android-[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\\\.apk$\",\"versionDetection\":false,\"includePrereleases\":false,\"includeDrafts\":false,\"trackOnly\":false}"
+}

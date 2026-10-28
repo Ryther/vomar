@@ -67,6 +67,7 @@ bool zigbee_custom_write_config(struct dimmer_config *c, uint16_t id, uint32_t v
     SET(VIMAR_ATTR_POWER_ON_LEVEL, power_on_level, uint8_t);
     SET(VIMAR_ATTR_RESTORE_TIMEOUT, zigbee_restore_timeout_s, uint16_t);
     SET(VIMAR_ATTR_OUTPUT_MODE, output_mode, enum dimmer_output_mode);
+    SET(VIMAR_ATTR_PHASE_CUT_MODE, phase_cut_mode, enum dimmer_phase_cut_mode);
     SET(VIMAR_ATTR_REPORTING_MODE, reporting_mode, enum dimmer_reporting_mode);
     SET(VIMAR_ATTR_FIXED_LEVEL, fixed_level, uint8_t);
     SET(VIMAR_ATTR_LED_ON_R, led_on.r, uint8_t); SET(VIMAR_ATTR_LED_ON_G, led_on.g, uint8_t);

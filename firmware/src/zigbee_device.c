@@ -1,8 +1,11 @@
 #include "zigbee_device.h"
 
+#include <errno.h>
+
 #include "application_controller.h"
 #include "app_settings_backend.h"
 #include "platform_io.h"
+#include "phase_cut_control.h"
 #include "vimar_power_protection.h"
 #include "boot_trace.h"
 #include "fault_diag_zephyr.h"
@@ -131,6 +134,7 @@ struct zigbee_context {
     uint8_t output_mode;
     uint8_t reporting_mode;
     uint8_t fixed_level;
+    uint8_t phase_cut_mode;
     uint8_t led_on_r, led_on_g, led_on_b, led_on_intensity;
     uint8_t led_off_r, led_off_g, led_off_b, led_off_intensity;
     uint8_t led_on_mode, led_on_min, led_on_max;
@@ -190,6 +194,7 @@ static zb_uint8_t custom_received_commands[] = {
     VIMAR_COMMAND_CLEAR_LED_OVERRIDE, VIMAR_COMMAND_APPLY_LED_OVERRIDE,
     VIMAR_COMMAND_REQUEST_SNAPSHOT,
     VIMAR_COMMAND_BYPASS_ON, VIMAR_COMMAND_ENTER_RECOVERY, VIMAR_COMMAND_SET_OUTPUT,
+    VIMAR_COMMAND_SET_PHASE_CUT,
 };
 static zb_uint8_t custom_generated_commands[] = { VIMAR_COMMAND_EVENT };
 static zb_discover_cmd_list_t custom_server_commands = {
@@ -242,6 +247,7 @@ static void custom_write_hook(zb_uint8_t endpoint, zb_uint16_t attr_id,
     if (zigbee_custom_write_config(&candidate, attr_id,
         custom_value(attr_id, value)) &&
         dimmer_model_modes_supported(&candidate, platform_io_capabilities())) {
+        zigbee_device_cancel_gestures();
         controller.model.config = candidate;
         controller.gestures.config = candidate;
         controller.leds.config = candidate;
@@ -255,6 +261,53 @@ static void recovery_after_ack(zb_uint8_t unused)
     (void)vimar_boot_trace_request(BOOT_REASON_ZIGBEE);
     int error=platform_io_request_recovery();
     if(error)LOG_ERR("Remote recovery failed:%d",error);
+}
+
+static int phase_cut_check(void *unused, enum dimmer_phase_cut_mode mode)
+{
+    ARG_UNUSED(unused);
+    return platform_io_check_phase_cut(mode);
+}
+
+static int phase_cut_persist(void *candidate, enum dimmer_phase_cut_mode mode)
+{
+    ARG_UNUSED(mode);
+    return app_settings_flush_current(candidate, false, controller.model.state.level);
+}
+
+static int phase_cut_apply(void *unused, enum dimmer_phase_cut_mode mode)
+{
+    ARG_UNUSED(unused);
+    return platform_io_set_phase_cut(mode);
+}
+
+static int configure_phase_cut(uint8_t mode)
+{
+    struct dimmer_config candidate = controller.model.config;
+    if (!zigbee_custom_write_config(&candidate, VIMAR_ATTR_PHASE_CUT_MODE, mode))
+        return -EINVAL;
+    const struct phase_cut_state state = {
+        .on = controller.model.state.on,
+        .target_on = controller.model.state.target_on,
+        .applied_on = controller.output_on,
+        .transitioning = controller.output_pending,
+    };
+    const struct phase_cut_io io = { &candidate,
+        phase_cut_check, phase_cut_persist, phase_cut_apply };
+    bool saved;
+    int error = phase_cut_change(controller.model.config.phase_cut_mode,
+        candidate.phase_cut_mode, &state, &io, &saved);
+    if (saved) {
+        /* Durable settings remain authoritative even if applying the GPIO fails. */
+        controller.model.config = candidate;
+        controller.gestures.config = candidate;
+        controller.leds.config = candidate;
+        context.phase_cut_mode = (uint8_t)candidate.phase_cut_mode;
+        zigbee_device_cancel_gestures();
+        if (error) application_controller_output_failed(&controller,
+            controller.model.state.operation_id, DIMMER_FAULT_SECONDARY_UNAVAILABLE);
+    }
+    return error;
 }
 
 static zb_bool_t custom_command_handler(zb_uint8_t buffer)
@@ -286,13 +339,22 @@ static zb_bool_t custom_command_handler(zb_uint8_t buffer)
         request_snapshot();
     } else if (header.cmd_id == VIMAR_COMMAND_BYPASS_ON &&
                zb_buf_len(buffer) == 0) {
+        zigbee_device_cancel_gestures();
         application_controller_bypass_on(&controller, k_uptime_get());
     } else if(header.cmd_id==VIMAR_COMMAND_SET_OUTPUT) {
         bool on;uint8_t level;
         if(!zigbee_custom_decode_set_output(payload,zb_buf_len(buffer),&on,&level)) {
             result=RET_INVALID_PARAMETER;
         } else {
+            zigbee_device_cancel_gestures();
             application_controller_command(&controller,on,level,DIMMER_SOURCE_ZIGBEE,k_uptime_get());
+        }
+    } else if(header.cmd_id==VIMAR_COMMAND_SET_PHASE_CUT) {
+        if (zb_buf_len(buffer) != 1 || payload[0] >= DIMMER_PHASE_MODE_COUNT) {
+            result = RET_INVALID_PARAMETER;
+        } else {
+            int error = configure_phase_cut(payload[0]);
+            result = error == 0 ? RET_OK : RET_ERROR;
         }
     } else if(header.cmd_id==VIMAR_COMMAND_ENTER_RECOVERY && zb_buf_len(buffer)==0) {
         result=IS_ENABLED(CONFIG_VIMAR_HARDWARE) ?
@@ -471,6 +533,7 @@ static void request_snapshot(void)
 
 static void refresh_led_runtime(uint64_t now_ms)
 {
+    led_controller_set_identifying(&controller.leds, context.identify.identify_time != 0);
     led_controller_set_fault(&controller.leds, controller.model.state.fault.active);
     struct led_output led = led_controller_resolve(&controller.leds,
         controller.model.state.on, controller.model.state.level, now_ms);
@@ -857,8 +920,18 @@ static void publish_model(void)
     app_settings_schedule_state(state->on, state->level, now_ms);
 }
 
+void zigbee_device_cancel_attachment(void)
+{
+    application_controller_cancel_attachment(&controller);
+    platform_io_cancel_attachment();
+    application_controller_attachment_edge(&controller,false,k_uptime_get());
+}
 void zigbee_device_cancel_gestures(void)
-{ application_controller_cancel_gestures(&controller); }
+{
+    application_controller_cancel_gestures(&controller);
+    platform_io_cancel_attachment();
+    application_controller_attachment_edge(&controller,false,k_uptime_get());
+}
 
 void zigbee_device_local_edge_at(uint8_t encoded_edge,uint64_t timestamp_ms)
 {
@@ -868,6 +941,11 @@ void zigbee_device_local_edge_at(uint8_t encoded_edge,uint64_t timestamp_ms)
 }
 void zigbee_device_local_edge(uint8_t encoded_edge)
 { zigbee_device_local_edge_at(encoded_edge,k_uptime_get()); }
+
+void zigbee_device_attachment_edge_at(bool pressed,uint64_t timestamp_ms)
+{ application_controller_attachment_edge(&controller,pressed,timestamp_ms); }
+void zigbee_device_attachment_settled(bool settled)
+{ application_controller_attachment_settled(&controller,settled); }
 
 static void state_changed(void *unused)
 {
@@ -991,6 +1069,7 @@ static void zcl_callback(zb_bufid_t buffer)
 #endif
     if (param->device_cb_id == ZB_ZCL_LEVEL_CONTROL_SET_VALUE_CB_ID) {
         uint8_t level = param->cb_param.level_control_set_value_param.new_value;
+        zigbee_device_cancel_gestures();
         application_controller_command(&controller, level != 0,
             level == 0 ? 1 : level, DIMMER_SOURCE_ZIGBEE_LEVEL, k_uptime_get());
         return;
@@ -999,6 +1078,7 @@ static void zcl_callback(zb_bufid_t buffer)
         param->cb_param.set_attr_value_param.cluster_id == ZB_ZCL_CLUSTER_ID_ON_OFF &&
         param->cb_param.set_attr_value_param.attr_id == ZB_ZCL_ATTR_ON_OFF_ON_OFF_ID) {
         const struct dimmer_state *state = application_controller_state(&controller);
+        zigbee_device_cancel_gestures();
         application_controller_command(&controller,
             param->cb_param.set_attr_value_param.values.data8 != 0,
             state->level, DIMMER_SOURCE_ZIGBEE, k_uptime_get());
@@ -1116,9 +1196,15 @@ int zigbee_device_start(void)
         application_controller_set_protection(&controller,true,k_uptime_get());
         controller.callbacks=saved;
     }
-    int error = platform_io_init(controller.model.state.on,controller.model.state.level);
+    int error = platform_io_set_phase_cut(config.phase_cut_mode);
+    if (error == 0) error = platform_io_init(controller.model.state.on,controller.model.state.level);
     if (error != 0) {
         LOG_ERR("Platform I/O initialization failed: %d",error);
+        if (platform_io_startup_inhibited()) {
+            /* Proven gate inhibition, not an assumption about generic I/O errors.
+             * Startup reconciliation must not schedule ZBOSS callbacks. */
+            application_controller_restore_handoff(&controller,false,controller.model.state.level);
+        }
         controller.model.state.fault=(struct dimmer_fault){.code=DIMMER_FAULT_SECONDARY_UNAVAILABLE,.active=true};
         /* Keep Zigbee and periodic button recovery running even if output init failed. */
     }
@@ -1139,6 +1225,7 @@ int zigbee_device_start(void)
     context.identify.identify_time = 0;
     context.level.remaining_time = 0;
     context.schema_version = VIMAR_SCHEMA_VERSION;
+    context.phase_cut_mode = (uint8_t)config.phase_cut_mode;
     context.capabilities = VIMAR_CUSTOM_CAPABILITIES &
         (IS_ENABLED(CONFIG_VIMAR_HARDWARE) ? ~VIMAR_CUSTOM_CAP_DK_SIMULATOR : UINT32_MAX);
     context.initial_on_delay_ms=config.initial_on_delay_ms;
