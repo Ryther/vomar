@@ -87,6 +87,12 @@ static uint32_t template_duration(const struct dimmer_config *cfg,unsigned index
 }
 static void bypass_on(struct application_controller *c,uint64_t now)
 {send_request(c,true,c->model.state.level,now);if(!c->protection_blocked)dimmer_model_bypass_off_timer(&c->model);}
+static bool front_hold_allowed(const struct application_controller *c)
+{
+ /* Accepted ON can precede applied output during the initial delay. */
+ return !c->protection_blocked && c->model.config.output_mode==DIMMER_OUTPUT_DIMMABLE &&
+     c->model.state.on && c->output_on;
+}
 static void classified(const struct gesture_event *e,void *ctx)
 {
  struct application_controller *c=ctx;
@@ -105,7 +111,7 @@ static void classified(const struct gesture_event *e,void *ctx)
  }
  c->queued_press_count[e->side]=0;
  if(disabled)return;
- if(e->type==GESTURE_EVENT_LONG){if(c->protection_blocked)return;if(c->model.config.output_mode!=DIMMER_OUTPUT_DIMMABLE)return;int level=(int)c->model.state.level+local_action_level_delta(&c->model.config,e->side);if(level<1)level=1;if(level>254)level=254;ordinary_request(c,true,(uint8_t)level,DIMMER_SOURCE_PHYSICAL_HOLD,c->now_ms);c->hold_active[e->side]=true;c->next_level_step_ms[e->side]=c->now_ms+c->model.config.level_step_period_ms;return;}
+ if(e->type==GESTURE_EVENT_LONG){if(!front_hold_allowed(c))return;int level=(int)c->model.state.level+local_action_level_delta(&c->model.config,e->side);if(level<1)level=1;if(level>254)level=254;ordinary_request(c,true,(uint8_t)level,DIMMER_SOURCE_PHYSICAL_HOLD,c->now_ms);c->hold_active[e->side]=true;c->next_level_step_ms[e->side]=c->now_ms+c->model.config.level_step_period_ms;return;}
  if(e->type==GESTURE_EVENT_RELEASE){c->hold_active[e->side]=false;return;}
  if(a>=DIMMER_ACTION_TIMED_ON_1 && a<=DIMMER_ACTION_TIMED_TOGGLE_4){
   bool toggle=a>=DIMMER_ACTION_TIMED_TOGGLE_1;
@@ -174,7 +180,7 @@ void application_controller_init(struct application_controller *c,const struct d
 void application_controller_button_edge(struct application_controller *c,enum gesture_side side,bool pressed,uint64_t now){c->now_ms=now;if(pressed){application_controller_cancel_attachment(c);dimmer_model_cancel_restore(&c->model);}gesture_classifier_edge(&c->gestures,side,pressed,now);}
 void application_controller_command(struct application_controller *c,bool on,uint8_t level,enum dimmer_request_source source,uint64_t now){c->now_ms=now;if(source==DIMMER_SOURCE_ZIGBEE||source==DIMMER_SOURCE_ZIGBEE_LEVEL)application_controller_cancel_gestures(c);ordinary_request(c,on,level,source,now);}
 void application_controller_bypass_on(struct application_controller *c,uint64_t now){c->now_ms=now;bypass_on(c,now);}
-void application_controller_tick_input(struct application_controller *c,uint64_t now,bool settled){c->now_ms=now;attachment_tick(c,now);if(c->model.config.output_mode!=DIMMER_OUTPUT_DIMMABLE)memset(c->hold_active,0,sizeof(c->hold_active));if(settled){gesture_classifier_tick(&c->gestures,now);for(enum gesture_side side=GESTURE_SIDE_UP;side<GESTURE_SIDE_COUNT;side++){if(c->hold_active[side]&&now>=c->next_level_step_ms[side]){int level=(int)c->model.state.level+local_action_level_delta(&c->model.config,side);if(level<1)level=1;if(level>254)level=254;ordinary_request(c,true,(uint8_t)level,DIMMER_SOURCE_PHYSICAL_HOLD,now);c->next_level_step_ms[side]+=c->model.config.level_step_period_ms;}}}bool timer=c->model.state.off_timer_active;bool restore=c->model.state.restore_waiting;if(dimmer_model_tick(&c->model,now)){if(c->callbacks.system_event)c->callbacks.system_event(c->context,timer?APPLICATION_EVENT_TIMER_EXPIRED:APPLICATION_EVENT_STATE_CORRECTION,0);schedule_output(c,now,false);}else if(restore&&!c->model.state.restore_waiting&&c->callbacks.system_event)c->callbacks.system_event(c->context,APPLICATION_EVENT_STATE_CORRECTION,0);advance_output(c,now);}
+void application_controller_tick_input(struct application_controller *c,uint64_t now,bool settled){c->now_ms=now;attachment_tick(c,now);if(!front_hold_allowed(c))memset(c->hold_active,0,sizeof(c->hold_active));if(settled){gesture_classifier_tick(&c->gestures,now);for(enum gesture_side side=GESTURE_SIDE_UP;side<GESTURE_SIDE_COUNT;side++){if(c->hold_active[side]&&now>=c->next_level_step_ms[side]){int level=(int)c->model.state.level+local_action_level_delta(&c->model.config,side);if(level<1)level=1;if(level>254)level=254;ordinary_request(c,true,(uint8_t)level,DIMMER_SOURCE_PHYSICAL_HOLD,now);c->next_level_step_ms[side]+=c->model.config.level_step_period_ms;}}}bool timer=c->model.state.off_timer_active;bool restore=c->model.state.restore_waiting;if(dimmer_model_tick(&c->model,now)){if(c->callbacks.system_event)c->callbacks.system_event(c->context,timer?APPLICATION_EVENT_TIMER_EXPIRED:APPLICATION_EVENT_STATE_CORRECTION,0);schedule_output(c,now,false);}else if(restore&&!c->model.state.restore_waiting&&c->callbacks.system_event)c->callbacks.system_event(c->context,APPLICATION_EVENT_STATE_CORRECTION,0);advance_output(c,now);}
 void application_controller_feedback(struct application_controller *c,uint32_t op,bool on,uint8_t level){if(c->protection_blocked&&on)return;if(c->emitting_output){if(op==c->model.state.operation_id){c->output_on=on;if(on)c->output_level=level;}return;}bool correction=op==c->model.state.operation_id&&(on!=c->model.state.target_on||level!=c->model.state.target_level);if(dimmer_model_apply_effective(&c->model,op,on,level)&&correction&&c->callbacks.system_event)c->callbacks.system_event(c->context,APPLICATION_EVENT_STATE_CORRECTION,0);}
 const struct dimmer_state *application_controller_state(const struct application_controller *c){return dimmer_model_state(&c->model);}
 

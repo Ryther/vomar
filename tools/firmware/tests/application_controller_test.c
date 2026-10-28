@@ -27,6 +27,93 @@ static void initialize(struct application_controller *c, struct dimmer_config *c
     application_controller_init(c,cfg,on,100,&cb,c,now);
 }
 
+static void test_front_holds_leave_off_lamp_unchanged(void)
+{
+ for(enum gesture_side side=GESTURE_SIDE_UP;side<GESTURE_SIDE_COUNT;side++) {
+  struct application_controller c;struct dimmer_config cfg=dimmer_config_defaults();
+  initialize(&c,&cfg,false,0);
+  uint32_t operation=c.model.state.operation_id;
+  application_controller_button_edge(&c,side,true,1000);
+  application_controller_tick(&c,1250);
+  assert(events==2 && requests==0 && !c.model.state.on && !c.output_on);
+  application_controller_tick(&c,1350);
+  application_controller_tick(&c,1550);
+  application_controller_button_edge(&c,side,false,1600);
+  application_controller_tick(&c,2000);
+  assert(events==3 && requests==0 && !c.model.state.on && !c.model.state.target_on);
+  assert(c.model.state.operation_id==operation && c.model.state.level==100);
+  assert(c.model.state.target_level==100 && c.model.previous_level==100);
+ }
+}
+
+static void test_front_holds_dim_on_lamp_in_each_direction(void)
+{
+ const uint8_t first[]={110,90},second[]={120,80};
+ for(enum gesture_side side=GESTURE_SIDE_UP;side<GESTURE_SIDE_COUNT;side++) {
+  struct application_controller c;struct dimmer_config cfg=dimmer_config_defaults();
+  initialize(&c,&cfg,true,0);
+  application_controller_button_edge(&c,side,true,1000);
+  application_controller_tick(&c,1250);
+  assert(events==2 && requests==1 && requested_on && requested_level==first[side]);
+  application_controller_tick(&c,1350);
+  assert(requests==2 && requested_level==second[side]);
+  application_controller_button_edge(&c,side,false,1400);
+  application_controller_tick(&c,2000);
+  assert(events==3 && requests==2 && c.model.state.on);
+ }
+}
+
+static void test_front_holds_do_not_bypass_pending_on_delay(void)
+{
+ for(enum gesture_side side=GESTURE_SIDE_UP;side<GESTURE_SIDE_COUNT;side++) {
+  struct application_controller c;struct dimmer_config cfg=dimmer_config_defaults();
+  cfg.initial_on_delay_ms=1000;cfg.rise_transition_ms=1000;
+  initialize(&c,&cfg,false,0);
+  application_controller_command(&c,true,100,DIMMER_SOURCE_ZIGBEE,0);
+  uint32_t operation=c.model.state.operation_id;
+  assert(c.model.state.on && !c.output_on);
+  application_controller_button_edge(&c,side,true,100);
+  application_controller_tick(&c,350);
+  application_controller_tick(&c,500);
+  assert(events==2 && requests==0 && !c.output_on && c.output_start_ms==1000);
+  assert(c.model.state.operation_id==operation && c.model.state.level==100);
+  application_controller_tick(&c,2000);
+  assert(requests==1 && requested_on && requested_level==100);
+  application_controller_tick(&c,2200);
+  application_controller_button_edge(&c,side,false,2300);
+  application_controller_tick(&c,2500);
+  assert(events==3 && requests==1 && c.model.previous_level==100);
+ }
+}
+
+static void test_front_hold_stops_when_accepted_state_turns_off(void)
+{
+ for(enum gesture_side side=GESTURE_SIDE_UP;side<GESTURE_SIDE_COUNT;side++) {
+  for(unsigned remote=0;remote<2;remote++) {
+   struct application_controller c;struct dimmer_config cfg=dimmer_config_defaults();
+   cfg.fall_transition_ms=1000;
+   initialize(&c,&cfg,true,0);
+   application_controller_button_edge(&c,side,true,100);
+   application_controller_tick(&c,350);
+   assert(requests==1 && requested_on);
+   application_controller_command(&c,false,c.model.state.level,
+       remote?DIMMER_SOURCE_ZIGBEE:DIMMER_SOURCE_PHYSICAL,400);
+   uint32_t operation=c.model.state.operation_id;
+   uint8_t remembered=c.model.previous_level;
+   assert(!c.model.state.on && c.output_on);
+   application_controller_tick(&c,500);
+   assert(!c.model.state.on && !c.model.state.target_on);
+   assert(c.model.state.operation_id==operation && c.model.previous_level==remembered);
+   application_controller_tick(&c,1400);
+   assert(!c.output_on && !c.hold_active[side]);
+   unsigned before=requests;
+   application_controller_button_edge(&c,side,false,1500);
+   application_controller_tick(&c,2000);
+   assert(requests==before && !c.model.state.on);
+  }
+ }
+}
+
 static void test_automatic_off_sources_and_bypass(void)
 {
     struct application_controller c; struct dimmer_config cfg=dimmer_config_defaults();
@@ -165,7 +252,7 @@ static void test_delayed_failure_and_off_cancel(void)
     application_controller_command(&c,false,200,DIMMER_SOURCE_ZIGBEE,50);
     application_controller_tick(&c,2000);assert(!requested_on && !c.output_pending && !c.model.state.on);
     /* Long dimming owns its discrete steps; defaults cannot restart a delay every tick. */
-    initialize(&c,&cfg,false,0);
+    initialize(&c,&cfg,true,0);
     application_controller_button_edge(&c,GESTURE_SIDE_UP,true,1000);
     application_controller_tick(&c,1250);assert(requests==1 && requested_on);
     application_controller_tick(&c,1350);assert(requests==2);
@@ -203,7 +290,7 @@ static void test_disabled_suppresses_events(void)
  application_controller_button_edge(&c,GESTURE_SIDE_UP,false,270);
  assert(events==2 && requests==0);
  /* Disabling clicks must not suppress an independent long-press gesture. */
- initialize(&c,&cfg,false,0);
+ initialize(&c,&cfg,true,0);
  application_controller_button_edge(&c,GESTURE_SIDE_UP,true,10);
  application_controller_tick(&c,300);
  application_controller_button_edge(&c,GESTURE_SIDE_UP,false,310);
@@ -370,6 +457,10 @@ static void test_protection_cancels_all_on_paths_without_resuming(void)
 }
 
 int main(void){
+ test_front_holds_leave_off_lamp_unchanged();
+ test_front_holds_dim_on_lamp_in_each_direction();
+ test_front_holds_do_not_bypass_pending_on_delay();
+ test_front_hold_stops_when_accepted_state_turns_off();
  test_protection_cancels_all_on_paths_without_resuming();
  test_minimum_on_off_skips_fade_duration();
  test_off_during_delayed_on_does_not_wait_for_fade();
@@ -415,6 +506,7 @@ int main(void){
  application_controller_button_edge(&c,GESTURE_SIDE_UP,false,20);
  application_controller_cancel_gestures(&c);
  application_controller_tick(&c,1000);assert(requests==0);
+ application_controller_restore_handoff(&c,true,100);
  application_controller_button_edge(&c,GESTURE_SIDE_UP,true,1100);
  application_controller_tick(&c,1400);assert(requests>0);
  application_controller_cancel_gestures(&c);unsigned saved_requests=requests;
