@@ -125,8 +125,9 @@ def physical_risk_review():
     return m,q,inventories,approval
 
 
-def test_explicit_physical_risk_requires_the_bound_public_owner_acceptance():
+def test_explicit_physical_risk_requires_the_bound_public_owner_acceptance(monkeypatch):
     from tools.release.evidence import dependency_review
+    monkeypatch.setenv('GITHUB_ACTIONS','true');monkeypatch.setenv('GITHUB_EVENT_NAME','workflow_dispatch')
     m,q,inventories,approval=physical_risk_review()
     assert dependency_review(m,q,inventories,now='2026-10-27T12:00:00Z',
         accepted_with_known_issues=True,acceptance=approval)
@@ -135,8 +136,9 @@ def test_explicit_physical_risk_requires_the_bound_public_owner_acceptance():
 @pytest.mark.parametrize('damage',['qualified','missing-owner','wrong-graph','wrong-id','missing-issue',
     'impact','evidence','stale-owner','owner-source','owner-payload','missing-public-asset',
     'stale-review','inventory','artifact','concealed-status','empty-disposition','software-advisory'])
-def test_physical_risk_is_not_a_general_advisory_waiver(damage):
+def test_physical_risk_is_not_a_general_advisory_waiver(damage,monkeypatch):
     from tools.release.evidence import dependency_review
+    monkeypatch.setenv('GITHUB_ACTIONS','true');monkeypatch.setenv('GITHUB_EVENT_NAME','workflow_dispatch')
     m,q,inventories,approval=physical_risk_review();accepted=True
     graph=q['graphs']['firmware-sdk'];disposition=graph['dispositions'][0]
     if damage=='qualified':accepted=False
