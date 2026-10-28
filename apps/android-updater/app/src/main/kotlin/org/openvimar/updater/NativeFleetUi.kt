@@ -577,7 +577,7 @@ internal class NativeFleetUi(
         }else if(sourceMessage.isNotBlank())copy(sourceMessage).accessibilityLiveRegion=View.ACCESSIBILITY_LIVE_REGION_POLITE
         experimentalRelease?.let{available->
             copy("Firmware ${available.firmwareVersion} · Experimental",secondary=false)
-            copy("Review the known issues in the release notes, then download its ZIP and choose it below. This firmware is not qualified for automatic updates.")
+            copy("Read the release notes before a manual trial. Download its ZIP, then use Devices → dimmer → Update firmware → Choose firmware. This firmware is not qualified for automatic updates.")
             action("Open release notes"){activity.startActivity(Intent(Intent.ACTION_VIEW,Uri.parse(available.releasePage)))}
         }
         release?.zigbeeOta?.let{ota->
