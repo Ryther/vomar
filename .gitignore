@@ -1260,3 +1260,9 @@
 !/tools/dev/tests/test_desktop_runtime.py
 !/apps/desktop-updater/src/vomar_updater/runtime_info.py
 !/apps/desktop-updater/tests/test_runtime_info.py
+
+# Block findings in addition to requiring successful CodeQL execution.
+!/tools/release/codeql_gate.py
+!/tools/release/tests/test_codeql_gate.py
+!/apps/android-updater/obtainium.json
+!/.github/code-scanning-ruleset.json

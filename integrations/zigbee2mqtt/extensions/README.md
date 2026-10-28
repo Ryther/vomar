@@ -20,3 +20,9 @@ IEEE addresses, recovery request values and command results; unrelated payload
 fields are omitted. Keep generated logs local. Frontend WebSocket and MQTT requests
 share Zigbee2MQTT's event path, so the records cannot identify the original publisher
 or automation. The extension sends no recovery commands itself.
+
+File logging refuses symbolic links, multiply linked files and special files. It
+checks and appends through the same open file descriptor, keeps the log private
+(mode `0600`), and rotates at 1 MiB. If safe file access is unavailable, the
+extension warns once and continues using the logger; logging never approves,
+starts or suppresses a device command.

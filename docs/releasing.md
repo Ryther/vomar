@@ -61,7 +61,9 @@ component versions and the source commit. SHA256SUMS covers the full asset set.
 The publisher defaults to dry-run. It discovers the exact draft, rejects duplicate
 or already published releases, requires immutable target/tag SHA and successful
 stable checks, then checks Sonar's exact revision, OK quality status, zero open
-security issues and zero unreviewed hotspots. It rechecks mutable remote gates
+security issues and zero unreviewed hotspots. It also requires exact-revision
+CodeQL analyses in all five categories with no
+open high/critical security or error alerts. It rechecks mutable remote gates
 before publication. Existing identical uploads are retained; differing bytes or
 unreviewed extra assets fail. Upload completeness/readback precedes draft=false.
 A source fix creates a new reviewed candidate; never overwrite published bytes.

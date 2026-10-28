@@ -86,6 +86,10 @@ Both publish report artifacts. Missing coverage, the expected scanner or its
 report fails the aggregate. Firmware C has mandatory CodeQL; full main/release
 Sonar additionally requires actual C compilation/coverage and exact revision.
 A scoped PR scan does not certify full release analysis or hardware behavior.
+CodeQL SARIF high/critical security findings and error results fail the required
+check; an analysis job completing successfully is insufficient. Main additionally
+requires the code scanning ruleset, and publication rechecks fresh CodeQL analyses
+and open blocking alerts alongside the Sonar gate.
 
 Workflow/settings changes take effect from the trusted base after merge. The
 initial infrastructure baseline must be reviewed and established before making

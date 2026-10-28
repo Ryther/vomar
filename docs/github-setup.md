@@ -56,6 +56,27 @@ actual UI state if feature APIs reject an enable request; do not interpret a
 missing analysis as a requirement to purchase a private-repository plan for this
 public project.
 
+## Block CodeQL findings
+
+Apply `.github/code-scanning-ruleset.json` as an active branch ruleset for `main`,
+with no bypass actors. It requires CodeQL results and blocks security findings
+at **High or higher**, plus error-level alerts. Preserve the existing required
+checks and branch protection. A successful analysis/upload job alone does not
+mean the analysis found no vulnerabilities.
+
+The CodeQL workflow also checks its SARIF results: high/critical security findings
+or error results fail `CodeQL required`, including findings already present on
+the branch. Missing or malformed reports fail. The publisher independently
+requires fresh successful main analyses for all five CodeQL categories and zero
+open high/critical security or error alerts, including paginated results, before
+any draft changes and again immediately before publication.
+
+Give the publication job's built-in `GITHUB_TOKEN` **security-events: read** as
+well as Checks read. It uses this reader credential for CodeQL APIs; never expand
+the publication PAT's scope or store another secret for this read. An API failure,
+stale analysis or missing category blocks publication. See
+[GitHub code scanning merge protection](https://docs.github.com/en/code-security/how-tos/find-and-fix-code-vulnerabilities/manage-your-configuration/set-merge-protection).
+
 ## Create protected environments
 
 Create these environments with a custom deployment branch policy allowing only

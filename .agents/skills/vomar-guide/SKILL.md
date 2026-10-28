@@ -75,6 +75,18 @@ creates temporary synthetic certificates and a bounded local TLS listener on
 cleans up. It never contacts a broker/device or changes CA preferences. A passing
 TLS self-test does not qualify Bluetooth/USB or physical firmware operation.
 
+## Install the Android client with Obtainium
+
+Use `https://github.com/Ryther/vomar` as the GitHub source. The reviewed import
+configuration is `apps/android-updater/obtainium.json`; the Android guide links
+its Obtainium import. It restricts APKs to `vomar-android-*.apk`, excludes drafts
+and prereleases, and disables `versionDetection` because Obtainium tracks the
+bundle tag while Android has its own native version/versionCode. Keep install
+mode enabled. Android still verifies the package and signer. Install over the
+existing client to retain its data; client installation never programs a dimmer.
+If the client is updated outside Obtainium, its tracked status may need manual
+correction. A new bundle may contain the same APK.
+
 ## Select a package and configure optional connections
 
 Use **Settings → Firmware updates** for the configured GitHub release source or
