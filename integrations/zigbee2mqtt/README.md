@@ -1,5 +1,8 @@
 # Zigbee2MQTT external converter
 
+Converter **1.1.0** adds schema 8 phase-cut selection and standard Identify. Its
+native version is independent of the distribution and firmware versions.
+
 `dist/vimar_30805.js` is the standalone ESM external converter for the custom DK firmware identity
 `Vimar30805-DK` and Vimar hardware identity `Vimar30805`. It registers cluster `0xFC00`, retains the standard dimmable-light
 exposure, publishes gesture/system events as `action`, and provides individually
