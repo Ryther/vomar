@@ -1,6 +1,7 @@
 """Native immutable publication: POSIX links/fsync, Windows write-through move."""
 import ctypes
 import errno
+import json
 import os
 from pathlib import Path
 
@@ -38,3 +39,9 @@ def ensure_directory(path):
     if not path.is_dir():raise ValueError('Private evidence directory is invalid')
     sync_directory(path)
     if path.parent!=path:sync_directory(path.parent)
+
+
+def write_new_json(path,value):
+    """Write an operator-selected export without replacing an existing file."""
+    with Path(path).open('x',encoding='utf-8') as stream:
+        json.dump(value,stream,indent=2)

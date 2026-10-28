@@ -38,6 +38,21 @@ def test_discovery_rejects_oversized_firmware_before_downloading(tmp_path):
     with pytest.raises(ValueError):select(r,m,'Ryther/vomar')
 
 
+def test_experimental_firmware_is_recognized_but_never_admitted_to_automatic_catalog(tmp_path):
+    from tools.release.manifest import digest
+    m,r=fixture(tmp_path)
+    for role,extension in [('firmware-common','zip'),('zigbee-ota','ota')]:
+        asset=next(a for a in m['artifacts'] if a['role']==role)
+        remote=next(a for a in r['assets'] if a['name']==asset['filename'])
+        asset['filename']=f'vomar-firmware-0.1.0-qualification-candidate.{extension}'
+        remote.update(name=asset['filename'],browser_download_url=f'https://github.com/Ryther/vomar/releases/download/v0.1.0/{asset["filename"]}')
+    name='vomar-release-acceptance-0.1.0.json';raw=b'synthetic owner acceptance'
+    m['artifacts'].append({'role':'release-acceptance','filename':name,'componentVersion':'0.1.0','size':len(raw),'sha256':digest(raw)})
+    r['assets'].append({'name':name,'size':len(raw),'browser_download_url':f'https://github.com/Ryther/vomar/releases/download/v0.1.0/{name}'})
+    with pytest.raises(ValueError,match='Firmware is experimental; import ZIP through Bluetooth trial'):
+        select(r,m,'Ryther/vomar')
+
+
 def test_local_import_does_not_read_an_unbounded_document(tmp_path,monkeypatch):
     import asyncio
     from vomar_updater.service import Service

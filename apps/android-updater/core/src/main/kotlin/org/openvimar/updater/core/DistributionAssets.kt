@@ -5,7 +5,12 @@ import org.openvimar.installer.StrictJson
 /** Download identity only. Existing signed common-package admission is still mandatory. */
 object DistributionAssets {
     data class Asset(val role:String,val filename:String,val size:Int,val sha256:String)
-    data class Selection(val tag:String,val firmware:Asset,val ota:Asset,val assets:List<Asset>)
+    data class Selection(val tag:String,val firmware:Asset,val ota:Asset,val assets:List<Asset>,val experimentalFirmware:Boolean=false) {
+        fun requireAutomaticFirmware():Selection {
+            require(!experimentalFirmware){"Firmware is experimental; import ZIP through Bluetooth trial"}
+            return this
+        }
+    }
     private val required=setOf("firmware-common","zigbee-ota","android-apk","desktop-linux-x64","desktop-windows-x64","desktop-windows-setup","desktop-macos-arm64","zigbee2mqtt-converter","licenses","offline-guide")
     fun parse(raw:ByteArray,tag:String):Selection {
         require(raw.size in 1..65536)
@@ -24,7 +29,7 @@ object DistributionAssets {
             require(a.keys.containsAll(setOf("role","filename","size","sha256","componentVersion"))&&(a.keys-setOf("role","filename","size","sha256","componentVersion")).all{it in setOf("platform","architecture","androidVersionCode")})
             val role=a["role"] as? String ?: error("Asset role required");val name=a["filename"] as? String ?: error("Asset name required")
             val size=a["size"] as? Long ?: error("Exact asset size required");val sha=a["sha256"] as? String ?: error("Asset hash required")
-            require(role in required+setOf("desktop-windows-setup","source-sbom")&&roles.add(role)&&names.add(name)&&Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}").matches(name)&&size in 1..Int.MAX_VALUE.toLong()&&Regex("[0-9a-f]{64}").matches(sha))
+            require(role in required+setOf("desktop-windows-setup","source-sbom","release-acceptance")&&roles.add(role)&&names.add(name)&&Regex("[A-Za-z0-9][A-Za-z0-9._-]{0,159}").matches(name)&&size in 1..Int.MAX_VALUE.toLong()&&Regex("[0-9a-f]{64}").matches(sha))
             require((a["componentVersion"] as? String)?.let{semver.matches(it)}==true)
             val expectedVersion=when {
                 role=="firmware-common"||role=="zigbee-ota"->components["firmware"]
@@ -41,7 +46,13 @@ object DistributionAssets {
             Asset(role,name,size.toInt(),sha)
         }
         require(roles.containsAll(required))
-        val firmware=assets.single{it.role=="firmware-common"};require(firmware.filename=="vomar-firmware-$v.zip"&&firmware.size<=PackageReader.MAX_ZIP)
-        return Selection(tag,firmware,assets.single{it.role=="zigbee-ota"},assets)
+        val firmware=assets.single{it.role=="firmware-common"};val ota=assets.single{it.role=="zigbee-ota"}
+        val experimental=roles.contains("release-acceptance")
+        require(firmware.size<=PackageReader.MAX_ZIP)
+        if(experimental) {
+            require(firmware.filename=="vomar-firmware-$v-qualification-candidate.zip"&&ota.filename=="vomar-firmware-$v-qualification-candidate.ota")
+            require(assets.single{it.role=="release-acceptance"}.filename=="vomar-release-acceptance-$v.json")
+        } else require(firmware.filename=="vomar-firmware-$v.zip")
+        return Selection(tag,firmware,ota,assets,experimental)
     }
 }

@@ -10,10 +10,11 @@ export function combineConverterSources(coreSource, wrapperSource) {
         line.startsWith('import ') && !line.includes("'./vimar_30805_core.js'"));
     const wrapperBody = wrapperLines.filter((line) => !line.startsWith('import '))
         .join('\n').replace(/^\n+/, '');
-    const coreBody = coreSource
+    let coreEnd = coreSource.length;
+    while (coreEnd > 0 && coreSource[coreEnd - 1] === '\n') coreEnd--;
+    const coreBody = coreSource.slice(0, coreEnd)
         .replace(/^export const /gm, 'const ')
-        .replace(/^export function /gm, 'function ')
-        .replace(/\n+$/, '');
+        .replace(/^export function /gm, 'function ');
     return `${imports.join('\n')}\n\n${coreBody}\n\n${wrapperBody}`;
 }
 

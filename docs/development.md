@@ -1,16 +1,18 @@
 # Development
 
-Open `.devcontainer/devcontainer.json` in Dev Containers. This is the only
-supported development configuration: firmware, Android, desktop, hardware and
-research work use the same container. Install additional tools there as needed;
-there is no hardware/research profile to switch to.
+Open `.devcontainer/devcontainer.json` in Dev Containers. This is the canonical
+development configuration: firmware, Android, desktop, hardware and research
+work use the same image. A retained local workstation file must be regenerated
+from this configuration after changes; an old copy can silently omit new tools,
+mounts or Features. The local compatibility helper below refreshes it.
 
 The Ubuntu image pins Python 3.13.12, Node 24 and assistant packages; npm verifies
 package integrity. Java 21 runs Gradle 9.6.0, AGP 9.4.1 and Kotlin 2.4.21;
 Java 17 remains the bytecode target. Git and the OpenSSH client, Docker CLI/Buildx,
-GitHub CLI, Codex, OpenCode, Claude and the Linux GUI runtime are available. Startup checks Docker, gh and `ssh -V` without
-
-logging in, contacting an assistant or opening hardware.
+GitHub CLI, Codex, OpenCode, Claude and the Linux GUI runtime are available.
+Bluetooth/USB clients, GDB, sigrok/PulseView and a full Java 21 GUI runtime are
+also installed. Startup checks Docker, gh and `ssh -V` without logging in,
+contacting an assistant or opening hardware.
 
 Docker and gh use official Dev Container Features pinned by OCI digest. The
 Docker feature mounts `/var/run/docker.sock` at `/var/run/docker-host.sock` and
@@ -38,8 +40,10 @@ inside `vomar-agent-state`. Keep these volumes when rebuilding; deleting them is
 not part of setup. Existing account state is never copied into an image.
 
 For SSH Git access, start the host's SSH agent with your existing key before
-opening VS Code. Dev Containers can forward the agent; no private-key directory
-is mounted by this configuration. `ssh -V` checks the client, while
+opening VS Code. Dev Containers can forward the agent; the public configuration
+does not mount a private-key directory. When explicitly inheriting an older local
+workstation, the compatibility helper can retain its SSH directory read-only;
+it does not read or copy keys. `ssh -V` checks the client, while
 `git ls-remote origin` verifies the actual repository access. Installing gh or
 SSH does not authenticate either one. HTTPS gh login remains available and its
 state has the separate `vomar-github-state` volume.
@@ -82,6 +86,49 @@ when invoking Gradle from another shell. Device coverage uses an isolated API 35
 emulator and the synthetic first-install UI/adapter tests. Ordinary unit tests
 and `jacocoDebugReport` never start an emulator or access physical hardware.
 
+## Isolated native desktop runtime
+
+The desktop native jobs use CPython 3.13.18 and OpenSSL 3.5.9 from the whole
+Astral Python Build Standalone 20261026 runtime, selected by exact platform,
+archive SHA256 and source provenance in `tools/dev/desktop-runtimes.json`.
+This changes neither the container's Python 3.13.12 nor the independent firmware
+SDK environment. Do not replace individual OpenSSL DLLs or combine runtime trees.
+
+For a native rebuild on the matching OS/architecture, use a new private output
+directory and Bash (Git Bash on Windows):
+
+```sh
+python - <<'PY'
+from pathlib import Path
+import shutil, subprocess
+from tools.dev.desktop_runtime import bootstrap
+env = bootstrap(Path('_test/desktop-runtime'))
+python = shutil.which('python', path=env['PATH'])
+for arguments in [
+    ['-m', 'pip', 'install', '--require-hashes', '-r', 'requirements-desktop.lock'],
+    ['-m', 'pip', 'install', '--no-deps', '.'],
+    ['-m', 'tools.release.package_desktop', '--output', '_test/native'],
+]:
+    subprocess.run([python, *arguments], env=env, check=True)
+PY
+```
+
+The bootstrap checks the complete compressed archive before bounded extraction,
+verifies the selected interpreter and OpenSSL before creating its own venv, and
+clears inherited Python/loader overrides for child processes. It refuses an
+existing destination. CI exports this environment only to subsequent native
+desktop job steps. No SDK/global environment or container is replaced.
+
+`vomar --runtime-info` reads runtime identity and default CA-store metadata;
+it opens no application state or network connection. The explicit
+`--runtime-info --tls-self-test` adds a bounded disposable loopback TLS test with
+fresh synthetic certificates. Frozen native builds require both trust success
+and untrusted-certificate rejection, plus observed default CA-store entries.
+OpenSSL may load hashed CA directories lazily, so zero cached CA certificates
+alone is not an empty trust store. User `SSL_CERT_FILE`/`SSL_CERT_DIR` choices are
+retained; no global certificate override is installed. These checks do not
+qualify Bluetooth, USB, a broker or physical firmware behavior.
+
 ## Optional Linux bench connections
 
 Use the same configuration. To expose Linux USB and the system D-Bus socket,
@@ -91,15 +138,65 @@ open VS Code from that shell:
 ```sh
 export VOMAR_USB_DEVICE=/dev/bus/usb
 export VOMAR_DBUS_SOURCE=/run/dbus
+export VOMAR_KVM_DEVICE=/dev/kvm  # only if the host provides KVM
+export VOMAR_KVM_GID="$(stat -c %g /dev/kvm)"  # grant the non-root container user access
 code .
 ```
 
 Review host USB/plugdev and D-Bus access first. Without these variables, the
-container maps only `/dev/null` and an empty private D-Bus volume, so CI and
-ordinary development do not require attached hardware or host services. Changing
+container uses empty private USB/D-Bus volumes and maps only `/dev/null` for
+virtualization, so CI and ordinary development do not require attached hardware or host services. Changing
 host mounts later requires recreating this same configuration after saving work;
-it never requires another profile. Access does not authorize programming,
-erasure, scanning at startup or recovery. Tests use synthetic targets only.
+it never requires another profile. The USB bind and major-189 cgroup rule also cover devices reconnected after
+startup; mapping only the original USB nodes misses hotplug. Access does not
+authorize programming, erasure, scanning at startup or recovery. Tests use synthetic targets only.
+
+## Repair a retained local workstation configuration
+
+First inspect the running container's `devcontainer.config_file` label. Editing
+`.devcontainer/devcontainer.json` cannot change a container launched from an older
+ignored `.devcontainer/local-preserve-codex/devcontainer.json` copy.
+
+To refresh that retained local file from the current canonical configuration and
+inherit the known workstation connections from an existing container:
+
+```sh
+python tools/dev/local_container.py --inherit-from-container previous-container --replace
+```
+
+The helper reads Docker metadata only. It keeps the canonical image, pinned
+Features, persistent SDK/Gradle/GitHub/Codex volumes and lifecycle commands;
+it imports only known USB/D-Bus/X11/SSH mounts, selected editor preferences and
+the existing debugger capability. It never starts/stops a container or imports
+arbitrary environment variables, credentials or old startup scripts. The previous
+local file is retained as `devcontainer.json.previous`. The generated file is
+ignored and stays machine-specific.
+
+Optional arguments select existing workspace tools and Linux KVM:
+
+```sh
+python tools/dev/local_container.py --inherit-from-container previous-container --replace \
+  --android-sdk "$PWD/work/android-sdk" --ghidra-home "$PWD/work/tools/ghidra-12.1.2" \
+  --zephyr-sdk "$PWD/work/tools/zephyr-sdk-1.0.1" \
+  --ghidra-compat-path /opt/ghidra-12.1.2 --kvm --kvm-gid HOST_KVM_GROUP_ID
+```
+
+Replace `HOST_KVM_GROUP_ID` with the numeric result of `stat -c %g /dev/kvm`
+on the host. Omit KVM options if the host does not provide it.
+Omit paths for tools not already installed. Ghidra must come from a reviewed
+installation; the helper neither downloads it nor copies an old installation.
+The optional compatibility mount preserves an absolute Ghidra path already used
+by REA without editing assistant configuration. An SDK environment variable alone
+does not install an SDK. The inherited Android SDK is added to the editor's PATH; firmware graph variables retain their canonical
+pinned-cache destinations. Do not redirect them to an older, different west graph.
+An explicitly selected existing Zephyr SDK retains its compiler and `/opt` path
+without registering a different NCS source graph. A Python compatibility alias preserves existing 3.13 virtualenv interpreter paths
+at `/usr/local/python/current`; it does not update their packages or SDK revision.
+
+After saving active work, rebuild/reopen the **generated local configuration**
+through Dev Containers. The shared `vimar-30805-codex` volume remains in place.
+Existing running containers do not acquire new mounts or packages when JSON is
+edited. Do not delete session volumes or copy authentication into the repository.
 
 The development SDK runs in Linux; Windows contributors can use a WSL2 workspace.
 The native application packages are separately built/tested on their target OS.

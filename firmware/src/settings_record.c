@@ -9,7 +9,7 @@ static void p16(uint8_t **p,uint16_t v){*(*p)++=(uint8_t)v;*(*p)++=(uint8_t)(v>>
 static void p32(uint8_t **p,uint32_t v){p16(p,(uint16_t)v);p16(p,(uint16_t)(v>>16));}
 static uint16_t g16(const uint8_t **p){uint16_t v=(*p)[0]|((uint16_t)(*p)[1]<<8);*p+=2;return v;}
 static uint32_t g32(const uint8_t **p){uint32_t v=g16(p);return v|((uint32_t)g16(p)<<16);}
-static uint32_t crc32(const uint8_t *p,size_t n){uint32_t c=~0U;while(n--){c^=*p++;for(unsigned i=0;i<8;i++)c=(c>>1)^(0xedb88320U&-(c&1U));}return ~c;}
+static uint32_t crc32(const uint8_t *p,size_t n){uint32_t c=~0U;while(n--){c^=*p++;for(unsigned i=0;i<8;i++)c=(c>>1)^(0xedb88320U&(0U-(c&1U)));}return ~c;}
 bool settings_record_encode(const struct dimmer_config *c,bool po,uint8_t pl,uint8_t *out,size_t cap,size_t *len)
 {
  if(!dimmer_config_validate(c)||cap<SETTINGS_RECORD_MAX_SIZE) return false;

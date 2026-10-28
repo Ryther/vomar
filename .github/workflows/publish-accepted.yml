@@ -1,0 +1,66 @@
+name: Publish accepted experimental distribution
+on:
+  workflow_dispatch:
+    inputs:
+      sha: {description: Exact reviewed source SHA of the complete frozen draft, required: true, type: string}
+      version: {description: Release Please distribution version, required: true, type: string}
+      publish: {description: Publish the verified accepted draft, required: true, type: boolean, default: false}
+permissions: {contents: read, checks: read}
+concurrency: {group: accepted-distribution-publication, cancel-in-progress: false}
+jobs:
+  publish:
+    if: github.repository == 'Ryther/vomar' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release-publication
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {ref: '${{ github.workflow_sha }}', path: trusted, persist-credentials: false}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.13.12'}
+      - run: python -m pip install --require-hashes -r trusted/requirements-dev.lock
+      - name: Materialize protected acceptance and dependency review privately
+        env:
+          OWNER_ACCEPTANCE: ${{ vars.OWNER_ACCEPTANCE_JSON }}
+          DEPENDENCY_REVIEW: ${{ vars.DEPENDENCY_REVIEW_JSON }}
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          private=Path('private');private.mkdir(mode=0o700)
+          for name,key in [('acceptance.json','OWNER_ACCEPTANCE'),('dependency-review.json','DEPENDENCY_REVIEW')]:
+              raw=os.environ[key].encode()
+              if not 1<=len(raw)<=65536:raise ValueError('Bounded protected review input required: '+key)
+              path=private/name
+              with path.open('xb') as stream:stream.write(raw)
+              path.chmod(0o600)
+          PY
+      - name: Download exact frozen draft payloads without rebuilding
+        env:
+          GH_TOKEN: ${{ secrets.VOMAR_RELEASE_PUBLICATION_TOKEN }}
+          CANDIDATE_SHA: ${{ inputs.sha }}
+          DISTRIBUTION_VERSION: ${{ inputs.version }}
+        run: >-
+          PYTHONPATH=trusted python -m tools.release.download_draft
+          --sha "$CANDIDATE_SHA" --version "$DISTRIBUTION_VERSION" --output assets
+      - name: Verify acceptance, signatures, inventories and optionally publish
+        env:
+          GH_TOKEN: ${{ secrets.VOMAR_RELEASE_PUBLICATION_TOKEN }}
+          GH_CHECKS_TOKEN: ${{ github.token }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          python - <<'PY'
+          import os,subprocess,sys
+          command=[sys.executable,'-m','tools.release.publish','--directory','assets',
+                   '--accepted-with-known-issues','--acceptance','private/acceptance.json',
+                   '--dependency-review','private/dependency-review.json',
+                   '--public-key','trusted/firmware/keys/dev-public.pem',
+                   '--android-tools',os.environ['ANDROID_HOME']+'/build-tools/36.0.0']
+          if os.environ['PUBLISH']=='true':command.append('--publish')
+          elif os.environ['PUBLISH']!='false':raise ValueError('Literal publish boolean required')
+          subprocess.run(command,env={**os.environ,'PYTHONPATH':'trusted'},check=True)
+          PY
+      - name: Remove private review inputs
+        if: always()
+        run: rm -rf -- private

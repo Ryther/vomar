@@ -25,8 +25,10 @@ raw network captures or original device images in chat.
 Before case-specific advice, establish the user's client/OS version, selected
 package version, current operation phase and intended target. Names and rooms
 are optional organization, not device identity. App and firmware versions are
-independent. The current firmware 1.0.0 is a qualification candidate with thirteen
-physical checks pending; a signed candidate is not a qualified fleet release.
+independent. A qualification candidate has thirteen physical checks pending. A distribution
+may explicitly include experimental firmware with a dated owner acceptance and
+known issues; that acceptance does not turn pending checks into completed tests.
+Read the matching release acceptance and use the explicit manual trial import.
 
 ## Install the client without touching a device
 
@@ -64,6 +66,15 @@ Desktop users need no Python or Nordic/Android SDK. `vomar --version` and
 Devices, Activity and Settings. First startup should work without a broker or
 probe attached; device access is a separate explicit action.
 
+Desktop `vomar --runtime-info` reports the bundled Python/OpenSSL versions and
+default CA-store metadata without opening application state or connecting to a
+service. Release builds use isolated CPython 3.13.18/OpenSSL 3.5.9; users do not
+install or replace Python/DLLs. An explicit `--runtime-info --tls-self-test`
+creates temporary synthetic certificates and a bounded local TLS listener on
+`127.0.0.1`, checks trusted success and untrusted-certificate rejection, then
+cleans up. It never contacts a broker/device or changes CA preferences. A passing
+TLS self-test does not qualify Bluetooth/USB or physical firmware operation.
+
 ## Select a package and configure optional connections
 
 In Settings → Updates, choose the common firmware ZIP or configured release
@@ -81,6 +92,15 @@ component image signatures, hashes, model/layout and loader compatibility remain
 mandatory. An unsigned descriptor cannot grant active-watchdog capability. This
 manual exception neither qualifies a package nor approves a device write.
 Desktop candidate handling remains a separate explicit qualification route.
+
+A complete distribution may contain an explicitly accepted experimental firmware
+ZIP named `vomar-firmware-VERSION-qualification-candidate.zip` and a
+`vomar-release-acceptance-VERSION.json` record. Read its known issues, exact
+payload hashes and unverified checks. APS-105-5241 remains an unresolved restart
+defect when listed. Android uses its manual firmware chooser and desktop uses
+the separate Bluetooth trial tool; online catalog/fleet/OTA admission stays
+closed for candidates. Distribution acceptance is distinct from the fresh review
+needed for each physical device operation.
 
 Broker integration is optional. On Android use Settings → Zigbee2MQTT to choose
 and connect a saved broker profile and its named Zigbee topics once. Android

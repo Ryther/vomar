@@ -32,10 +32,11 @@ class PackageTest {
         rejects { PackageReader.read(zip(listOf("manifest.sig" to ByteArray(81)))) }
         rejects { PackageReader.read(zip(listOf("main.signed.bin" to ByteArray(0xa4001)))) }
     }
-    private fun zip(entries:List<Pair<String,ByteArray>>,symlink:Boolean=false):InputStream {
+    private fun zip(entries:List<Pair<String,ByteArray>>,symlink:Boolean=false,method:Int=8):InputStream {
         val bytes=ByteArrayOutputStream()
         ZipArchiveOutputStream(bytes).use { out -> entries.forEach { (name,data) ->
             val entry=ZipArchiveEntry(name); entry.unixMode=if(symlink) 0xa1ff else 0x81a4
+            entry.method=method;entry.size=data.size.toLong();entry.crc=java.util.zip.CRC32().apply{update(data)}.value
             out.putArchiveEntry(entry); out.write(data); out.closeArchiveEntry()
         }}
         return bytes.toByteArray().inputStream()
@@ -108,6 +109,35 @@ class PackageTest {
         val signature=Signature.getInstance("SHA256withECDSA").apply { initSign(pair.private); update(bytes) }.sign()
         val validated=PackageValidator.validate(r.copy(manifest=bytes,signature=signature),pair.public,"0.1.0")
         assertEquals("«Bagno è acceso 💡»",validated.manifest.device.name)
+    }
+    @Test fun rejectsXzZipBeforeOptionalCodecLinking() {
+        assertThrows(IllegalArgumentException::class.java){PackageReader.read(rawCompressionMethod(95))}
+    }
+    @Test fun rejectsZstandardZipBeforeOptionalCodecLinking() {
+        for(method in listOf(20,93)){
+            assertThrows(IllegalArgumentException::class.java){PackageReader.read(rawCompressionMethod(method))}
+        }
+    }
+    @Test fun storedAndDeflatedArchivesKeepTheSameSignedPackageAdmission() {
+        val original=raw()
+        val entries=listOf("manifest.json" to original.manifest,"manifest.sig" to original.signature,
+            "migration.signed.bin" to original.migration,"main.signed.bin" to original.main)
+        for(method in listOf(0,8)){
+            val result=PackageValidator.validate(PackageReader.read(zip(entries,method=method)),key(),"0.1.0")
+            assertEquals("0.5.8",result.manifest.main.version)
+            assertTrue(original.main.contentEquals(result.main))
+        }
+    }
+    private fun rawCompressionMethod(method:Int):InputStream {
+        val bytes=ByteArrayOutputStream();val data="{}".toByteArray()
+        ZipArchiveOutputStream(bytes).use{output->
+            val entry=ZipArchiveEntry("manifest.json").apply{
+                this.method=method;size=data.size.toLong();compressedSize=data.size.toLong()
+                crc=java.util.zip.CRC32().apply{update(data)}.value
+            }
+            output.addRawArchiveEntry(entry,data.inputStream())
+        }
+        return bytes.toByteArray().inputStream()
     }
     @Test fun requiresCompatibleAppVersion() {
         rejects { PackageValidator.validate(raw(),key(),"0.0.9") }

@@ -6,5 +6,5 @@
     "build": "node build_external_converter.js",
     "test": "node --test"
   },
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

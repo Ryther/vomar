@@ -50,6 +50,11 @@ def select(release,manifest,repo):
         result[a['role']]={**a,'url':url}
     from tools.firmware.package_android_update import MAX_ZIP
     if not 1<=result['firmware-common']['size']<=MAX_ZIP:raise ValueError('Firmware asset exceeds the signed package bound')
+    if 'release-acceptance' in result:
+        version=manifest['distributionVersion']
+        if result['firmware-common']['filename']!=f'vomar-firmware-{version}-qualification-candidate.zip' or result['zigbee-ota']['filename']!=f'vomar-firmware-{version}-qualification-candidate.ota' or result['release-acceptance']['filename']!=f'vomar-release-acceptance-{version}.json':
+            raise ValueError('Noncanonical experimental distribution assets')
+        raise ValueError('Firmware is experimental; import ZIP through Bluetooth trial')
     if result['firmware-common']['filename']!=f'vomar-firmware-{manifest["distributionVersion"]}.zip':raise ValueError('Noncanonical firmware asset')
     return result
 

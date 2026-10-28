@@ -1,4 +1,5 @@
 import java.security.MessageDigest
+import java.util.zip.ZipFile
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import com.android.build.api.artifact.ScopedArtifact
 import com.android.build.api.variant.ScopedArtifacts
@@ -13,8 +14,15 @@ android {
     namespace="org.openvimar.updater"
     compileSdk { version = release(37) { minorApiLevel = 0 } }
     buildToolsVersion="36.0.0"
-    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=32; versionName="1.1.2"; testInstrumentationRunner="org.openvimar.updater.CoverageInstrumentationTestRunner" }
+    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=33; versionName="1.1.3"; testInstrumentationRunner="org.openvimar.updater.CoverageInstrumentationTestRunner" }
 
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled=true
+            isShrinkResources=true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"),"proguard-rules.pro")
+        }
+    }
     compileOptions { sourceCompatibility=JavaVersion.VERSION_17; targetCompatibility=JavaVersion.VERSION_17 }
 }
 dependencies { implementation(platform("com.fasterxml.jackson:jackson-bom:2.18.12")); implementation(project(":core")); implementation("org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5"); implementation("androidx.core:core:1.19.1"); implementation("no.nordicsemi.android:mcumgr-ble:3.4.1"); implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0"); implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.12.0"); testImplementation("junit:junit:4.13.2"); testImplementation("org.mockito:mockito-subclass:5.24.0") }
@@ -121,5 +129,29 @@ tasks.register("writeRuntimeInventory") {
         val sha=sourceRevision.get()
         val file=output.get().asFile;file.parentFile.mkdirs()
         file.writeText(groovy.json.JsonOutput.prettyPrint(groovy.json.JsonOutput.toJson(mapOf("schemaVersion" to 1,"graph" to "android-runtime","sourceCommit" to sha,"packages" to packages,"artifacts" to artifacts)))+"\n")
+    }
+}
+
+// Inspect actual R8 output: configuration text alone does not prove that the
+// delivered APK contains obfuscated project code.
+tasks.register("verifyReleaseObfuscation") {
+    dependsOn("assembleRelease")
+    val mapping=layout.buildDirectory.file("outputs/mapping/release/mapping.txt")
+    val releaseApk=layout.buildDirectory.file("outputs/apk/release/app-release-unsigned.apk")
+    inputs.files(mapping,releaseApk)
+    doLast {
+        val file=mapping.get().asFile
+        require(file.isFile){"Release R8 mapping is missing; release obfuscation did not run"}
+        val text=file.readText()
+        val projectClasses=Regex("(?m)^(org\\.openvimar\\.[^ ]+) -> ([^ :]+):$").findAll(text)
+        require(projectClasses.any{it.groupValues[1]!=it.groupValues[2]&&!it.groupValues[2].startsWith("R8\$\$REMOVED\$\$CLASS")}){"Release R8 mapping contains no obfuscated project classes"}
+        val mapId=requireNotNull(Regex("(?m)^# pg_map_id: ([0-9a-f]+)$").find(text)?.groupValues?.get(1)){"Release R8 map identity is missing"}
+        val marker="\"pg-map-id\":\"$mapId\""
+        val matched=ZipFile(releaseApk.get().asFile).use{archive->
+            archive.entries().asSequence().filter{it.name.matches(Regex("classes[0-9]*\\.dex"))}.any{entry->
+                archive.getInputStream(entry).use{it.readBytes().toString(Charsets.ISO_8859_1)}.contains(marker)
+            }
+        }
+        require(matched){"Release APK DEX does not match the obfuscation mapping"}
     }
 }

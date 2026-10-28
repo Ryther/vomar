@@ -10,7 +10,7 @@ engine. End users need no Python, Nordic SDK, Gradle or development container.
 Each supported platform is built separately; a Linux test does not qualify
 Windows/macOS drivers or Bluetooth.
 
-The desktop component is version 1.1.0. The CLI, Windows installed application
+The desktop component is version 1.1.1. The CLI, Windows installed application
 and executable metadata, and macOS bundle metadata use that native version.
 Download filenames use the coordinated distribution version, which can differ.
 
@@ -118,13 +118,22 @@ read-only admission; `run` prepares and prints a fresh interactive review.
 There is no universal `--yes` or replayable approval file. Machine-readable
 results go to stdout; progress and errors go to stderr.
 
-Rebuild with Python 3.13.12 and the hash-locked desktop requirements:
+`vomar --runtime-info` reports the bundled Python/OpenSSL versions and platform
+default CA-store metadata without opening application state or connecting to a
+service. It does not disclose user-supplied CA paths. The explicit
+`vomar --runtime-info --tls-self-test` additionally creates temporary test-only
+certificates and a bounded listener on literal `127.0.0.1`, verifies a trusted
+connection and rejection of an untrusted certificate, then removes its temporary
+files. It never connects to a broker or device and does not alter CA preferences.
 
-```sh
-python -m pip install --require-hashes -r requirements-desktop.lock
-python -m pip install --no-deps .
-python -m tools.release.package_desktop --output _test/native
-```
+Native builds use the checksum-pinned whole Astral Python Build Standalone
+20261026 runtime: CPython 3.13.18 with OpenSSL 3.5.9, in an isolated desktop venv.
+Follow the [desktop runtime rebuild](development.md#isolated-native-desktop-runtime)
+procedure; the development container and firmware SDK keep Python 3.13.12.
+Packaging checks the actual frozen CLI identity and loopback TLS behavior and
+binds the observed results, provider archive/source hashes and runtime binary
+hashes into each shipped native inventory. Native runner tests still need to
+establish each platform's default certificate-store usability.
 
 Build on the target OS/architecture. The onedir runtime links Qt dynamically;
 upstream license texts and build inventory ship under notices. Replacing Qt

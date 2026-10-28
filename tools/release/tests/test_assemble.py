@@ -19,7 +19,7 @@ INVENTORIES=('android-runtime','firmware-sdk','native-linux-x64','native-windows
 @pytest.fixture
 def synthetic_release(tmp_path,monkeypatch):
     inputs=tmp_path/'inputs';inputs.mkdir();sha='a'*40
-    (inputs/'component-versions.json').write_text(json.dumps({'commit':sha,'distributionVersion':'0.1.0','android':{'version':'1.0.0','versionCode':20},'desktop':{'version':'1.0.0'},'zigbee2mqtt':{'version':'1.0.0'}}))
+    (inputs/'component-versions.json').write_text(json.dumps({'commit':sha,'distributionVersion':'0.1.0','firmware':{'version':'1.0.0'},'android':{'version':'1.0.0','versionCode':20},'desktop':{'version':'1.0.0'},'zigbee2mqtt':{'version':'1.0.0'}}))
     for name in (*NATIVE_INPUTS,'app-release-unsigned.apk','vimar_30805.js'):
         (inputs/name).write_bytes(('synthetic '+name).encode())
     for graph in INVENTORIES:
@@ -37,7 +37,7 @@ def synthetic_release(tmp_path,monkeypatch):
     monkeypatch.setattr(assemble,'sign_android',sign_android)
     monkeypatch.setattr(assemble,'promote',promote)
     output=tmp_path/'output'
-    def build(version='0.1.0'):return assemble.assemble(inputs,output,version,sha,candidate,qualification,tmp_path/'unused-private-key',tmp_path/'unused-keystore',tmp_path/'unused-password',tmp_path/'unused-sdk')
+    def build(version='0.1.0',**options):return assemble.assemble(inputs,output,version,sha,candidate,qualification,tmp_path/'unused-private-key',tmp_path/'unused-keystore',tmp_path/'unused-password',tmp_path/'unused-sdk',**options)
     return inputs,output,build
 
 
@@ -75,7 +75,7 @@ def test_assembly_rejects_missing_required_dependency_inventory(synthetic_releas
 def test_first_distribution_preserves_distinct_native_versions(synthetic_release,tmp_path):
     inputs,output,build=synthetic_release
     metadata=json.loads((inputs/'component-versions.json').read_bytes())
-    metadata.update(distributionVersion='2.0.0',android={'version':'1.1.2','versionCode':32},desktop={'version':'1.1.0'})
+    metadata.update(distributionVersion='2.0.0',firmware={'version':'1.1.1'},android={'version':'1.1.2','versionCode':32},desktop={'version':'1.1.0'})
     (inputs/'component-versions.json').write_text(json.dumps(metadata))
     for name in NATIVE_INPUTS:(inputs/name).rename(inputs/name.replace('0.1.0','2.0.0'))
     with zipfile.ZipFile(tmp_path/'candidate.zip','w') as archive:
@@ -97,3 +97,49 @@ def test_first_distribution_preserves_distinct_native_versions(synthetic_release
     with zipfile.ZipFile(output/'vomar-firmware-2.0.0.zip') as archive:
         assert archive.read('main.ota')==(output/'vomar-firmware-2.0.0.ota').read_bytes()==b'synthetic OTA carrier'
     validate(manifest,output)
+
+
+def test_assembly_rejects_firmware_not_matching_its_source_owner(synthetic_release):
+    inputs,output,build=synthetic_release
+    metadata=json.loads((inputs/'component-versions.json').read_bytes())
+    metadata['firmware']={'version':'9.0.0'}
+    (inputs/'component-versions.json').write_text(json.dumps(metadata))
+    with pytest.raises(ValueError,match='Firmware.*owner'):build()
+    assert not (output/'release-manifest.json').exists()
+
+
+def test_firmware_version_export_uses_exact_native_owner():
+    from tools.release.component_versions import firmware_owner
+    owner='VERSION_MAJOR = 1\nVERSION_MINOR = 1\nPATCHLEVEL = 2\nVERSION_TWEAK = 0\nEXTRAVERSION =\n'
+    assert firmware_owner(owner)=='1.1.2'
+    for bad in (owner+'PATCHLEVEL = 3\n',owner.replace('VERSION_TWEAK = 0','VERSION_TWEAK = 1'),owner.replace('EXTRAVERSION =','EXTRAVERSION = candidate')):
+        with pytest.raises(ValueError):firmware_owner(bad)
+
+
+def test_accepted_stage_preserves_candidate_and_waits_for_hash_bound_acceptance(synthetic_release,monkeypatch,tmp_path):
+    from datetime import datetime,timezone
+    from test_protected_evidence import accepted_release
+    inputs,output,build=synthetic_release
+    monkeypatch.setenv('GITHUB_EVENT_NAME','workflow_dispatch')
+    candidate=tmp_path/'candidate.zip';original=candidate.read_bytes()
+    monkeypatch.setattr(assemble,'candidate_metadata',lambda path:{'purpose':'qualification-candidate','main':{'version':'1.0.0'}})
+    monkeypatch.setattr(assemble,'promote',lambda *args:pytest.fail('An experimental candidate must never be promoted'))
+    manifest=build(accepted_with_known_issues=True)
+    assert (output/'vomar-firmware-0.1.0-qualification-candidate.zip').read_bytes()==original
+    assert len(list(output.iterdir()))==13 and len(manifest['artifacts'])==11
+    assert not any(a['role']=='release-acceptance' for a in manifest['artifacts'])
+    payload_hashes={a['filename']:digest((output/a['filename']).read_bytes()) for a in manifest['artifacts']}
+    _,approval=accepted_release();approval.update(sourceCommit=manifest['commit'],distributionVersion='0.1.0',acceptedAt=datetime.now(timezone.utc).isoformat(),artifacts={a['role']:a['sha256'] for a in manifest['artifacts']})
+    report=tmp_path/'owner-acceptance.json';report.write_text(json.dumps(approval))
+    wrong={**approval,'sourceCommit':'b'*40};report.write_text(json.dumps(wrong))
+    with pytest.raises(ValueError):assemble.finalize_acceptance(output,report)
+    assert len(list(output.iterdir()))==13
+    report.write_text(json.dumps(approval));final=assemble.finalize_acceptance(output,report)
+    assert len(final['artifacts'])==12 and len(list(output.iterdir()))==14
+    acceptance=next(a for a in final['artifacts'] if a['role']=='release-acceptance')
+    assert (output/acceptance['filename']).read_bytes()==report.read_bytes()
+    assert all(digest((output/name).read_bytes())==expected for name,expected in payload_hashes.items())
+    (output/'SHA256SUMS').write_text('interrupted checksum publication\n')
+    assert assemble.finalize_acceptance(output,report)==final
+    for line in (output/'SHA256SUMS').read_text().splitlines():
+        expected,name=line.split('  ');assert digest((output/name).read_bytes())==expected

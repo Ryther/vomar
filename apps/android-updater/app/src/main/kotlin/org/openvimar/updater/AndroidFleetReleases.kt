@@ -76,7 +76,7 @@ internal class AndroidFleetReleases(context:Context) {
             while(true){coroutine.ensureActive();val count=input.read(buffer);if(count<0)break;require(count<=65536-out.size());out.write(buffer,0,count)}
             out.toByteArray().also{require(it.size==metadataAsset.getInt("size"))}
         }
-        val selection=DistributionAssets.parse(metadata,tag)
+        val selection=DistributionAssets.parse(metadata,tag).requireAutomaticFirmware()
         selection.assets.forEach{asset(it.filename,it.size)}
         val firmware=asset(selection.firmware.filename,selection.firmware.size)
         onTotal(firmware.getLong("size"));onProgress(0)

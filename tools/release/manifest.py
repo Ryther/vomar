@@ -8,7 +8,7 @@ import re
 
 SEMVER = r'(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)'
 REQUIRED_ROLES = frozenset(('firmware-common','zigbee-ota','android-apk','desktop-linux-x64','desktop-windows-x64','desktop-windows-setup','desktop-macos-arm64','zigbee2mqtt-converter','licenses','offline-guide'))
-OPTIONAL_ROLES = frozenset(('source-sbom',))
+OPTIONAL_ROLES = frozenset(('source-sbom','release-acceptance'))
 TOP = {'schemaVersion','distributionVersion','tag','commit','components','artifacts'}
 ARTIFACT = {'role','filename','size','sha256','componentVersion'}
 COMPONENTS = frozenset(('firmware','android','desktop','zigbee2mqtt'))

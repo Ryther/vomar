@@ -1126,6 +1126,8 @@
 
 !/tools/dev/tests/test_docs_site.py
 !/tools/dev/container_check.py
+!/tools/dev/local_container.py
+!/tools/dev/tests/test_local_container.py
 !/tools/dev/tests/test_container_check.py
 
 !/apps/android-updater/app/src/main/kotlin/org/openvimar/updater/ZigbeeDeviceMetadata.kt
@@ -1233,7 +1235,28 @@
 !/tools/release/tests/test_branding.py
 !/apps/android-updater/app/src/androidTest/kotlin/org/openvimar/updater/MqttCleartextPolicyTest.kt
 
+# Release R8 reflection entry points and optimized-runtime regression checks.
+!/apps/android-updater/app/proguard-rules.pro
+!/apps/android-updater/app/src/androidTest/java/
+!/apps/android-updater/app/src/androidTest/java/org/
+!/apps/android-updater/app/src/androidTest/java/org/openvimar/
+!/apps/android-updater/app/src/androidTest/java/org/openvimar/updater/
+!/apps/android-updater/app/src/androidTest/java/org/openvimar/updater/ReleaseRuntimeContractTest.java
+
 # Explicit maintainer review of exact Sonar findings.
 !/tools/release/sonar_review.py
 !/tools/release/tests/test_sonar_review.py
 !/.github/workflows/sonar-review.yml
+
+# Exact frozen experimental draft transfer and explicit publication.
+!/tools/release/download_draft.py
+!/tools/release/tests/test_download_draft.py
+!/.github/workflows/publish-accepted.yml
+
+# Pinned native Python/TLS runtime and exact system-library provenance.
+!/tools/release/tests/test_inventory_system_components.py
+!/tools/dev/desktop_runtime.py
+!/tools/dev/desktop-runtimes.json
+!/tools/dev/tests/test_desktop_runtime.py
+!/apps/desktop-updater/src/vomar_updater/runtime_info.py
+!/apps/desktop-updater/tests/test_runtime_info.py

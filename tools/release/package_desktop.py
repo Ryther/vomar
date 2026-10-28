@@ -56,6 +56,46 @@ def verify_cli_version(cli,version,output,env):
     return observed
 
 
+def build_runtime_provenance():
+    from tools.dev.desktop_runtime import validate_receipt,platform_key,verify_identity,catalog
+    from vomar_updater.runtime_info import runtime_info
+    verify_identity(runtime_info())
+    if sys.prefix==sys.base_prefix:raise ValueError('Native desktop packaging requires the isolated runtime venv')
+    receipt=os.environ.get('VOMAR_DESKTOP_RUNTIME_RECEIPT')
+    if not receipt:raise ValueError('Bootstrap the pinned isolated desktop runtime before packaging')
+    result=validate_receipt(json.loads(Path(receipt).read_bytes()),platform_key())
+    license_file=os.environ.get('VOMAR_DESKTOP_OPENSSL_LICENSE')
+    if not license_file or hashlib.sha256(Path(license_file).read_bytes()).hexdigest()!=catalog()['opensslLicense']['sha256']:
+        raise ValueError('Pinned desktop OpenSSL license is missing or changed')
+    return result
+
+
+def verify_frozen_runtime(cli,version,output,env):
+    from tools.dev.desktop_runtime import verify_identity
+    observed=json.loads(run(cli,'--runtime-info','--tls-self-test',cwd=output,env=env,capture_output=True,text=True,timeout=45).stdout)
+    verify_identity(observed)
+    if observed.get('schemaVersion')!=1 or observed.get('nativeVersion')!=version or observed.get('frozen') is not True:
+        raise ValueError('Frozen CLI runtime identity mismatch')
+    tls=observed.get('tlsSelfTest',{});trust=observed.get('defaultTrustStore',{})
+    if tls.get('address')!='127.0.0.1' or tls.get('trustedCertificateAccepted') is not True or tls.get('untrustedCertificateRejected') is not True or tls.get('negotiatedTlsVersion') not in ('TLSv1.2','TLSv1.3'):
+        raise ValueError('Frozen CLI loopback TLS verification failed')
+    counts=[trust.get('caCertificates'),trust.get('hashedCaFiles')]
+    if any(type(count) is not int or count<0 for count in counts) or not any(counts):
+        raise ValueError('Frozen CLI has no observed platform default CA trust store')
+    return observed
+
+
+def frozen_environment():
+    from tools.dev.desktop_runtime import OVERRIDES
+    excluded=OVERRIDES|{'VIMAR_NCS_WORKSPACE','VIMAR_BUILD_PYTHON','ZEPHYR_BASE','ANDROID_HOME',
+                       'LD_LIBRARY_PATH_ORIG','DYLD_LIBRARY_PATH_ORIG'}
+    env={key:value for key,value in os.environ.items() if key not in excluded}
+    roots=[Path(sys.prefix).resolve(),Path(sys.base_prefix).resolve()]
+    env['PATH']=os.pathsep.join(path for path in env.get('PATH','').split(os.pathsep)
+                              if path and not any(Path(path).resolve().is_relative_to(root) for root in roots))
+    return env
+
+
 def verify_macos_version(bundle,version):
     with (bundle/'Contents/Info.plist').open('rb') as source:info=plistlib.load(source)
     observed={key:info.get(key) for key in ('CFBundleShortVersionString','CFBundleVersion')}
@@ -114,6 +154,9 @@ def notices(output):
     python_license=next((p for p in (Path(sysconfig.get_path('stdlib'))/'LICENSE.txt',Path(sys.base_prefix)/'LICENSE.txt') if p.is_file()),None)
     if python_license is None:raise ValueError('Exact Python runtime license is missing')
     shutil.copy2(python_license,dest/'Python-LICENSE.txt');shutil.copytree(ROOT/'licenses/qt',dest/'Qt-PySide6')
+    receipt=build_runtime_provenance()
+    (dest/'desktop-runtime-provenance.json').write_text(json.dumps(receipt,indent=2)+'\n')
+    shutil.copy2(os.environ['VOMAR_DESKTOP_OPENSSL_LICENSE'],dest/'OpenSSL-LICENSE.txt')
     records=[]
     # Include the exact installed distributions/available license texts in the
     # build SBOM. Development dependencies are identified, never asserted shipped.
@@ -133,6 +176,7 @@ def build(output,version):
         raise ValueError('macOS builds require Apple Silicon (arm64)')
     if not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',version):raise ValueError('Distribution SemVer required')
     desktop_version=native_version()
+    runtime_provenance=build_runtime_provenance()
     from .branding import synchronize,SIZES
     if synchronize(check=True):raise ValueError('Stale brand assets; run python -m tools.release.branding --sync')
     output=output.absolute();output.mkdir(parents=True,exist_ok=False)
@@ -183,8 +227,9 @@ def build(output,version):
     else:raise ValueError('Unsupported native package platform')
     cli=bundle/('Contents/MacOS/vomar-cli' if system=='Darwin' else 'vomar-cli.exe' if system=='Windows' else 'vomar-cli')
     # Run outside the source tree with no repository PYTHONPATH or SDK environment.
-    smoke_env={k:v for k,v in os.environ.items() if k not in ('PYTHONPATH','VIMAR_NCS_WORKSPACE','VIMAR_BUILD_PYTHON','ZEPHYR_BASE','ANDROID_HOME')}
+    smoke_env=frozen_environment()
     version_verification={'cli':verify_cli_version(cli,desktop_version,output,smoke_env)}
+    runtime_verification=verify_frozen_runtime(cli,desktop_version,output,smoke_env)
     if system=='Darwin':version_verification['macos']=verify_macos_version(bundle,desktop_version)
     elif system=='Windows':
         setup=output/f'vomar-desktop-{version}-windows-{arch}-setup.exe'
@@ -201,8 +246,12 @@ def build(output,version):
     from .inventory import native
     native_platform=('windows' if system=='Windows' else 'macos' if system=='Darwin' else 'linux')+'-'+arch
     built=sorted(output.glob('vomar-desktop-*'))
-    (output/('native-'+native_platform+'.json')).write_text(json.dumps(native(bundle,native_platform,built),indent=2)+'\n')
-    (output/('package-report-'+native_platform+'.json')).write_text(json.dumps({'platform':system,'architecture':arch,'distributionVersion':version,'nativeVersion':desktop_version,'nativeVersionVerification':version_verification,'artifact':artifact.name,'sha256':hashlib.sha256(artifact.read_bytes()).hexdigest(),'size':artifact.stat().st_size,'physicalBleUsbQualification':False,'trustedOsSigning':False},indent=2)+'\n')
+    dependency_inventory=native(bundle,native_platform,built)
+    runtime_files=[record for record in dependency_inventory.get('files',[]) if re.search(r'(?:^|/)(?:libpython3\.13[^/]*|python313\.dll|_ssl[.][^/]*|lib(?:ssl|crypto)[^/]*)$',record['path'])]
+    runtime_evidence={'provenance':runtime_provenance,'frozen':runtime_verification,'binaryFiles':runtime_files}
+    dependency_inventory['nativeRuntime']=runtime_evidence
+    (output/('native-'+native_platform+'.json')).write_text(json.dumps(dependency_inventory,indent=2)+'\n')
+    (output/('package-report-'+native_platform+'.json')).write_text(json.dumps({'platform':system,'architecture':arch,'distributionVersion':version,'nativeVersion':desktop_version,'nativeVersionVerification':version_verification,'nativeRuntime':runtime_evidence,'artifact':artifact.name,'sha256':hashlib.sha256(artifact.read_bytes()).hexdigest(),'size':artifact.stat().st_size,'physicalBleUsbQualification':False,'trustedOsSigning':False},indent=2)+'\n')
     return artifact
 
 

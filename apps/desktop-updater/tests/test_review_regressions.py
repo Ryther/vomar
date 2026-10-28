@@ -82,3 +82,39 @@ def test_batch_restart_does_not_repeat_acknowledged_session(tmp_path):
     s=Store(tmp_path);session=s.begin({'operation':'update'});s.record(session,'await-operator',{'acknowledged':True});b=Batches(s);group=b.create('a'*64,['done','queued']);group['state']='running';group['jobs'][0].update(state='running',session=session);b.save(group);s.close()
     s=Store(tmp_path);b=Batches(s);group=b.list()[0];assert group['state']=='paused' and group['jobs'][0]['state']=='await-operator'
     s.record(session,'operator-confirmed');assert b.list()[0]['jobs'][0]['state']=='verified';s.close()
+
+
+def test_diagnostic_export_keeps_owner_event_loop_responsive(tmp_path,monkeypatch):
+    import threading
+    from vomar_updater.service import Service
+    output=tmp_path/'diagnostic.json';started=threading.Event();release=threading.Event();original_open=Path.open
+    def delayed_open(path,*args,**kwargs):
+        if path==output:
+            started.set();release.wait(2)
+        return original_open(path,*args,**kwargs)
+    monkeypatch.setattr(Path,'open',delayed_open)
+    async def scenario():
+        service=Service(tmp_path/'state');report={'identity':{'uid':['synthetic']},'history':[]}
+        service.store.setting('last-diagnostic',report)
+        export=asyncio.create_task(service.dispatch('diagnostics.export',{'path':str(output)}))
+        try:
+            assert await asyncio.to_thread(started.wait,3)
+            assert not export.done(),'Diagnostic file I/O blocked the owning event loop'
+        finally:
+            release.set()
+            await export
+            await service.close()
+        assert json.loads(output.read_text())==report
+    asyncio.run(scenario())
+
+
+def test_diagnostic_export_preserves_existing_destination(tmp_path):
+    from vomar_updater.service import Service
+    output=tmp_path/'existing.json';output.write_text('operator-owned document')
+    async def scenario():
+        service=Service(tmp_path/'state');service.store.setting('last-diagnostic',{'history':[]})
+        try:
+            with pytest.raises(FileExistsError):await service.dispatch('diagnostics.export',{'path':str(output)})
+        finally:await service.close()
+    asyncio.run(scenario())
+    assert output.read_text()=='operator-owned document'

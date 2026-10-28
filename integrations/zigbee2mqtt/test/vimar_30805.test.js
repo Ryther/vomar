@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {spawnSync} from 'node:child_process';
 import test from 'node:test';
 
 import {ATTRIBUTE_METADATA, CLUSTER_ID, buildDefinition, decodeEvent} from '../vimar_30805_core.js';
@@ -25,6 +26,34 @@ test('combines converter modules into one importable source', () => {
         "import {Zcl} from 'zigbee-herdsman';\n\n" +
         'const value = 7;\nfunction buildDefinition() { return value; }\n\n' +
         'export default buildDefinition(Zcl);\n');
+});
+
+test('combines long internal newline runs without an unbounded suffix search', () => {
+    const script = `
+        import assert from 'node:assert/strict';
+        import {combineConverterSources} from ${JSON.stringify(new URL('../build_external_converter.js', import.meta.url).href)};
+        const internal = '\\n'.repeat(256 * 1024);
+        const source = 'export const value = 7;' + internal + '// final comment \\t\\n\\n';
+        assert.equal(combineConverterSources(source, ''),
+            '\\n\\nconst value = 7;' + internal + '// final comment \\t\\n\\n');
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script],
+        {encoding: 'utf8', timeout: 5000});
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stderr);
+});
+
+test('passes only the descriptor to the expose adapter', () => {
+    const definition = buildDefinition({
+        light: () => ({}),
+        addCustomCluster: () => ({}),
+        expose(descriptor, ...unexpected) {
+            assert.equal(unexpected.length, 0);
+            return descriptor;
+        },
+    });
+    const dynamic = definition.extend[2].exposes[0];
+    assert.ok(dynamic({modelID: 'Vimar30805-DK'}).some((item) => item.name === 'auto_off_mode'));
 });
 
 test('keeps the committed external converter synchronized', async () => {

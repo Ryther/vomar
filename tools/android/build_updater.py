@@ -114,7 +114,7 @@ def build(output):
     reserve_output(output)
     env=os.environ.copy()
     env.update(ANDROID_HOME=str(SDK),ANDROID_SDK_ROOT=str(SDK),GRADLE_USER_HOME=str(ROOT/'work/android-gradle-cache'))
-    tasks=[':core:test',':app:testDebugUnitTest',':app:lint',':app:assembleRelease']
+    tasks=[':core:test',':app:testDebugUnitTest',':app:lint',':app:verifyReleaseObfuscation']
     run([APP/'gradlew','--offline','--dependency-verification=strict',*tasks],output/'gradle.log',APP,env)
     private=ROOT/'work/private/android-updater'
     private.mkdir(parents=True,exist_ok=True,mode=0o700)

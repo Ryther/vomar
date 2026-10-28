@@ -11,7 +11,9 @@ from .service import Service
 
 def parser():
     p=argparse.ArgumentParser(prog='vomar',description=__doc__);p.add_argument('--version',action='version',version=__version__);p.add_argument('--state',type=Path,help='Private application state directory')
-    groups=p.add_subparsers(dest='group',required=True)
+    p.add_argument('--runtime-info',action='store_true',help='Print bundled Python/OpenSSL identity without opening application state')
+    p.add_argument('--tls-self-test',action='store_true',help='With --runtime-info, explicitly test disposable loopback TLS trust and rejection')
+    groups=p.add_subparsers(dest='group')
     commands={'releases':['inspect','latest','verify'],'devices':['list','scan','import','save','remove'],'sessions':['list','details','confirm'],'diagnostics':['read','export'],'updates':['preview','run','resume','prepare'],'backup':['capture','import'],'first-install':['run'],'repair':['run'],'start':['run'],'probe':['inspect','halt'],'mqtt':['save','connect','disconnect','devices'],'settings':['get','save'],'trial':['preview','run'],'zigbee':['preview','run','reconcile'],'fleet':['list','preview','run','resume'],'bench':['install','repair','start']}
     for group,actions in commands.items():
         q=groups.add_parser(group);sub=q.add_subparsers(dest='action',required=True)
@@ -74,8 +76,17 @@ async def run(args):
 
 
 def main(argv=None):
-    args=parser().parse_args(argv)
-    try:result=asyncio.run(run(args));print(json.dumps(result,indent=2));return 0
+    command_parser=parser();args=command_parser.parse_args(argv)
+    if args.tls_self_test and not args.runtime_info:command_parser.error('--tls-self-test requires --runtime-info')
+    if args.runtime_info and args.group:command_parser.error('--runtime-info cannot be combined with an operation')
+    if not args.runtime_info and not args.group:command_parser.error('a command or --runtime-info is required')
+    try:
+        if args.runtime_info:
+            from .runtime_info import runtime_info,tls_self_test
+            result=runtime_info()
+            if args.tls_self_test:result['tlsSelfTest']=tls_self_test()
+        else:result=asyncio.run(run(args))
+        print(json.dumps(result,indent=2));return 0
     except (ValueError,KeyError,OSError,RuntimeError) as e:
         print(json.dumps({'error':str(e),'operationStartedAutomatically':False}),file=sys.stderr);return 2
     except KeyboardInterrupt:
