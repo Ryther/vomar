@@ -142,7 +142,7 @@ int main(void)
     assert(VIMAR_ATTR_SCHEMA_VERSION < 0x0100);
     assert(VIMAR_ATTR_TIMER_DURATION >= 0x0200);
     assert(VIMAR_ATTR_FAULT_CODE >= 0x0600);
-    assert(VIMAR_SCHEMA_VERSION == 7);
+    assert(VIMAR_SCHEMA_VERSION == 8);
     assert(VIMAR_ATTR_P031_ENABLED == 0x0700);
     assert(VIMAR_ATTR_BOOT_SEQUENCE == 0x070c);
     assert(VIMAR_ATTR_OTA_CONTRACT == 0x070d);

@@ -161,3 +161,35 @@ and alternating direction with all four wired buttons. The preceding OTA and
 correlated readback verified the version, unchanged recovery and all 40 settings.
 This is bounded operator-observed acceptance; no terminal waveform or physical
 MAIN hash was measured, and broader hardware/release qualification remains open.
+
+## Front holds, phase-cut selection and Identify (schema 8 candidate)
+
+A front UP or DOWN long press dims only a lamp that is already ON with an
+applied ON output. Holding either button while OFF keeps it OFF, including
+an initial ON delay or an unfinished OFF ramp. The release does not become a
+short click. The separate wired auxiliary input keeps its existing behavior.
+
+`phase_cut_mode` selects `trailing_edge` (TE, wire value 0) or `leading_edge`
+(LE, wire value 1). The default is TE, including migration of older records without a phase field.
+An explicit `CONFIG_RESEARCH_STOCK_CONFIG19=1` build override selects LE.
+The selection uses P0.19 while retaining the stock secondary power controller.
+A change requires accepted, target and applied output to be OFF with no pending
+delay or ramp. It is saved durably before applying the GPIO; a storage failure
+leaves the mode unchanged. An unexpected hardware apply failure inhibits output
+and reports an output fault. No automatic retry or restart is performed.
+
+Settings record v5 appends the phase choice and reads v1–v4 without discarding
+their values. Older firmware cannot decode v5: a downgrade is not a settings
+migration and must not be assumed to preserve configuration. Warm recovery
+returns preserve P0.19; cold starts load the saved choice before enabling output.
+
+The standard Identify command controls a temporary green LED flash at 5 Hz.
+The converter's Identify button requests 15 seconds; IdentifyTime=0 cancels it.
+A fault indication has priority. On expiry the configured LED profile or an
+unexpired manual override returns. Identify never changes the lamp or saves LED
+configuration. Repeating Identify during an active SDK countdown can shorten
+the renewed interval by less than one second.
+
+These behaviors have host-test coverage. Electrical phase-cut behavior,
+load compatibility and mounted-device timing still require physical validation;
+software tests alone do not qualify this candidate.

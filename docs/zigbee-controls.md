@@ -303,3 +303,20 @@ limitato al livello iniziale:0 termina a spento. Durante queste rampe il
 livello può scendere sotto `min_level`; la soglia fisica minima non è ancora
 calibrata. La modalità `fixed_level` conserva il livello fisso senza questo
 percorso di rampa.
+
+## Schema 8: phase-cut mode and Identify
+
+`phase_cut_mode` chooses `trailing_edge` (TE, default) or `leading_edge` (LE).
+Change it separately, only when the lamp is fully OFF and all ramps/delays have
+finished. Firmware saves the choice before applying P0.19 and rejects busy or
+failed saves. The converter uses guarded command 6 and verifies attribute
+0x0305; the attribute is not writable. Older schemas do not expose the setting.
+Settings record v5 reads v1–v4; older firmware cannot read v5 on downgrade.
+
+The diagnostic Identify button requests 15 seconds of rapid green LED flashes
+(100 ms ON, 100 ms OFF). It never changes the lamp and yields to fault indication.
+The previous profile or unexpired manual override returns afterward.
+`{"identify":"identify"}` is the standard converter action. The runtime effect
+`fast_blink` is diagnostic only. UP/DOWN long presses while OFF leave the lamp
+OFF; they dim only an already applied ON output. Wired auxiliary behavior is
+unchanged. Electrical phase-cut validation remains pending.

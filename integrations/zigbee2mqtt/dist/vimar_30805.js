@@ -46,6 +46,7 @@ for (const name of ['single_up_action', 'single_down_action', 'double_up_action'
 SETTING_PRESENTATION.ramp_start_level = ['Luminosità iniziale rampa', 'Livello iniziale della rampa OFF→ON: zero parte da spento; un valore maggiore parte da questo livello, limitato al target. Solo con rampa non nulla; soglia fisica minima non calibrata.', 0];
 SETTING_PRESENTATION.ramp_end_level = ['Luminosità finale rampa', 'Ultimo livello acceso prima di OFF: zero termina a spento; un valore maggiore termina qui prima dello spegnimento, limitato al livello iniziale. Solo con rampa non nulla; soglia fisica minima non calibrata.', 0];
 for (const n of [2, 3, 4]) SETTING_PRESENTATION[`timer_${n}_duration_s`] = [`Durata timer ${n}`, 'Modello riutilizzabile dalle azioni dei pulsanti.', 600];
+SETTING_PRESENTATION.phase_cut_mode = ['Phase-cut mode', 'Trailing edge (TE) or leading edge (LE). Change only with the lamp fully OFF and all delays/ramps finished. Saved before applying; requires schema 8 firmware.', 'trailing_edge'];
 const setting = (name, zclName, ID, type, options = {}) => ({
     name, zclName, ID, type, access: 'STATE_SET_GET', category: 'config',
     label: SETTING_PRESENTATION[name]?.[0], default: SETTING_PRESENTATION[name]?.[2],
@@ -85,6 +86,7 @@ const ATTRIBUTE_METADATA = Object.freeze([
     setting('reporting_mode', 'reportingMode', 0x0301, 'enum', {values: ['optimistic', 'acknowledged', 'physical']}),
     setting('fixed_level', 'fixedLevel', 0x0302, 'numeric', {min: 1, max: 254}),
     setting('min_level', 'minLevel', 0x0303, 'numeric', {min: 1, max: 254}),
+    setting('phase_cut_mode', 'phaseCutMode', 0x0305, 'enum', {values: ['trailing_edge', 'leading_edge'], minSchema: 8, writeCommand: 'setPhaseCut'}),
     setting('max_level', 'maxLevel', 0x0304, 'numeric', {min: 1, max: 254}),
     setting('led_on_red', 'ledOnR', 0x0400, 'numeric', {min: 0, max: 255}),
     setting('led_on_green', 'ledOnG', 0x0401, 'numeric', {min: 0, max: 255}),
@@ -101,7 +103,7 @@ const ATTRIBUTE_METADATA = Object.freeze([
     diagnostic('led_runtime_green', 'ledRuntimeG', 0x0501, 'numeric', {min: 0, max: 255}),
     diagnostic('led_runtime_blue', 'ledRuntimeB', 0x0502, 'numeric', {min: 0, max: 255}),
     diagnostic('led_runtime_intensity', 'ledRuntimeIntensity', 0x0503, 'numeric', {min: 0, max: 100, unit: '%'}),
-    diagnostic('led_runtime_effect', 'ledRuntimeEffect', 0x0504, 'enum', {values: ['steady', 'slow_blink']}),
+    diagnostic('led_runtime_effect', 'ledRuntimeEffect', 0x0504, 'enum', {values: ['steady', 'slow_blink', 'fast_blink']}),
     diagnostic('led_override_active', 'ledOverrideActive', 0x0505, 'binary', {zclType: 'bool', valueOn: true, valueOff: false}),
     diagnostic('target_state', 'targetOn', 0x0600, 'binary', {zclType: 'bool', valueOn: 'ON', valueOff: 'OFF'}),
     diagnostic('target_level', 'targetLevel', 0x0601, 'numeric', {min: 0, max: 254}),
@@ -238,7 +240,7 @@ function ledLightState(data) {
     return {state_led: data.ledRuntimeIntensity > 0 && (r || g || b) ? 'ON' : 'OFF',
         brightness_led: Math.round(data.ledRuntimeIntensity * 254 / 100), brightness_percent_led: data.ledRuntimeIntensity,
         color_led: {...color, h: color.hue, s: color.saturation}, color_mode_led: 'hs',
-        effect_led: data.ledOverrideActive ? ['steady', 'slow_blink'][data.ledRuntimeEffect] : 'automatic'};
+        ...(!data.ledOverrideActive ? {effect_led: 'automatic'} : data.ledRuntimeEffect <= 1 ? {effect_led: ['steady', 'slow_blink'][data.ledRuntimeEffect]} : {})};
 }
 
 const PROFILE_ATTRIBUTES = {
@@ -323,7 +325,7 @@ function ledLightConverter() {
             const on = message.state === 'TOGGLE' ? !current.ledRuntimeIntensity : message.state !== 'OFF';
             if (!on) intensity = 0;
             else if (message.state && !intensity && message.brightness !== 0) intensity = 10;
-            const effect = message.effect === undefined ? current.ledRuntimeEffect : ['steady', 'slow_blink'].indexOf(message.effect);
+            const effect = message.effect === undefined ? ([0, 1].includes(current.ledRuntimeEffect) ? current.ledRuntimeEffect : 0) : ['steady', 'slow_blink'].indexOf(message.effect);
             await entity.command(CLUSTER_NAME, 'applyLedOverride', {r, g, b, intensity, effect, durationMs: 0}, {disableDefaultResponse: false});
         }};
 }
@@ -378,7 +380,7 @@ function decodeEvent(data) {
 function clusterDefinition(T) {
     const types = {u8: T.UINT8 ?? 'UINT8', u16: T.UINT16 ?? 'UINT16', u32: T.UINT32 ?? 'UINT32', bool: T.BOOLEAN ?? 'BOOLEAN', octetStr: T.OCTET_STR ?? 'OCTET_STR'};
     const attributes = Object.fromEntries(ATTRIBUTE_METADATA.map((item) => [item.zclName,
-        {name: item.zclName, ID: item.ID, type: types[item.zclType ?? 'u8'], write: item.writable !== false,
+        {name: item.zclName, ID: item.ID, type: types[item.zclType ?? 'u8'], write: item.writable !== false && !item.writeCommand,
             ...(item.min !== undefined ? {min: item.min} : {}), ...(item.max !== undefined ? {max: item.max} : {})}]));
     const u8 = types.u8, u16 = types.u16, u32 = types.u32, bool = types.bool;
     return {name: CLUSTER_NAME, ID: CLUSTER_ID, attributes, commands: {
@@ -389,6 +391,7 @@ function clusterDefinition(T) {
         requestSnapshot: {name: 'requestSnapshot', ID: 2, parameters: []},
         bypassOn: {name: 'bypassOn', ID: 3, parameters: []},
         enterRecovery: {name: 'enterRecovery', ID: 4, parameters: []},
+        setPhaseCut: {name: 'setPhaseCut', ID: 6, parameters: [{name: 'mode', type: u8}]},
         setOutput: {name: 'setOutput', ID: 5, parameters: [{name: 'on', type: bool}, {name: 'level', type: u8}]},
     }, commandsResponse: {event: {name: 'event', ID: 0, parameters: [
         {name: 'type', type: u8}, {name: 'side', type: u8}, {name: 'sequenceId', type: u32},
@@ -422,6 +425,7 @@ function exposeDescriptors(device) {
         if (/^led_(on|off)_(red|green|blue|intensity)$/.test(item.name)) item.homeassistant = {enabledByDefault: false};
     }
     return [...attributes,
+        {name: 'identify', type: 'enum', access: 'SET', values: ['identify'], category: 'config', description: 'Flash the button LED green rapidly for 15 seconds without changing the lamp.'},
         ...['led_off', 'led_on'].map((endpoint) => ({name: endpoint, type: 'light', endpoint,
             homeassistant: {entityCategory: 'config', enabledByDefault: true, name: endpoint === 'led_off' ? 'LED a lampada spenta' : 'LED a lampada accesa'},
             description: endpoint === 'led_off' ? 'Colore e intensità del profilo automatico a lampada spenta; non accende la lampada.' :
@@ -470,7 +474,7 @@ function buildDefinition({light, addCustomCluster, expose, dataTypes = {}}) {
             const attributes = Object.fromEntries(requested.map(([name, input]) => {
                 const metadata = byPublicName.get(aliases.get(name) ?? name);
                 const schema = schemaVersion(meta?.device);
-                if ((metadata.minSchema ?? 0) > schema || (metadata.values === ACTIONS && ACTIONS.indexOf(input) >= 7 && schema < 4) || (name === 'timer_1_duration_s' && schema < 4)) throw new Error('Requires schema >= 4');
+                if ((metadata.minSchema ?? 0) > schema || (metadata.values === ACTIONS && ACTIONS.indexOf(input) >= 7 && schema < 4) || (name === 'timer_1_duration_s' && schema < 4)) throw new Error(`Requires schema >= ${metadata.minSchema ?? 4}`);
                 if (name.endsWith('_percent')) {
                     if (!Number.isFinite(input) || input < toPercent(metadata.min) || input > toPercent(metadata.max)) throw new RangeError(`${name} outside percent range`);
                     input = Math.round(input * 254 / 100);
@@ -478,6 +482,13 @@ function buildDefinition({light, addCustomCluster, expose, dataTypes = {}}) {
                 if (Object.hasOwn(meta?.message ?? {}, metadata.name) && name !== metadata.name) throw new Error('Specify raw or alias, not both');
                 return [metadata.zclName, encodeValue(metadata, input)];
             }));
+            if (attributes.phaseCutMode !== undefined) {
+                if (Object.keys(meta?.message ?? {[key]: value}).length !== 1) throw new Error('Send phase_cut_mode separately');
+                await entity.command(CLUSTER_NAME, 'setPhaseCut', {mode: attributes.phaseCutMode}, {disableDefaultResponse: false});
+                const readback = await entity.read(CLUSTER_NAME, ['phaseCutMode'], {});
+                if (readback.phaseCutMode !== attributes.phaseCutMode) throw new Error('Phase-cut readback did not match the requested mode');
+                return {state: Object.fromEntries(requested)};
+            }
             const boundPairs = [['minLevel', 'maxLevel'], ['ledOnMin', 'ledOnMax']];
             const prewrites = [];
             for (const [minimum, maximum] of boundPairs) {
@@ -522,6 +533,11 @@ function buildDefinition({light, addCustomCluster, expose, dataTypes = {}}) {
         await entity.command(CLUSTER_NAME, name, {}, {disableDefaultResponse: false});
     }});
     const toZigbee = [settingConverter, diagnosticGet,
+        {key: ['identify'], convertSet: async (entity, _key, value) => {
+            if (value === false) return;
+            if (![true, 'identify', 'press'].includes(value)) throw new Error('identify requires identify, press or boolean true');
+            await entity.command('genIdentify', 'identify', {identifytime: 15}, {disableDefaultResponse: false});
+        }},
         {key: ['led_override'], convertSet: async (entity, _key, value) => entity.command(CLUSTER_NAME,
             'applyLedOverride', ledOverridePayload(value), {disableDefaultResponse: false})},
         command('enter_recovery', 'enterRecovery'),

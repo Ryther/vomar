@@ -5,6 +5,7 @@ project(vimar_30805_platform)
 target_sources(app PRIVATE
     src/main.c
     src/dimmer_config.c
+    src/phase_cut_control.c
     src/dimmer_model.c
     src/gesture_classifier.c
     src/local_action_mapper.c

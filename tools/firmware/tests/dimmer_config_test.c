@@ -7,6 +7,7 @@ static void test_defaults_match_approved_design(void)
 {
     struct dimmer_config config = dimmer_config_defaults();
 
+    assert(config.phase_cut_mode == DIMMER_PHASE_TRAILING_EDGE);
     assert(config.initial_on_delay_ms==0 && config.rise_transition_ms==0 && config.fall_transition_ms==0);
     assert(config.min_level==1 && config.max_level==254);
     assert(config.double_click_window_ms == 150);

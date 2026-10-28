@@ -311,3 +311,19 @@ restores stock device firmware nor cancels an already submitted remote OTA.
 Later source documentation is at https://github.com/Ryther/vomar/tree/main/docs.
 These steps require no repository access. Verify the installed version's guide
 when its controls differ; do not invent UI or claim tests exercised that setup.
+
+## Schema 8 dimmer controls
+
+A front UP/DOWN long press while the lamp is OFF leaves it OFF; dimming requires
+an already ON applied output. The separate wired auxiliary behavior is unchanged.
+With matching schema 8 firmware and converter, `phase_cut_mode` offers TE
+(`trailing_edge`, default) and LE (`leading_edge`). Ask the operator to switch
+the lamp OFF and wait for any ramp/delay before changing it. The backend saves
+and applies it through a guarded command and the converter checks readback;
+read-only attribute 0x0305 must not be used as a raw write bypass. Do not infer
+load compatibility or electrical qualification from a successful software test.
+
+Identify is a diagnostic button: it flashes green rapidly for 15 seconds without
+changing the lamp. Fault indications take priority; automatic profiles or an
+unexpired override resume afterward. Settings v5 preserves v1–v4 values while
+adding phase selection; older firmware cannot decode v5 after a downgrade.

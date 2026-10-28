@@ -1267,3 +1267,8 @@
 !/tools/firmware/tests/test_vimar_attachment.py
 !/tools/firmware/tests/test_attachment_gpio.py
 !/tools/firmware/tests/test_attachment_controller.py
+
+# Guarded phase-cut configuration and migration coverage.
+!/firmware/src/phase_cut_control.c
+!/firmware/src/phase_cut_control.h
+!/tools/firmware/tests/test_phase_cut_control.py

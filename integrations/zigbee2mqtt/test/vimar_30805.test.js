@@ -328,7 +328,7 @@ test('reads saved settings at configure time without imposing converter defaults
     assert.ok(hooks?.length);
     await hooks[0](device);
     const attrs = calls.flatMap((c) => c[1]);
-    for (const m of ATTRIBUTE_METADATA.filter((m) => m.category === 'config')) assert.ok(attrs.includes(m.zclName), m.name);
+    for (const m of ATTRIBUTE_METADATA.filter((m) => m.category === 'config' && (m.minSchema ?? 0) <= 4)) assert.ok(attrs.includes(m.zclName), m.name);
     assert.ok(calls.every((c) => c[1].length <= 6));
 });
 
@@ -473,6 +473,12 @@ test('native installed exposes and HA metadata prepare four distinct lights with
     const {default: definition} = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
     const prepared = zhc.prepareDefinition({...definition, externalConverterName: 'vimar-profile-test.js'});
     const exposed = prepared.exposes({modelID: 'Vimar30805'}, {});
+    const identifyButtons = exposed.filter((x) => x.property === 'identify');
+    assert.equal(identifyButtons.length, 1);
+    assert.deepEqual(identifyButtons[0].values, ['identify']);
+    assert.equal(identifyButtons[0].category, 'config');
+    const schema8 = prepared.exposes({modelID: 'Vimar30805', getEndpoint: () => ({getClusterAttributeValue: () => 8})}, {});
+    assert.deepEqual(schema8.find((x) => x.property === 'phase_cut_mode').values, ['trailing_edge', 'leading_edge']);
     const lights = exposed.filter((x) => x.type === 'light');
     assert.equal(lights.length, 4); // lamp + two automatic profiles + preserved advanced runtime endpoint
     for (const light of lights) {
@@ -493,7 +499,7 @@ test('native installed exposes and HA metadata prepare four distinct lights with
         assert.equal(entry.discovery_payload.enabled_by_default, endpoint !== 'led');
     }
     assert.ok(prepared.toZigbee.find((x) => x.endpoints?.includes('led_off')));
-    assert.equal(ATTRIBUTE_METADATA.filter((x) => x.category === 'config').length, 40);
+    assert.equal(ATTRIBUTE_METADATA.filter((x) => x.category === 'config').length, 41);
 });
 
 test('partial profile reports remain isolated between devices and mode changes update the slider', () => {
@@ -728,4 +734,67 @@ test('reads new diagnostic IDs even when a device keeps an older custom-cluster 
     assert.equal(result.fault_diagnostic_status, 1);
     assert.equal(result.fault_diagnostic_0, '00'.repeat(32));
     assert.equal(result.fault_diagnostic_1, undefined);
+});
+
+test('phase selection uses guarded command and verified readback on schema 8', async () => {
+    const {cluster, custom, definition} = build();
+    const metadata = ATTRIBUTE_METADATA.find((item) => item.name === 'phase_cut_mode');
+    assert.ok(metadata);
+    assert.equal(metadata.default, 'trailing_edge');
+    assert.equal(cluster.attributes.phaseCutMode.ID, 0x0305);
+    assert.equal(cluster.attributes.phaseCutMode.write, false);
+    assert.equal(cluster.commands.setPhaseCut.ID, 6);
+    const device = {getEndpoint: () => ({getClusterAttributeValue: () => 8})};
+    const exposures = definition.extend[2].exposes[0](device);
+    assert.deepEqual(exposures.find((item) => item.name === 'phase_cut_mode').values, ['trailing_edge', 'leading_edge']);
+    const oldDevice = {getEndpoint: () => ({getClusterAttributeValue: () => 7})};
+    assert.equal(definition.extend[2].exposes[0](oldDevice).some((item) => item.name === 'phase_cut_mode'), false);
+    const setter = custom.toZigbee.find((item) => item.key.includes('phase_cut_mode'));
+    const calls = [];
+    const entity = {
+        command: async (...args) => calls.push(['command', ...args]),
+        read: async (...args) => {calls.push(['read', ...args]); return {phaseCutMode: 0};},
+        write: async () => assert.fail('phase must not bypass firmware admission with a raw attribute write'),
+    };
+    assert.deepEqual(await setter.convertSet(entity, 'phase_cut_mode', 'trailing_edge', {device}),
+        {state: {phase_cut_mode: 'trailing_edge'}});
+    assert.deepEqual(calls[0], ['command', 'vimarDimmer', 'setPhaseCut', {mode: 0}, {disableDefaultResponse: false}]);
+    assert.deepEqual(calls[1], ['read', 'vimarDimmer', ['phaseCutMode'], {}]);
+    calls.length = 0;
+    await assert.rejects(() => setter.convertSet(entity, 'phase_cut_mode', 'trailing_edge', {device: oldDevice}), /schema.*8/i);
+    await assert.rejects(() => setter.convertSet(entity, 'phase_cut_mode', 'trailing_edge', {device,
+        message: {phase_cut_mode: 'trailing_edge', min_level: 3}}), /separat/i);
+    await assert.rejects(() => setter.convertSet({...entity, read: async () => ({phaseCutMode: 1})}, 'phase_cut_mode', 'trailing_edge', {device}), /readback/i);
+    await assert.rejects(() => setter.convertSet({...entity, command: async () => {throw Error('busy');}}, 'phase_cut_mode', 'trailing_edge', {device}), /busy/);
+});
+
+test('Identify is a configuration press button and sends a standard 15 second request', async () => {
+    const {custom} = build();
+    const button = custom.exposes.find((item) => item.name === 'identify');
+    assert.deepEqual([button.type, button.access, button.category, button.values], ['enum', 'SET', 'config', ['identify']]);
+    const converter = custom.toZigbee.find((item) => item.key.includes('identify'));
+    const calls = [];
+    const entity = {command: async (...args) => calls.push(args)};
+    await converter.convertSet(entity, 'identify', 'identify');
+    assert.deepEqual(calls, [['genIdentify', 'identify', {identifytime: 15}, {disableDefaultResponse: false}]]);
+    calls.length = 0;
+    await converter.convertSet(entity, 'identify', false);
+    assert.deepEqual(calls, []);
+    await assert.rejects(() => converter.convertSet(entity, 'identify', 'anything'), /press/);
+});
+
+
+test('Identify runtime effect is diagnostic and never replayed as a manual LED effect', async () => {
+    const {custom, definition} = build();
+    const converter = definition.toZigbee.find((item) => item.endpoints?.includes('led'));
+    const commands = [];
+    const data = {ledRuntimeR: 0, ledRuntimeG: 255, ledRuntimeB: 0,
+        ledRuntimeIntensity: 100, ledRuntimeEffect: 2, ledOverrideActive: true};
+    const entity = {read: async () => data, command: async (...args) => commands.push(args)};
+    await converter.convertSet(entity, 'brightness', 127, {message: {brightness: 127}});
+    assert.equal(commands[0][2].effect, 0);
+    const runtime = custom.fromZigbee.find((item) => item.type.includes('attributeReport'));
+    const state = runtime.convert(null, {data});
+    assert.equal(state.led_runtime_effect, 'fast_blink');
+    assert.equal(Object.hasOwn(state, 'effect_led'), false);
 });

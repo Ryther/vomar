@@ -81,7 +81,7 @@ int main(void)
     config.ramp_end_level = 201;
     config.single_up_action = (enum dimmer_action)14;
     assert(settings_record_encode(&config, previous_on, 88, record, sizeof(record), &length));
-    assert(length == 82 && record[4] == 4 && record[6] == 70);
+    assert(length == 83 && record[4] == 5 && record[6] == 71);
     assert(settings_record_decode(record, length, &decoded, &decoded_on, &decoded_level) == SETTINGS_RECORD_OK);
     assert(decoded.double_click_window_ms == 150 && decoded_on && decoded_level == 88);
     assert(decoded.timer_duration_s == 321 && decoded.timer_2_duration_s == 654);

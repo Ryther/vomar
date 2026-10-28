@@ -9,6 +9,8 @@
 int platform_io_restore(bool *on, uint8_t *level);
 int platform_io_init(bool on, uint8_t level);
 int platform_io_apply(bool on, uint8_t level);
+int platform_io_check_phase_cut(enum dimmer_phase_cut_mode);
+int platform_io_set_phase_cut(enum dimmer_phase_cut_mode);
 bool platform_io_input_settled(void);
 int platform_io_request_recovery(void);
 int platform_io_request_pairing(void);

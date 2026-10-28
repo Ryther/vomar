@@ -9,6 +9,7 @@
 #include <zigbee/zigbee_app_utils.h>
 
 LOG_MODULE_REGISTER(vimar_platform_io, LOG_LEVEL_INF);
+static bool output_on;
 
 static void button_changed(uint32_t button_state, uint32_t has_changed)
 {
@@ -25,7 +26,7 @@ static void button_changed(uint32_t button_state, uint32_t has_changed)
 
 int platform_io_init(bool on, uint8_t level)
 {
-    ARG_UNUSED(on); ARG_UNUSED(level);
+    output_on=on; ARG_UNUSED(level);
     int error = dk_leds_init();
     if (error != 0) {
         LOG_ERR("DK LED initialization failed: %d", error);
@@ -46,7 +47,7 @@ void platform_io_render(bool on)
 }
 
 int platform_io_restore(bool *on,uint8_t *level){ARG_UNUSED(on);ARG_UNUSED(level);return 0;}
-int platform_io_apply(bool on,uint8_t level){ARG_UNUSED(on);ARG_UNUSED(level);return 0;}
+int platform_io_apply(bool on,uint8_t level){output_on=on;ARG_UNUSED(level);return 0;}
 void platform_io_tick(uint64_t now){ARG_UNUSED(now);}
 void platform_io_led(const struct led_output *output,uint64_t now){ARG_UNUSED(output);ARG_UNUSED(now);}
 const struct dimmer_secondary_capabilities *platform_io_capabilities(void)
@@ -60,3 +61,11 @@ int platform_io_request_recovery(void){return-ENOTSUP;}
 int platform_io_request_pairing(void){return-ENOTSUP;}
 
 void platform_io_cancel_attachment(void){}
+
+int platform_io_check_phase_cut(enum dimmer_phase_cut_mode phase)
+{
+ if(phase<DIMMER_PHASE_TRAILING_EDGE||phase>=DIMMER_PHASE_MODE_COUNT)return-EINVAL;
+ return output_on?-EBUSY:0;
+}
+int platform_io_set_phase_cut(enum dimmer_phase_cut_mode phase)
+{return platform_io_check_phase_cut(phase);}

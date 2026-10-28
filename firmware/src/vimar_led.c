@@ -13,6 +13,7 @@ int vimar_led_render(const struct led_output *o,uint64_t now)
  if(!ready)return-ENODEV;
  uint32_t intensity=o->intensity>100?100:o->intensity;
  if(o->effect==LED_EFFECT_SLOW_BLINK&&now%1000>=500)intensity=0;
+ if(o->effect==LED_EFFECT_FAST_BLINK&&now%200>=100)intensity=0;
  const uint8_t rgb[]={o->r,o->g,o->b};uint16_t next[3];bool changed=false;
  for(unsigned i=0;i<3;i++){uint32_t component=rgb[i]*intensity/100;next[i]=(255-component)*6666/255;changed|=next[i]!=previous[i];}
  if(!changed)return 0;

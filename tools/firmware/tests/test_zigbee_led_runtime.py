@@ -23,7 +23,7 @@ static uint64_t connection_selector_since;
 static struct connection_pairing connection_pairing;
 static bool vimar_power_protection_blocked(void){return false;}
 typedef bool zb_bool_t;
-struct { uint8_t led_runtime_r,led_runtime_g,led_runtime_b,led_runtime_intensity,led_runtime_effect; bool led_override_active; } context;
+struct { uint8_t led_runtime_r,led_runtime_g,led_runtime_b,led_runtime_intensity,led_runtime_effect; bool led_override_active; struct { uint16_t identify_time; } identify; } context;
 struct { struct led_controller leds; struct { struct { bool on; uint8_t level; struct { bool active; } fault; } state; } model; } controller;
 static bool led_report_pending;
 static uint64_t last_led_report_ms;
@@ -72,6 +72,19 @@ int main(void) {
  assert(context.led_runtime_r==255&&context.led_runtime_g==255&&context.led_runtime_b==0);
  connection_pairing_tick(&connection_pairing,4300);refresh_led_runtime(4300);
  assert(context.led_runtime_r==255&&context.led_runtime_g==0&&context.led_runtime_b==255);
+ connection_selecting=false;connection_pairing=(struct connection_pairing){0};
+ context.identify.identify_time=15;refresh_led_runtime(5000);
+ assert(context.led_runtime_r==0&&context.led_runtime_g==255&&context.led_runtime_b==0&&context.led_runtime_effect==2);
+ assert(controller.model.state.on); /* Identify must never command the lamp. */
+ controller.model.state.on=false;refresh_led_runtime(5025);
+ assert(context.led_runtime_g==255&&context.led_runtime_effect==2);
+ led_controller_set_override(&controller.leds,&override,5050,1000);refresh_led_runtime(5050);
+ assert(context.led_override_active&&context.led_runtime_g==255&&context.led_runtime_effect==2);
+ controller.model.state.fault.active=true;refresh_led_runtime(5075);
+ assert(context.led_runtime_r==255&&context.led_runtime_g==0);
+ controller.model.state.fault.active=false;context.identify.identify_time=0;refresh_led_runtime(5100);
+ assert(context.led_runtime_r==9&&context.led_runtime_g==8&&context.led_runtime_effect==1);
+ refresh_led_runtime(6100);assert(context.led_runtime_r==1&&context.led_runtime_intensity==40);
  return 0;
 }
 '''

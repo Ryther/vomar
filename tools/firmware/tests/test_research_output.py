@@ -8,7 +8,7 @@ class ResearchOutputTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as directory:
    d=Path(directory);(d/'hal').mkdir();(d/'zephyr').mkdir()
    (d/'hal/nrf_gpio.h').write_text('''#include <stdint.h>
-void nrf_gpio_pin_clear(uint32_t);void nrf_gpio_cfg_output(uint32_t);void nrf_gpio_pin_write(uint32_t,uint32_t);
+uint32_t nrf_gpio_pin_out_read(uint32_t);void nrf_gpio_pin_clear(uint32_t);void nrf_gpio_cfg_output(uint32_t);void nrf_gpio_pin_write(uint32_t,uint32_t);
 ''')
    (d/'zephyr/kernel.h').write_text('''#define __aligned(n) __attribute__((aligned(n)))
 #define __DMB() ((void)0)
@@ -38,15 +38,16 @@ void nrf_pwm_task_trigger(void*,int);bool nrf_pwm_event_check(void*,int);
 #include <hal/nrf_gpio.h>
 #include <assert.h>
 #include <errno.h>
-static unsigned gate,off_writes,triggers,compare;static int timeout;
+static unsigned gate,off_writes,triggers,compare,phase,unsafe_phase_changes;static int timeout;
 #if defined(CONFIG_VIMAR_P031_PROTECTION)
 #include "vimar_power_protection.h"
 static bool inhibit;
 int vimar_power_protection_gate(bool on){nrf_gpio_pin_write(14,on&&!inhibit);return on&&inhibit?-EACCES:0;}
 #endif
-void nrf_gpio_pin_clear(uint32_t p){if(p==14){gate=0;off_writes++;}}
+void nrf_gpio_pin_clear(uint32_t p){if(p==14){gate=0;off_writes++;}if(p==19){if(gate&&phase)unsafe_phase_changes++;phase=0;}}
+uint32_t nrf_gpio_pin_out_read(uint32_t p){return p==14?gate:phase;}
 void nrf_gpio_cfg_output(uint32_t p){(void)p;}
-void nrf_gpio_pin_write(uint32_t p,uint32_t v){if(p==14){gate=v;if(!v)off_writes++;}}
+void nrf_gpio_pin_write(uint32_t p,uint32_t v){if(p==14){gate=v;if(!v)off_writes++;}if(p==19){if(gate&&phase!=v)unsafe_phase_changes++;phase=v;}}
 void nrf_pwm_disable(void*p){(void)p;}void nrf_pwm_enable(void*p){(void)p;}
 void nrf_pwm_pins_set(void*p,const uint32_t*v){(void)p;assert(v[0]==UINT32_MAX&&v[3]==13);}
 void nrf_pwm_configure(void*p,int c,int m,int t){(void)p;assert(c==1&&m==0&&t==1024);}
@@ -70,6 +71,22 @@ int main(void){
  assert(research_output_level(-32768)==0&&gate==0);
  inhibit=false;assert(research_output_level(0)==0&&gate==1);
 #endif
+ timeout=0;
+ assert(research_output_init_at_level_phase(-32768,1)==0);
+ assert(research_output_init_at_level_phase(0,1)==0&&phase==1);
+ unsigned prior_off=off_writes;
+ assert(research_output_init_at_level_phase(0,1)==0&&off_writes==prior_off);
+ assert(research_output_set_phase_cut(0)==-EBUSY&&phase==1&&gate==1);
+ assert(research_output_init_at_level_phase(0,0)==-EBUSY&&phase==1&&gate==1);
+ assert(research_output_level(-32768)==0);
+ assert(research_output_set_phase_cut(0)==0&&phase==0);
+ assert(research_output_init_at_level_phase(0,0)==0&&gate==1&&phase==0);
+ prior_off=off_writes;
+ assert(research_output_init_at_level_phase(0,0)==0&&off_writes==prior_off&&phase==0);
+ assert(research_output_init_at_level_phase(-32768,1)==0&&gate==0&&phase==1);
+ assert(research_output_set_phase_cut(2)==-EINVAL);
+ assert(research_output_init_at_level_phase(0,2)==-EINVAL);
+ assert(unsafe_phase_changes==0);
  return 0;
 }
 ''')
