@@ -99,8 +99,11 @@ static int signature_raw(const uint8_t *sig, size_t n, uint8_t raw[64]) {
     size_t off = 2;
     memset(raw, 0, 64);
     for (unsigned i = 0; i < 2; i++) {
-        if (off + 2 > n || sig[off++] != 2)
+        if (off + 2 > n)
             return -EBADMSG;
+        if (sig[off] != 2)
+            return -EBADMSG;
+        off++;
         size_t len = sig[off++];
         if (!len || len > 33 || len > n - off || sig[off] & 0x80)
             return -EBADMSG;

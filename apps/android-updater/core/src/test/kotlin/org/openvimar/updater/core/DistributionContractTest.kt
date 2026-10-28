@@ -13,6 +13,7 @@ import kotlinx.serialization.json.*
 import org.junit.Test
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 
 class DistributionContractTest {
     @Test fun sourceOwnedGoldenPackages() {
@@ -72,6 +73,23 @@ class DistributionContractTest {
                 DistributionAssets.parse(expanded.toString().toByteArray(),"v2.0.0")
             }
         }
+    }
+    @Test fun acceptedExperimentalFirmwareRemainsManualTrialOnly() {
+        val manifest=independentDistribution()
+        val artifacts=manifest.getValue("artifacts").jsonArray.map{entry->
+            val artifact=entry.jsonObject
+            val name=when(artifact.getValue("role").jsonPrimitive.content){
+                "firmware-common"->"vomar-firmware-2.0.0-qualification-candidate.zip"
+                "zigbee-ota"->"vomar-firmware-2.0.0-qualification-candidate.ota"
+                else->artifact.getValue("filename").jsonPrimitive.content
+            }
+            JsonObject(artifact+("filename" to JsonPrimitive(name)))
+        }+Json.parseToJsonElement("""{"role":"release-acceptance","filename":"vomar-release-acceptance-2.0.0.json","size":1,"sha256":"${"ab".repeat(32)}","componentVersion":"2.0.0"}""")
+        val accepted=JsonObject(manifest+("artifacts" to JsonArray(artifacts)))
+        val selected=DistributionAssets.parse(accepted.toString().toByteArray(),"v2.0.0")
+        assertTrue(selected.experimentalFirmware)
+        val failure=assertThrows(IllegalArgumentException::class.java){selected.requireAutomaticFirmware()}
+        assertEquals("Firmware is experimental; import ZIP through Bluetooth trial",failure.message)
     }
     @Test fun everyNativeArtifactMustUseItsOwnersExactVersion() {
         for(role in listOf("firmware-common","zigbee-ota","android-apk","desktop-linux-x64",

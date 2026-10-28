@@ -183,6 +183,57 @@ CI results cannot fill physical checks. Linux-only bench access does not qualify
 macOS/Windows hardware behavior; missing platform evidence remains a release
 blocker even when hosted builds succeed.
 
+For a deliberately accepted experimental-firmware distribution, use the separate
+[manual staging and acceptance route](releasing.md#explicit-release-with-experimental-firmware).
+It preserves the signed candidate and false physical flags, publishes the dated
+owner acceptance of the unresolved APS-105-5241 assert and unverified native
+checks, and retains dependency/security/signature checks. It does not require
+inventing `FIRMWARE_QUALIFICATION_JSON` or `NATIVE_QUALIFICATION_JSON`. The
+qualified automatic workflow remains unchanged: do not enable it as a shortcut
+to the manual route. Candidate inputs may be exact-run artifact downloads and a
+local signed ZIP; a draft GitHub asset is not a public download prerequisite.
+
+Stage all eleven payloads first. After the owner reviews their actual hashes,
+finalise with the protected owner acceptance JSON. Keep that JSON independently
+available to publication: its bytes must match the new `release-acceptance`
+asset exactly. Prepare `DEPENDENCY_REVIEW_JSON` for all twelve final payload
+roles, including acceptance. A configured manual Actions route must retain the
+`workflow_dispatch` event and protected publication context; the tools reject
+automatic Actions triggers for accepted releases. Local dry-run remains available
+before any authorised remote upload or publication.
+
+The separate **Publish accepted experimental distribution** workflow
+(`publish-accepted.yml`) is manual, main-only and defaults to `publish=false`.
+Before dispatch, Release Please must have selected 2.0.0 and the draft's
+`target_commitish` and `v2.0.0` tag must already name the exact final reviewed
+main SHA. Upload the fourteen frozen files to that draft; do not rebuild or
+replace payloads after their hashes have been accepted. Its body must contain
+the exact experimental-firmware sentence in the release guide.
+
+In the protected `release-publication` environment, set `OWNER_ACCEPTANCE_JSON`
+and `DEPENDENCY_REVIEW_JSON` to the independently reviewed documents. The
+existing `VOMAR_RELEASE_PUBLICATION_TOKEN` reads the private draft as data and,
+only when explicitly selected, publishes it. Repository `SONAR_TOKEN` and the
+workflow's separate check-reading token retain their existing roles. Never
+print token contents or put them in workflow inputs.
+
+If accepting the nRF52840 physical fault-injection limitation in Nordic
+SA-2025-380, disclose it as an unresolved known issue in the public owner
+acceptance. The `firmware-sdk` dependency review may then use
+`reviewed-with-accepted-physical-risk` with an `accepted-physical-risk`
+disposition for that exact ID, matching the public issue's `impact` and `evidence`
+verbatim. Follow the [physical-risk contract](releasing.md#delivered-dependencies-and-native-qualification).
+The qualified publisher rejects this status, and the exception cannot admit a
+different advisory or waive software/remote vulnerability review.
+
+Dispatch with `sha` set to that full source SHA, `version=2.0.0` and
+`publish=false` first. The workflow downloads only the existing fourteen assets,
+checks their manifest/checksums, and invokes the accepted publisher; it performs
+no builds or firmware promotion. Review that result before the final authorised
+dispatch with `publish=true`. Native/firmware qualification remains unverified
+as disclosed; normal firmware catalogues still refuse the candidate and direct
+the user to explicit Bluetooth-trial import.
+
 ## Enable documentation and immutable releases
 
 Configure Pages with GitHub Actions as its source and restrict `github-pages`

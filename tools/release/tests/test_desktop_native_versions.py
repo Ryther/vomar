@@ -16,6 +16,48 @@ import pytest
 from tools.release import package_desktop
 
 
+def frozen_runtime():
+    return {'schemaVersion':1,'nativeVersion':'1.1.0','pythonVersion':'3.13.18',
+            'opensslVersion':'OpenSSL 3.5.9 29 Sep 2026','frozen':True,
+            'defaultTrustStore':{'caCertificates':100,'hashedCaFiles':0},
+            'tlsSelfTest':{'address':'127.0.0.1','trustedCertificateAccepted':True,
+                           'untrustedCertificateRejected':True,'negotiatedTlsVersion':'TLSv1.3'}}
+
+
+@pytest.mark.parametrize('damage',['python','openssl','source-interpreter','untrusted','missing-test','empty-trust'])
+def test_actual_frozen_runtime_mismatch_rejects_package(tmp_path, monkeypatch, damage):
+    observed=frozen_runtime()
+    if damage=='python':observed['pythonVersion']='3.13.12'
+    elif damage=='openssl':observed['opensslVersion']='OpenSSL 3.0.18 30 Sep 2025'
+    elif damage=='source-interpreter':observed['frozen']=False
+    elif damage=='untrusted':observed['tlsSelfTest']['untrustedCertificateRejected']=False
+    elif damage=='missing-test':observed.pop('tlsSelfTest')
+    else:observed['defaultTrustStore']={'caCertificates':0,'hashedCaFiles':0}
+    monkeypatch.setattr(package_desktop,'run',lambda *a,**k:subprocess.CompletedProcess(a,0,stdout=json.dumps(observed)))
+    with pytest.raises(ValueError):package_desktop.verify_frozen_runtime(tmp_path/'cli','1.1.0',tmp_path,{})
+
+
+def test_actual_frozen_runtime_records_lazy_default_ca_directory(tmp_path, monkeypatch):
+    observed=frozen_runtime();observed['defaultTrustStore']={'caCertificates':0,'hashedCaFiles':3}
+    calls=[]
+    def run(*args,**kwargs):
+        calls.append(args);return subprocess.CompletedProcess(args,0,stdout=json.dumps(observed))
+    monkeypatch.setattr(package_desktop,'run',run)
+    assert package_desktop.verify_frozen_runtime(tmp_path/'cli','1.1.0',tmp_path,{})==observed
+    assert calls[0][1:]==('--runtime-info','--tls-self-test')
+
+
+def test_frozen_smoke_cannot_borrow_build_python_or_tls_libraries(tmp_path, monkeypatch):
+    prefix=tmp_path/'runtime/venv';base=tmp_path/'runtime/base/python'
+    monkeypatch.setattr(package_desktop.sys,'prefix',str(prefix));monkeypatch.setattr(package_desktop.sys,'base_prefix',str(base))
+    monkeypatch.setenv('PATH',os.pathsep.join([str(prefix/'bin'),str(base/'bin'),'/usr/bin']))
+    monkeypatch.setenv('LD_LIBRARY_PATH',str(base/'lib'));monkeypatch.setenv('PYTHONPATH',str(tmp_path/'source'))
+    monkeypatch.setenv('DYLD_LIBRARY_PATH',str(base/'lib'))
+    observed=package_desktop.frozen_environment()
+    assert all(name not in observed for name in ('LD_LIBRARY_PATH','DYLD_LIBRARY_PATH','PYTHONPATH'))
+    assert observed['PATH']=='/usr/bin'
+
+
 def test_desktop_version_reads_native_owner(tmp_path, monkeypatch):
     (tmp_path/'pyproject.toml').write_text('[project]\nversion = "1.1.0"\n')
     (tmp_path/'VERSION').write_text('2.0.0\n')
@@ -182,6 +224,7 @@ def synthetic_native_build(tmp_path, monkeypatch):
     monkeypatch.setattr(branding, 'synchronize', lambda **kwargs: False)
     monkeypatch.setattr(package_desktop, 'probe_tools', lambda output: output/'probe')
     monkeypatch.setattr(package_desktop, 'notices', lambda output: output/'notices')
+    monkeypatch.setattr(package_desktop, 'build_runtime_provenance', lambda: {'synthetic':True})
     monkeypatch.setattr(package_desktop, 'fetch', lambda item, path: path.write_bytes(b'synthetic installer'))
     monkeypatch.setattr(inventory, 'native', lambda *args: {'synthetic':True})
     settings = {'cliVersion':'1.1.0', 'platformVersion':'1.1.0'}
@@ -211,6 +254,8 @@ def synthetic_native_build(tmp_path, monkeypatch):
             Path(args[-1]).write_bytes(b'synthetic dmg')
         elif Path(args[0]).name in ('vomar-cli', 'vomar-cli.exe') and args[1:] == ['--version']:
             return subprocess.CompletedProcess(args, 0, stdout=settings['cliVersion']+'\n')
+        elif Path(args[0]).name in ('vomar-cli', 'vomar-cli.exe') and args[1:] == ['--runtime-info','--tls-self-test']:
+            return subprocess.CompletedProcess(args, 0, stdout=json.dumps(frozen_runtime()))
         return subprocess.CompletedProcess(args, 0, stdout='')
     monkeypatch.setattr(package_desktop, 'run', run)
     return output, settings
@@ -227,6 +272,9 @@ def test_build_keeps_distribution_filenames_and_native_metadata(synthetic_native
     assert report['distributionVersion'] == '2.0.0'
     assert report['nativeVersion'] == '1.1.0'
     assert report['nativeVersionVerification']['cli'] == '1.1.0'
+    assert report['nativeRuntime']['frozen']['pythonVersion']=='3.13.18'
+    assert report['nativeRuntime']['frozen']['tlsSelfTest']['untrustedCertificateRejected'] is True
+    assert json.loads((output/f'native-{platform_name}.json').read_bytes())['nativeRuntime']==report['nativeRuntime']
     assert settings['buildEnv']['VOMAR_NATIVE_VERSION'] == '1.1.0'
     if system == 'Windows':
         assert Path(settings['buildEnv']['VOMAR_VERSION_RESOURCE']).is_relative_to(output)

@@ -7,13 +7,20 @@ backup, household configuration, account credential or signing key.
    Desktop packages target Linux x64, Windows x64 and macOS Apple Silicon (arm64).
    Check SHA256SUMS against release-manifest.json. Desktop trusted OS signing is
    deferred; firmware/APK cryptographic signing remains mandatory.
-2. Choose the one `vomar-firmware-VERSION.zip`. The app independently verifies
-   its signature, roles, layout and approved loader. Desktop ZIPs are installers.
-   Do not unzip or substitute image files to bypass package admission.
+2. For qualified firmware choose `vomar-firmware-VERSION.zip`. An explicitly
+   accepted experimental distribution instead contains
+   `vomar-firmware-VERSION-qualification-candidate.zip` and
+   `vomar-release-acceptance-VERSION.json`. Read the acceptance record and known
+   issues before selecting those bytes through manual candidate import. Android
+   uses its firmware chooser; desktop uses the separate Bluetooth trial tool.
+   Automatic firmware catalog/fleet/Zigbee selection rejects the experimental
+   package. The app independently verifies signatures, roles, layout and loader.
+   Desktop ZIPs are installers. Do not unpack firmware to bypass admission.
 3. For an already compatible dimmer, enter the project's Bluetooth recovery,
    select the nearby target, read its live identity and review the operation.
    Do not approve from a radio name or saved room alone. A stable HTTPS carrier
-   can alternatively support an eligible Zigbee2MQTT update after fresh checks.
+   can alternatively support a qualified eligible Zigbee2MQTT update after fresh
+   checks. The experimental OTA asset is not an automatic update approval.
 4. First installation is an isolated bench procedure, with mains disconnected.
    Select the exact DK, explicitly review HALT, acquire two equal full originals,
    save privately and reopen the same bytes. Android 1.0.6 keeps this verified
@@ -31,7 +38,8 @@ backup, household configuration, account credential or signing key.
    Diagnostic export is intentional and may contain device identity: share it
    privately after review, never as a public GitHub release asset.
 
-Current firmware 1.0.0 has thirteen physical qualification checks pending. A
-candidate, successful host test or downloaded package is not a qualified hardware
-release. Use only an operator-controlled qualification process until matching
-physical evidence exists.
+Experimental firmware retains all thirteen pending physical-check flags. The
+release acceptance binds the owner's distribution decision to exact payload
+hashes and discloses unverified native checks; it does not certify those tests.
+The known APS-105-5241 assert can restart Zigbee firmware and remains unresolved.
+A passing host test or downloaded package is not physical qualification.

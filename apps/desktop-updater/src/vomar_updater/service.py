@@ -15,6 +15,7 @@ from .core.storage import Store
 from .adapters.smp import BleakSmp
 from .adapters.openocd import OpenOcdProbe
 from .adapters.credentials import Credentials
+from .adapters.filesystem import write_new_json
 from .adapters.mqtt import MqttBridge
 from .adapters import releases
 
@@ -126,7 +127,7 @@ class Service:
         if action=='diagnostics.export':
             report=self.store.setting('last-diagnostic')
             if report is None:raise ValueError('Read a diagnostic report first')
-            with Path(a['path']).open('x',encoding='utf-8') as f:json.dump(report,f,indent=2)
+            await asyncio.to_thread(write_new_json,a['path'],report)
             return {'exported':True}
         if action=='probe.inspect':
             if self.probe:self.probe.close()

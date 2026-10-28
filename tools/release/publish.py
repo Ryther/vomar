@@ -22,6 +22,12 @@ from tools.firmware.ota_release import REQUIRED_CHECKS,SPLIT_REQUIRED_CHECKS
 from cryptography.hazmat.primitives import serialization
 
 CHECKS=set(loads((Path(__file__).resolve().parents[2]/'.github/required-checks.json').read_bytes())['release'])
+ACCEPTED_RELEASE_NOTICE='Experimental firmware: APS-105-5241 remains unresolved; firmware and native physical qualification checks are unverified.'
+
+
+def require_accepted_notice(release):
+    if not isinstance(release.get('body'),str) or ACCEPTED_RELEASE_NOTICE not in release['body']:
+        raise ValueError('Accepted release draft must disclose its experimental firmware and unverified qualification')
 
 
 def select_draft(releases,tag,sha):
@@ -56,12 +62,26 @@ def qualification(package,report,source_sha):
     return q
 
 
-def verify_candidate(manifest,directory,qualification_path,public_key,android_tools=None,*,native_evidence=None,dependency_evidence=None):
+def verify_candidate(manifest,directory,qualification_path,public_key,android_tools=None,*,native_evidence=None,dependency_evidence=None,accepted_with_known_issues=False,acceptance_path=None):
     validate(manifest,directory)
-    from .evidence import native_qualification,dependency_review,DEPENDENCY_GRAPHS
-    if not native_evidence or not dependency_evidence:raise ValueError('Protected native qualification and delivered dependency review are required')
-    native_qualification(manifest,loads(Path(native_evidence).read_bytes()))
+    from .evidence import native_qualification,dependency_review,owner_acceptance,require_manual_acceptance,DEPENDENCY_GRAPHS
     assets={a['role']:a for a in manifest['artifacts']}
+    accepted_approval=None
+    if accepted_with_known_issues:
+        require_manual_acceptance()
+        expected_files={a['filename'] for a in manifest['artifacts']}|{'release-manifest.json','SHA256SUMS'}
+        if len(expected_files)!=14 or {p.name for p in directory.iterdir()}!=expected_files or any(p.is_symlink() or not p.is_file() for p in directory.iterdir()):
+            raise ValueError('Accepted distribution requires exactly fourteen reviewed regular files')
+        if not acceptance_path or 'release-acceptance' not in assets:raise ValueError('Protected owner acceptance and its published asset are required')
+        accepted_raw=Path(acceptance_path).read_bytes();accepted_approval=loads(accepted_raw);owner_acceptance(manifest,accepted_approval)
+        approval=assets['release-acceptance']
+        if approval['filename']!=f'vomar-release-acceptance-{manifest["distributionVersion"]}.json' or (directory/approval['filename']).read_bytes()!=accepted_raw:
+            raise ValueError('Published owner acceptance differs from protected approval')
+        if not dependency_evidence:raise ValueError('Protected delivered dependency review remains required')
+    else:
+        if 'release-acceptance' in assets:raise ValueError('Experimental release requires explicit accepted-with-known-issues mode')
+        if not native_evidence or not dependency_evidence:raise ValueError('Protected native qualification and delivered dependency review are required')
+        native_qualification(manifest,loads(Path(native_evidence).read_bytes()))
     if 'source-sbom' not in assets:raise ValueError('Delivered dependency inventories are missing')
     from tools.firmware.bounded_zip import read_member
     with zipfile.ZipFile(directory/assets['source-sbom']['filename']) as archive:
@@ -75,17 +95,24 @@ def verify_candidate(manifest,directory,qualification_path,public_key,android_to
             from .evidence import PLATFORMS
             expected={a['filename']:a['sha256'] for a in manifest['artifacts'] if a['role'] in PLATFORMS[graph[7:]]}
             if data.get('artifacts')!=expected or not data.get('files') or not data.get('packages'):raise ValueError('Native inventory does not describe the delivered bundle')
-    dependency_review(manifest,loads(Path(dependency_evidence).read_bytes()),inventories)
+    dependency_review(manifest,loads(Path(dependency_evidence).read_bytes()),inventories,
+        accepted_with_known_issues=accepted_with_known_issues,acceptance=accepted_approval)
     raw=(directory/assets['firmware-common']['filename']).read_bytes()
-    key=serialization.load_pem_public_key(Path(public_key).read_bytes());package=validate_common_v3_bundle(raw,key)
+    key=serialization.load_pem_public_key(Path(public_key).read_bytes())
+    if accepted_with_known_issues:
+        from tools.firmware.package_common_android_update_v3 import _validate_common_v3_bundle
+        package=_validate_common_v3_bundle(raw,key,expected_purpose='qualification-candidate')
+    else:package=validate_common_v3_bundle(raw,key)
     if package['main']['version']!=manifest['components']['firmware'] or assets['firmware-common']['componentVersion']!=package['main']['version']:raise ValueError('Firmware version identity mismatch')
-    q=qualification(package,Path(qualification_path).read_bytes(),manifest['commit'])
+    if not accepted_with_known_issues:
+        if qualification_path is None:raise ValueError('Protected physical qualification is required')
+        q=qualification(package,Path(qualification_path).read_bytes(),manifest['commit'])
     with zipfile.ZipFile(io.BytesIO(raw)) as z:
         expected={n:package[n]['fileSha256'] for n in ('main','recovery','migration','stockRestore','stockBootstrap') if n in package};expected['loader']=digest(z.read('loader.bin'))
         ota=package.get('zigbeeOta')
         if not ota:raise ValueError('Distribution requires its signed Zigbee carrier')
         expected['zigbeeOta']=ota['fileSha256']
-        if q.get('components')!=expected:raise ValueError('Physical evidence component set mismatch')
+        if not accepted_with_known_issues and q.get('components')!=expected:raise ValueError('Physical evidence component set mismatch')
         carrier=(directory/assets['zigbee-ota']['filename']).read_bytes()
         if len(carrier)!=ota['size'] or digest(carrier)!=ota['fileSha256'] or carrier!=z.read('main.ota'):raise ValueError('Distribution OTA bytes differ from signed firmware')
     if 'desktop-windows-setup' not in assets:raise ValueError('Per-user Windows installer is missing')
@@ -98,7 +125,9 @@ def verify_candidate(manifest,directory,qualification_path,public_key,android_to
     certificates=re.findall(r'Signer #[0-9]+ certificate SHA-256 digest: ([0-9a-fA-F]+)',report)
     pinned=loads((Path(__file__).with_name('signing-identities.json')).read_bytes())
     if certificates!=[pinned['androidCertificateSha256']]:raise ValueError('APK signer continuity mismatch')
-    if assets['firmware-common']['filename']!=f'vomar-firmware-{manifest["distributionVersion"]}.zip':raise ValueError('Noncanonical firmware name')
+    suffix='-qualification-candidate' if accepted_with_known_issues else ''
+    if assets['firmware-common']['filename']!=f'vomar-firmware-{manifest["distributionVersion"]}{suffix}.zip':raise ValueError('Noncanonical firmware name')
+    if accepted_with_known_issues and assets['zigbee-ota']['filename']!=f'vomar-firmware-{manifest["distributionVersion"]}-qualification-candidate.ota':raise ValueError('Noncanonical experimental OTA name')
     return package
 
 
@@ -160,8 +189,16 @@ def verify_checks(value,sha):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--repo',default='Ryther/vomar');p.add_argument('--directory',type=Path,required=True);p.add_argument('--qualification',type=Path,required=True);p.add_argument('--public-key',type=Path,required=True);p.add_argument('--android-tools',type=Path);p.add_argument('--native-qualification',type=Path,required=True);p.add_argument('--dependency-review',type=Path,required=True);p.add_argument('--publish',action='store_true');a=p.parse_args()
-    manifest=loads((a.directory/'release-manifest.json').read_bytes());verify_candidate(manifest,a.directory,a.qualification,a.public_key,a.android_tools,native_evidence=a.native_qualification,dependency_evidence=a.dependency_review)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--repo',default='Ryther/vomar');p.add_argument('--directory',type=Path,required=True);p.add_argument('--qualification',type=Path);p.add_argument('--public-key',type=Path,required=True);p.add_argument('--android-tools',type=Path);p.add_argument('--native-qualification',type=Path);p.add_argument('--dependency-review',type=Path,required=True);p.add_argument('--publish',action='store_true');p.add_argument('--accepted-with-known-issues',action='store_true');p.add_argument('--acceptance',type=Path);a=p.parse_args()
+    if a.accepted_with_known_issues:
+        from .evidence import require_manual_acceptance
+        require_manual_acceptance()
+        if not a.acceptance:p.error('--accepted-with-known-issues requires --acceptance')
+        if a.qualification or a.native_qualification:p.error('Experimental acceptance cannot use qualified firmware/native reports')
+    elif a.acceptance or not a.qualification or not a.native_qualification:
+        p.error('Qualified publication requires --qualification and --native-qualification; --acceptance requires explicit experimental mode')
+    manifest=loads((a.directory/'release-manifest.json').read_bytes());verify_options={'native_evidence':a.native_qualification,'dependency_evidence':a.dependency_review,'accepted_with_known_issues':a.accepted_with_known_issues,'acceptance_path':a.acceptance}
+    verify_candidate(manifest,a.directory,a.qualification,a.public_key,a.android_tools,**verify_options)
     paths={x['filename']:a.directory/x['filename'] for x in manifest['artifacts']};paths['release-manifest.json']=a.directory/'release-manifest.json';paths['SHA256SUMS']=a.directory/'SHA256SUMS'
     expected=''.join(digest(path.read_bytes())+'  '+name+'\n' for name,path in sorted(paths.items()) if name!='SHA256SUMS')
     if paths['SHA256SUMS'].read_text()!=expected:raise ValueError('Checksums do not describe the complete immutable asset set')
@@ -174,10 +211,16 @@ def main():
     def fetch(path,params):
         req=urllib.request.Request('https://sonarcloud.io'+path+'?'+urllib.parse.urlencode(params),headers={'Authorization':'Bearer '+sonar_token})
         with urllib.request.urlopen(req,timeout=30) as r:return loads(r.read())
-    security_check(fetch,manifest['commit'],'Ryther_vomar');draft=remote.pin_draft(manifest['tag'],manifest['commit']);select_draft([draft],manifest['tag'],manifest['commit']);reconcile_assets(remote,draft['id'],paths)
+    security_check(fetch,manifest['commit'],'Ryther_vomar');draft=remote.pin_draft(manifest['tag'],manifest['commit']);select_draft([draft],manifest['tag'],manifest['commit'])
+    if a.accepted_with_known_issues:require_accepted_notice(draft)
+    reconcile_assets(remote,draft['id'],paths)
     # Recheck mutable external gates immediately before the single publish mutation.
-    select_draft(remote.releases(),manifest['tag'],manifest['commit']);verify_checks(remote.checks(manifest['commit']),manifest['commit'])
+    current_draft=select_draft(remote.releases(),manifest['tag'],manifest['commit'])
+    if a.accepted_with_known_issues:require_accepted_notice(current_draft)
+    verify_checks(remote.checks(manifest['commit']),manifest['commit'])
     if remote.tag_sha(manifest['tag'])!=manifest['commit']:raise ValueError('Tag changed during upload')
-    security_check(fetch,manifest['commit'],'Ryther_vomar');remote.publish(draft['id'])
+    security_check(fetch,manifest['commit'],'Ryther_vomar')
+    if a.accepted_with_known_issues:verify_candidate(manifest,a.directory,a.qualification,a.public_key,a.android_tools,**verify_options)
+    remote.publish(draft['id'])
 
 if __name__=='__main__':main()

@@ -82,6 +82,49 @@ when invoking Gradle from another shell. Device coverage uses an isolated API 35
 emulator and the synthetic first-install UI/adapter tests. Ordinary unit tests
 and `jacocoDebugReport` never start an emulator or access physical hardware.
 
+## Isolated native desktop runtime
+
+The desktop native jobs use CPython 3.13.18 and OpenSSL 3.5.9 from the whole
+Astral Python Build Standalone 20261026 runtime, selected by exact platform,
+archive SHA256 and source provenance in `tools/dev/desktop-runtimes.json`.
+This changes neither the container's Python 3.13.12 nor the independent firmware
+SDK environment. Do not replace individual OpenSSL DLLs or combine runtime trees.
+
+For a native rebuild on the matching OS/architecture, use a new private output
+directory and Bash (Git Bash on Windows):
+
+```sh
+python - <<'PY'
+from pathlib import Path
+import shutil, subprocess
+from tools.dev.desktop_runtime import bootstrap
+env = bootstrap(Path('_test/desktop-runtime'))
+python = shutil.which('python', path=env['PATH'])
+for arguments in [
+    ['-m', 'pip', 'install', '--require-hashes', '-r', 'requirements-desktop.lock'],
+    ['-m', 'pip', 'install', '--no-deps', '.'],
+    ['-m', 'tools.release.package_desktop', '--output', '_test/native'],
+]:
+    subprocess.run([python, *arguments], env=env, check=True)
+PY
+```
+
+The bootstrap checks the complete compressed archive before bounded extraction,
+verifies the selected interpreter and OpenSSL before creating its own venv, and
+clears inherited Python/loader overrides for child processes. It refuses an
+existing destination. CI exports this environment only to subsequent native
+desktop job steps. No SDK/global environment or container is replaced.
+
+`vomar --runtime-info` reads runtime identity and default CA-store metadata;
+it opens no application state or network connection. The explicit
+`--runtime-info --tls-self-test` adds a bounded disposable loopback TLS test with
+fresh synthetic certificates. Frozen native builds require both trust success
+and untrusted-certificate rejection, plus observed default CA-store entries.
+OpenSSL may load hashed CA directories lazily, so zero cached CA certificates
+alone is not an empty trust store. User `SSL_CERT_FILE`/`SSL_CERT_DIR` choices are
+retained; no global certificate override is installed. These checks do not
+qualify Bluetooth, USB, a broker or physical firmware behavior.
+
 ## Optional Linux bench connections
 
 Use the same configuration. To expose Linux USB and the system D-Bus socket,

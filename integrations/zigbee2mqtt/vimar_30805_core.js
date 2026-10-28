@@ -527,7 +527,7 @@ export function buildDefinition({light, addCustomCluster, expose, dataTypes = {}
         description: 'Vimar 30805 custom dimmer firmware',
         extend: [addCustomCluster(CLUSTER_NAME, clusterDefinition(dataTypes)),
             standardLight,
-            {isModernExtend: true, fromZigbee, toZigbee, exposes: [(device) => exposeDescriptors(device).map(expose)],
+            {isModernExtend: true, fromZigbee, toZigbee, exposes: [(device) => exposeDescriptors(device).map((descriptor) => expose(descriptor))],
                 configure: [async (device) => {
                     const endpoint = device.getEndpoint(1);
                     await endpoint.read(CLUSTER_NAME, ['schemaVersion'], {});

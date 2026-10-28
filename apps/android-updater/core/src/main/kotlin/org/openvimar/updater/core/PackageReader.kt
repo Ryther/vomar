@@ -2,6 +2,7 @@ package org.openvimar.updater.core
 
 import java.io.InputStream
 import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
 import org.apache.commons.compress.archivers.zip.ZipFile
 import org.apache.commons.compress.utils.SeekableInMemoryByteChannel
 
@@ -30,6 +31,7 @@ object PackageReader {
                 val entry=all.nextElement(); val limit=allowed[entry.name] ?: error("Unexpected ZIP entry")
                 require(!entry.isDirectory && !entry.isUnixSymlink && (entry.unixMode==0 || entry.unixMode and 0xf000==0x8000)) {"Nonregular entry"}
                 require(entry.name !in entries && !entry.generalPurposeBit.usesEncryption()) {"Duplicate or encrypted entry"}
+                require(entry.method==ZipEntry.STORED||entry.method==ZipEntry.DEFLATED) {"Unsupported ZIP compression method"}
                 require(zip.canReadEntryData(entry)) {"Unsupported ZIP entry"}
                 val data=zip.getInputStream(entry).use { bounded(it,minOf(limit,MAX_ZIP-total)) }
                 require(data.isNotEmpty()) {"Empty entry"}

@@ -374,8 +374,18 @@ Core1.19.1, serialization1.12.0 and MCUmgr3.4.1 are locked with strict artifact
 verification. With dependencies available, run from `apps/android-updater`:
 
 ```sh
-./gradlew --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:assembleRelease :app:writeRuntimeInventory
+./gradlew --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:verifyReleaseObfuscation :app:writeRuntimeInventory
 ```
+
+Release APKs use R8 code obfuscation and resource shrinking. The
+`verifyReleaseObfuscation` task assembles the unsigned release and requires its
+actual mapping to contain renamed project classes. Retain the mapping with the
+exact APK for diagnostic stack traces. Narrow reflection rules preserve the
+project's Nordic CBOR response fields and Paho transport/logger entry points;
+Kotlin serialization uses the pinned library's consumer rules. Package ZIPs admit
+only stored or deflated entries and reject optional compression codecs before
+decoding. Optimized runtime
+checks must execute the release APK; debug JVM tests alone do not exercise R8.
 
 The toolchain migration follows [AGP compatibility](https://developer.android.com/build/releases/agp-9-4-0-release-notes)
 and [built-in Kotlin migration](https://developer.android.com/build/migrate-to-built-in-kotlin).
