@@ -43,7 +43,7 @@ def server_transport_error(monkeypatch, error, *, phase='untrusted'):
         if current==phase:
             if phase=='trusted':raise error
             try:return original(context,socket,*args,**kwargs)
-            except ssl.SSLError:raise error from None
+            except (ssl.SSLError,ConnectionResetError):raise error from None
         return original(context,socket,*args,**kwargs)
     monkeypatch.setattr(ssl.SSLContext,'wrap_socket',wrap)
     return calls
