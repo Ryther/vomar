@@ -306,18 +306,22 @@ def test_pending_prior_evidence_blocks_sdk_error_replacement(sdk_capture, scenar
     assert raw[128:] == b"\0" * 128
 
 
-def test_adapter_has_only_registration_and_ram_capture_dependencies(tmp_path):
+@pytest.mark.parametrize("coverage", [False, True])
+def test_adapter_has_only_registration_and_ram_capture_dependencies(tmp_path, coverage):
     write_headers(tmp_path)
     obj = tmp_path / "adapter.o"
     subprocess.run([
         "cc", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-fno-lto",
+        *(["--coverage"] if coverage else []),
         "-DCONFIG_VIMAR_FAULT_DIAGNOSTICS=1", "-I", str(tmp_path), "-I", str(SOURCE),
         "-c", str(SOURCE / "fault_diag_sdk.c"), "-o", str(obj),
     ], check=True, capture_output=True, text=True)
     undefined = subprocess.run(["nm", "-u", str(obj)], check=True, capture_output=True, text=True)
-    assert {line.split()[-1] for line in undefined.stdout.splitlines()} == {
-        "vimar_fault_diag_error", "zb_error_register_app_handler",
-    }
+    dependencies = {line.split()[-1] for line in undefined.stdout.splitlines()}
+    required = {"vimar_fault_diag_error", "zb_error_register_app_handler"}
+    # The host coverage lane adds this exact compiler runtime, not SDK services.
+    instrumented = required | {"__gcov_init", "__gcov_exit", "__gcov_merge_add"}
+    assert dependencies in (required, instrumented)
 
 
 @pytest.mark.parametrize(("header", "before", "after"), [
