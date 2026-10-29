@@ -132,6 +132,10 @@ def test_legacy_loader_admits_same_signed_contract_without_a_recovery_pin(pairli
  assert bytes(loader)==allowed.raw[:32]
  # The existing installer API must still reject a different exact image.
  pairlib.ota_pair_verify.argtypes=[c.c_void_p,c.c_size_t,c.c_void_p,c.c_size_t,c.c_void_p,c.c_void_p,c.POINTER(Info)]
+ assert pairlib.ota_pair_verify(memory,0x100000,allowed,1,hashlib.sha256(recovery).digest(),loader,c.byref(out))==0
+ assert bytes(out.output_digest)==hashlib.sha256(recovery).digest() and bytes(loader)==allowed.raw[:32]
+ assert pairlib.ota_pair_verify(memory,0x100000,allowed,1,bytes(out.signed_digest),loader,c.byref(out))<0
+ assert bytes(loader)==bytes(32) and bytes(out)==bytes(c.sizeof(out))
  assert pairlib.ota_pair_verify(memory,0x100000,allowed,1,bytes(32),loader,c.byref(out))<0
 
 
