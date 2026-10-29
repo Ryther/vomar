@@ -201,14 +201,16 @@ static void test_boots_build_identity_and_persist_acknowledgement(void)
     bounds();
 }
 
-static void test_all_interrupted_stores_and_reentry(void)
+static void test_all_interrupted_stores_and_reentry(bool tagged)
 {
     /* Stops immediately before each store, including the final commit. */
     for (volatile unsigned cut = 0; cut < 33; cut++) {
         fresh(1);
+        reenter = tagged;
         stop_after = cut;
         if (setjmp(interrupted) == 0) {
-            (void)fault_diag_capture_assert(&context, 7, 8);
+            if (tagged) (void)fault_diag_capture_error(&context, UINT32_C(0xa1ff007c), 652, -29);
+            else (void)fault_diag_capture_assert(&context, 7, 8);
             assert(!"expected injected interruption");
         }
         stop_after = UINT_MAX;
@@ -222,10 +224,12 @@ static void test_all_interrupted_stores_and_reentry(void)
     }
     for (volatile unsigned cut = 0; cut < 33; cut++) {
         fresh(3);
-        assert(fault_diag_capture_error(&context, 123, 456, -789));
+        assert(fault_diag_capture_error(&context, tagged ? UINT32_C(0xa1ff007c) : 123, tagged ? 652 : 456, tagged ? -29 : -789));
+        assert(!fault_diag_capture_assert(&context, 116, 81));
         struct fault_diag_record cause, after;
         assert(fault_diag_read(window, 0, identity, &cause));
         stores = 0;
+        reenter = tagged;
         stop_after = cut;
         if (setjmp(interrupted) == 0) {
             (void)fault_diag_capture_abort(&context, 7, 8, 9, 10, 11, 12);
@@ -296,7 +300,8 @@ int main(void)
     test_checked_error_and_abort_without_cause();
     test_validation_rejects_corruption_and_wrong_metadata();
     test_boots_build_identity_and_persist_acknowledgement();
-    test_all_interrupted_stores_and_reentry();
+    test_all_interrupted_stores_and_reentry(false);
+    test_all_interrupted_stores_and_reentry(true);
     test_cached_snapshot_validity_and_sequence_wrap();
     puts("fault diagnostics behavioral tests passed");
     return 0;
