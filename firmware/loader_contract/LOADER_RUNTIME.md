@@ -1,52 +1,61 @@
-# Opt-in typed loader runtime snapshot (source island)
+# Typed loader runtime integration
 
-`loader_runtime_snapshot()` consumes an exact48KiB immutable reader, explicit
-approved typed records, local FICR/geometry and locally computed UICR SHA256.
-It reuses the reviewed portable authorization core. Common authorization also
-validates the complete committed canonical VAR1 anchor against the live values;
-the returned anchor measurement is SHA256 of the complete4096-byte page.
-Legacy authorization retains its exact full48KiB digest type and has no anchor
-measurement. Unknown kind/family or malformed/mismatched anchors fail closed.
-Outputs stage locally through all input/hash reads, including aliased live UICR,
-records and reader storage; failure zeros the final output only afterward.
+The runtime measures and authorizes an exact 48 KiB loader view using explicit
+approved typed records, local FICR/geometry and locally computed UICR SHA-256.
+`loader_runtime_snapshot()` reuses the portable [anchor contract](README.md).
+`runtime.cmake` wires the implementation into opted-in applications; it requires
+`CONFIG_VIMAR_LOADER_RUNTIME_V2`, a finite validated bindings header and an
+existing authenticated image verifier. It does not enable an unrestricted
+loader allowlist or add a FLASH-write endpoint.
 
-The new source has no flash writer, retained request, ACL/protection operation,
-signature bypass, global allowlist or registered SMP handler. Existing core,
-READ0 protocol1, ordinary image/profile2 rules, current APK and schemas1/2 are
-unchanged. Object compilation is not a native consumer integration proof.
+## Identity and digest meanings
 
-The proposed explicit opt-in READ1 identity2 uses the existing group0x8040:
+Common authorization requires the approved 44 KiB code-family digest and a
+complete committed VAR1 page matching live values. The returned anchor measurement
+is SHA-256 of all 4096 bytes. Legacy authorization requires the exact complete
+48 KiB digest and returns no anchor measurement. Unknown types/families, failed
+reads and malformed/mismatching anchors fail closed. Inputs are consumed before
+publishing outputs, including supported aliasing cases.
+
+The authenticated READ1 identity2 in group `0x8040` contains:
 
 ```text
 {protocol:2, model:"VIMAR30805", layout:2, uid:[uint32,uint32],
  loader:{kind:"common-code44k-anchor-v1",digest:bstr32,anchor_sha256:bstr32}}
 ```
 
-For legacy, kind is `legacy-full48k-sha256` and `anchor_sha256` is absent.
-`loader_runtime_identity_encode()` writes the fields of that five-pair map.
-It stages its input before encoding and refuses unknown types or a legacy value
-carrying an anchor hash. The measurement is not hardware attestation or a
-project signature. Common approval always requires the typed code-family
-allowlist and live anchor validation; an arbitrary masked legacy hash cannot
-be renamed as a common family.
+Legacy kind is `legacy-full48k-sha256`; `anchor_sha256` is absent.
+`loader_runtime_identity_encode()` rejects unknown types or a legacy record with
+an anchor measurement. This is authenticated local measurement, not hardware
+attestation or a project signature. Only a genuinely unsupported command/group
+may use approved legacy READ0 fallback; malformed or refused identity must not
+cause downgrade.
 
-Public JSON records have exactly `kind` and lowercase `sha256` fields. A future
-signed schema3 `loaderContracts` list uses1..64 unique records sorted by
-(kind,sha256); this file does not add that schema to existing consumers.
-`tools/firmware/loader_runtime_contract.py` measures an exact canonical loader
-artifact with one explicit kind and emits canonical sorted JSON+newline. It
-never reads a key, backup, UID registry or hardware and does not authorize the
-measured artifact. Runtime common admission still needs an approved record and
-a valid committed per-unit anchor; the code-family span deliberately excludes
-only the precisely defined anchor page and uses the exact domain plus one NUL.
-There is no arbitrary range/mask/truncation option.
+Public JSON records contain exactly `kind` and lowercase `sha256`. Signed
+schema3 `loaderContracts` has 1–64 unique records sorted by `(kind,sha256)`.
+`tools/firmware/loader_runtime_contract.py` measures an explicitly typed canonical
+artifact and emits sorted JSON plus newline. Measurement does not approve it.
+There is no arbitrary ignored-range, mask or truncation option.
 
-Next integration requires independent review, default-off firmware READ1 wiring
-with local hardware reads and approved typed records, matching release verifier
-and signed schema3 support, then Android strict READ1 handling. Only genuine
-unsupported command/group may fall back to exact approved legacy READ0 records;
-malformed, stale, unknown or refused identity cannot downgrade. Android/DK anchor
-construction/programming remains separately gated by a verified original ZIP,
-successful archive export/reopen proof and commit-last readback. No compiler or
-project private key belongs on the phone. No physical programming or future
-first-flash qualification is supplied by this portable source.
+## Pair compatibility and operation binding
+
+`loader_pair_verify()` validates typed loader authority and pinned-key
+RECOVERY role2/profile2 in slot1. The expected recovery **full signed-file** hash
+binds the pair; `recovery.signed_digest` separately supplies SMP/manifest image
+identity. The full 48 KiB loader digest, including its per-unit anchor, remains
+the JournalV2 consistency binding. Never reinterpret it as a family digest.
+
+Version-independent `vimar30805-split-v2` contract admission establishes supported
+layout/protocol compatibility. Every operation still checks its exact image
+hashes, roles and live identity. A version-independent contract is not permission
+to substitute arbitrary component bytes or reuse an old review.
+
+## Consumers and checks
+
+Owners include `loader_runtime_zephyr.c`, `loader_pair.c`, the Zigbee OTA and
+installer paths, signed-package validators and Android/desktop shared admission.
+Initial anchor construction requires a verified original archive and successful
+save/reopen; programming commits the anchor last and ends halted. See
+[the first-install contract](../../tools/android/first_install_contract/README.md).
+Host parser/crypto tests, SDK compilation and physical installation are distinct
+evidence. No native build or source integration alone qualifies this route.

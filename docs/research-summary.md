@@ -9,6 +9,12 @@ physical endpoint or safety coverage of the downstream circuit.
 
 ## Architecture and current status
 
+For checkout versions, use native version owners such as `firmware/VERSION`;
+for shipped bytes and qualification, use the exact release manifest and public
+acceptance/evidence record. Distribution and component versions are independent.
+APS-105-5241 remains unresolved in this source. Subsequent work on another branch
+is not evidence for this checkout.
+
 The custom application uses Nordic nRF Connect SDK/Zephyr with ZBOSS for Zigbee,
 configurable gestures/timers, versioned persistent settings, LED policy and
 manufacturer cluster `0xFC00`. The hardware backend and DK simulator are separate.
@@ -22,8 +28,8 @@ loader. Signed role/profile, slot geometry, component-pair and finite loader
 contracts constrain updates. The compressed Zigbee OTA installer stages an
 image outside its destination and authenticates it before reconstruction; BLE
 provides the independent recovery route. The common Android package also carries
-migration and stock-restoration helpers. Android 1.0.6 offers explicit original restoration from a device with its
-retained matching original; its physical qualification is still pending. The
+migration and stock-restoration helpers. Android implements explicit original restoration using the retained matching
+original; generic-route physical qualification remains pending. The
 presence of restoration helpers alone does not qualify that path. See
 [loader contracts](../firmware/loader_contract/README.md),
 [common restore engine](../firmware/common_restore/README.md),
@@ -47,10 +53,10 @@ full original-stock restoration/readback and later mounted-device updates with
 preserved settings and network return. One owner-reported Android Bluetooth
 update was corroborated by post-trial radio diagnostics, without a fresh full
 image hash. These successes are real but apply to their recorded versions and
-routes. They cannot promote 1.0.0 to fleet qualification or qualify the new
-common-loader first-install and generic restore helpers.
+routes. They cannot qualify later firmware or the common-loader first-install and
+generic restore helpers.
 
-## Zigbee report correction in the MAIN 1.0.1 candidate
+## Historical Zigbee report correction (MAIN 1.0.1)
 
 **CONFIRMED:** a captured MAIN 1.0.0 assertion identifies ZBOSS file 105,
 line 5241. In the matching linked binary, `zb_aps_hdr_parse_retrans` checks

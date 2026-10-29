@@ -129,6 +129,44 @@ alone is not an empty trust store. User `SSL_CERT_FILE`/`SSL_CERT_DIR` choices a
 retained; no global certificate override is installed. These checks do not
 qualify Bluetooth, USB, a broker or physical firmware behavior.
 
+## Run and inspect the desktop GUI
+
+Install `requirements-desktop.lock` in a disposable Python 3.13 environment and
+install this project with `--no-deps`; keep this environment separate from the
+firmware SDK. From the repository root, use synthetic private state:
+
+```sh
+PYTHONPATH="$PWD/apps/desktop-updater/src" python -m vomar_updater.gui.app --state "$PWD/_test/desktop-manual-state"
+```
+
+The development image includes Qt's X11 runtime dependencies. The default
+container does not forward a host display. Interactive use needs a deliberately
+mounted host X11 socket, matching `DISPLAY` and host display authorization;
+setting `DISPLAY` alone is insufficient. With the socket mounted and container
+UID matching the host desktop user's UID, grant access in a **host** terminal:
+
+```sh
+xhost +SI:localuser:"$(id -un)"
+```
+
+After the GUI session, revoke that grant on the host:
+
+```sh
+xhost -SI:localuser:"$(id -un)"
+```
+
+For a bounded startup smoke check without a host display:
+
+```sh
+QT_QPA_PLATFORM=xcb PYTHONPATH="$PWD/apps/desktop-updater/src" xvfb-run -a python -m vomar_updater.gui.app --state "$PWD/_test/desktop-smoke-state" --smoke-test
+```
+
+A missing Qt library differs from display authorization failure: inspect native
+library resolution (for example with `ldd`) before changing display permissions.
+Use `QT_QPA_PLATFORM=offscreen` for the synthetic Qt test suite. Smoke/offscreen
+checks do not establish host interaction, native dialogs or BLE/USB behavior.
+See [UX evidence](ux-evidence.md) for the required review journeys.
+
 ## Optional Linux bench connections
 
 Use the same configuration. To expose Linux USB and the system D-Bus socket,
@@ -227,10 +265,11 @@ against the original product source archive, rather than included as nonexistent
 paths in Python extraction. Successful uploads also require the GitHub code
 scanning configuration described in [GitHub setup](github-setup.md).
 
-Host C coverage instruments only durable firmware sources, including inline
-functions in that source tree. Disposable test harnesses and synthetic SDK
-headers are excluded before compilation. GCC maps and executed profiles must
-still match exactly, and gcovr errors remain fatal. Run the actual native suites
+Host C coverage compiles all translation units with coverage enabled, then
+uses GCC filename filtering to retain durable firmware sources, including code
+included by a synthetic harness. gcovr selects product firmware files and
+excludes disposable harnesses and synthetic headers from the report. GCC maps
+and executed profiles must still match exactly, and gcovr errors remain fatal. Run the actual native suites
 and produce XML with:
 
 ```sh

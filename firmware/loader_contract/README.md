@@ -1,11 +1,15 @@
-# Portable loader/backup-anchor contract v1
+# Typed loader and backup-anchor contract
 
-This source-only core is opt-in: no existing firmware CMake target includes it.
-It does not select an image, verify a firmware signature, program flash, control
-ACL protection, reset hardware or extend existing loader allowlists. Existing
-main/recovery/migration/restore consumers are unchanged. Integration must retain
-successful MCUboot validation and explicit privileged RESTORE authorization
-before any protection exception.
+This reference describes the portable C authority used by opted-in firmware and
+host tooling. `firmware/CMakeLists.txt` includes `runtime.cmake`; enabling
+`CONFIG_VIMAR_LOADER_RUNTIME_V2` requires an explicit finite bindings header and
+an existing authenticated image verifier. The core itself supplies no FLASH
+writer, signature verifier, protection exception or hardware reset.
+
+Typed loader approval and live anchor validation are separate from exact
+per-operation image/hash binding. See [runtime integration](LOADER_RUNTIME.md),
+[common restore gate](../common_restore_gate/README.md) and
+[first-install contract](../../tools/android/first_install_contract/README.md).
 
 The canonical anchor is one 4096-byte page at `0xb000..0xc000`. All multibyte
 integers are little endian. There are no caller-selected address fields.
@@ -34,8 +38,8 @@ integers are little endian. There are no caller-selected address fields.
 | 252 | 4 | Commit marker `0xa60c17ed` |
 | 256 | 3840 | All `0xff` |
 
-`loader_anchor_encode` creates the complete canonical page in **RAM**. A future
-SWD installer must program/readback-verify the body with commit erased, then
+`loader_anchor_encode` creates the complete canonical page in **RAM**. The
+first-install writer must program/readback-verify the body with commit erased, then
 program the four-byte commit word last. The core supplies no flash writer.
 `loader_anchor_decode` requires exactly 4096 bytes, all fixed/reserved values,
 CRC/commit, and locally supplied live part/variant/UID/geometry/UICR hash. It
@@ -107,50 +111,40 @@ compares the appropriate accepted table entry. It supports original boot-page
 checks for later SRAM staging, but has no flash callback or finalizer. Page
 checks may run before begin-write for query/dry-run; an actual writer must
 explicitly require successful begin-write and page verification. This library
-cannot enforce correct use by a future hardware adapter.
+cannot enforce correct use by a hardware adapter.
 
-The generic restorer must still check all staged pages, reconstruct/hash the
-logical whole original FLASH against the anchor, recheck UICR, stop radio/reset
-sources and use the reviewed SRAM-only finalizer. Those consumers are pending.
-The current exact-legacy gate and candidate 0.6.0 artifacts remain unchanged.
+The [common restorer](../common_restore/README.md) checks staged pages,
+reconstructs/hashes logical whole original FLASH against the anchor, rechecks
+UICR and uses an SRAM-only finalizer after quiescing execution. These consumers
+are implemented; physical qualification remains separate.
 
-## Evidence
 
-Independent Python fixtures use `struct` and `zlib.crc32`; their wire values do
-not come from this encoder. OpenSSL EVP supplies the host callback backend and
-Python hashlib independently checks family/full/table/page digests. No private
-key or hardware is used.
+## Verify changes
 
-Fresh verification on 2026-10-23:
+From the pinned development environment:
 
-- `work/ncs-venv/bin/python -m pytest -q tools/firmware/tests/test_loader_contract.py`:
-  **93 passed**. The same 93 tests pass with compiler flags
-  `-fsanitize=undefined -fno-sanitize-recover=all`.
-- Complete corrected `tools/firmware/tests`: **562 passed, 39 subtests
-  passed**, 53.16 s.
-- Standalone Cortex-M4 Thumb `-Os` compile: **2383 bytes text, zero data/BSS**,
-  no undefined symbols except `memcmp`, `memcpy`, `memmove`, `memset`.
-  Largest measured local frame is 952 bytes for authorize; streaming hash uses
-  320 bytes. Nested frames and adapter/crypto stack must still be budgeted.
+```sh
+python -m pytest tools/firmware/tests/test_loader_contract.py
+```
 
-The initial semantic stub run failed 56 tests; implementing the contract made
-the cases pass. Additional tests exposed and corrected in-place table handling
-and stale authority after invalid session reinitialization. Fault injection
-covers every stream/table crypto step and selected code/anchor read boundaries;
-negative and positive callback failures stay closed. Tests also cover fixed
-spans, truncation, reserved bytes, partial commit, live identity/geometry/UICR,
-typed-digest confusion, two-unit common family authorization, unknown loaders,
-wrong tables/pages, all 256 page boundaries and reset/write-lock behavior.
+The suite uses independent Python `struct`/CRC/hash fixtures and host crypto
+callbacks, including aliasing, malformed anchors, exact digest domains,
+identity/UICR mismatches, table/page authority and write-lock failures. Host
+checks establish the portable contract, not target timing, FLASH protection or
+power-loss recovery. Native link/fit checks belong to the matching builder;
+physical qualification must identify the exact signed executable set.
 
-ARM object/frame outputs are under `work/loader-contract-core-proof-v2/`. This is
-not a linked production loader or proof that the final adapter fits reserved
-flash. No CMake consumer, production signature or hardware operation was added.
+## Historical portable-core evidence (2026-10-23)
 
-Independent review found an alias bypass in eager output zeroing: an output
-overlapping the live UICR expectation could erase that expectation before its
-comparison and accept a mismatching zero-hash anchor. The original independent
-reproducer now rejects both decode and authorization with `-EACCES`. Nine new
-regressions cover that exact bypass, valid output overlap with source/records/
-live data, and full/family digest output overlapping source bytes. All failed
-against the eager-output code before the staging correction. The v1 proof is
-preserved; v2 is the corrected source snapshot.
+The corrected isolated core passed 93 focused tests, including a UBSan run.
+The recorded Cortex-M4 Thumb `-Os` object used 2383 bytes of text and no data/BSS,
+with only standard memory functions unresolved. Measured local frames were
+952 bytes for authorization and 320 bytes for streaming hashing; these are not
+whole-call-chain or adapter/crypto stack budgets.
+
+Review found that eager output clearing could corrupt an aliased trusted UICR
+comparison input. Staging input consumption before output publication corrected
+that defect; the independent reproducer rejected the mismatch afterward, with
+nine regressions covering invalid and valid overlap. This is historical
+host/object evidence, not proof that a linked production loader fits or that
+physical installation/restoration is qualified.

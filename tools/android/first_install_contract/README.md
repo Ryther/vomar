@@ -1,97 +1,85 @@
-# Portable first-install contract candidate
+# Shared first-install contract
 
-Source-only Kotlin engine under `org.openvimar.installer`; not wired into the
-Android APK, a physical SWD driver, release UI or deployable firmware set.
-The approved scope is Phase4 of
-`docs/superpowers/plans/2026-10-23-common-first-flash-loader.md`.
+The Kotlin engine in `src/` is compiled directly into the Android `:core` module
+by `apps/android-updater/core/build.gradle.kts`. Android Activities, services and
+USB adapters live in `apps/android-updater/app/`; the portable core supplies
+archive, signed-package, plan and transaction authority. This is implemented
+source, with separate physical qualification. For operator steps use
+[Android first installation](../../../docs/android-first-install.md).
 
-Data flow is deliberately explicit:
+## Authority flow
 
-1. Validate the bounded original Android five-entry backup ZIP. A single export
-   cannot independently prove the producer's two acquisition passes or identify
-   the commercial board.
-2. Require an explicit successful document export, reopen that exact document,
-   validate it independently and compare the complete ZIP bytes. Only this
-   capability permits deriving the page table and original-bound VAR1 anchor.
-3. Authenticate one schema3 common ZIP, its manifest and its static public
-   `first-install.json`/`.sig` entries using the trusted public P256 key.
-   Descriptor/component duplicates must agree. `loader.bin` is exactly48KiB
-   with an all-FF anchor placeholder; its typed family measures code44KiB.
-   Legacy48KiB and unknown types never alias. There is no second user download.
-4. Create an immutable plan: common loader code + original-bound anchor + signed
-   MAIN/RECOVERY, with erased gaps/storage for a fresh network installation.
-5. Acquire a separately owner-authorized, exclusive, quiescent SWD session for
-   the exact plan/UID. Match live original FLASH/FICR/UICR before mutation.
-   Recheck full identity/UICR before each page transaction. Before each bounded
-   mutation, check cancellation and the non-reconnectable target/lease identity.
-   Recheck UID after each page; full UICR again before commit and final success.
-6. Journal intent before each bounded FLASH page erase/word write. Read back
-   body with commit erased; verify complete body; write the four-byte anchor
-   commit last; verify complete FLASH, identity and unchanged UICR afterward.
+1. Validate a bounded original backup ZIP, its exact entries, metadata, geometry
+   and hashes. A ZIP cannot independently prove how its producer acquired two
+   copies or identify a commercial board; capture provenance and live identity
+   remain separate requirements.
+2. Save and reopen the complete exact archive through `ArchiveExport`, validate
+   the reopened bytes independently and compare the entire ZIP. Only the resulting
+   capability permits deriving the original page table and VAR1 anchor.
+3. Authenticate the signed schema3 common ZIP and embedded
+   `first-install.json`/`.sig` with the trusted public P-256 key. Descriptor and
+   component duplicates must agree. `loader.bin` is exactly 48 KiB with an erased
+   anchor placeholder; its typed family measures precisely 44 KiB of code.
+4. Construct an immutable original-bound plan: loader, anchor, signed MAIN and
+   RECOVERY, with erased gaps/storage for fresh network installation.
+5. Acquire separately authorized exclusive, halted, quiescent SWD ownership.
+   Match live original FLASH/FICR/UICR. Recheck identity/UICR before bounded page
+   transactions and UID after each page; cancellation or lease change stops work.
+6. Persist intent before erase/program, verify the complete body with commit
+   erased, write the four-byte anchor commit last, then verify complete FLASH,
+   identity and unchanged UICR. Completion leaves the target halted.
 
-The adapter API intentionally has no recover, mass erase, UICR write, halt or
-reset method. Its future implementation must establish owner-authorized,
-CPU-halted exclusive/quiescent
-ownership separately, reject physical target/connection changes, and never add
-implicit destructive fallback. The engine cannot attest an arbitrary adapter.
+The engine's adapter has no recover, mass-erase, UICR-write or reset operation.
+The platform adapter owns reviewed HALT and the separate verified start. A
+signature or selected ZIP is never sufficient write consent. The signed
+`paused-reset-before-main-v1` policy supports only the admitted inherited
+watchdog profile; capture does not feed or reset that watchdog.
 
-An interruption is not an atomic installation. Original export and journal are
-retained. Explicit resume is unsupported in this first source phase: an existing
-journal cannot silently authorize a retry against arbitrary mixed FLASH. A
-failure around the final commit retains commit-uncertain evidence.
+## Android persistence and interruption
 
-The public first-install descriptor is a versioned source contract embedded in
-the same schema3 common release ZIP;
-it does not make existing schema2 APK/runtime consumers support the upcoming
-schema3 typed loader records. Integration needs an independently reviewed
-matched executable set and separately approved physical qualification.
+`InitialInstallService` automatically invokes
+`active.export(persistence.privateExport(...))` after two-pass capture. The
+required save/reopen therefore occurs in private app storage. External document
+export is an additional user-selected copy; it is essential before uninstall or
+app-data clearing, which deletes private originals/journals/credentials. Android
+automatic backup is disabled. Desktop has an explicit export/reopen journey.
 
-Implementation plan (inline, root-approved):
+`FirstInstallEngine` plans are single-attempt. An existing transaction blocks
+ordinary replay. The separate `first_install_resume_contract` supports explicit
+repair only with the exact retained original, immutable initial receipt,
+hash-linked journal, fresh signed plan and new review. It cannot recapture mixed
+FLASH as a replacement original. Failure around commit remains uncertain; no
+catch path resumes the old CPU into partial firmware. Successful installation
+requires a separate receipt-gated start. See the
+[resume integration contract](../first_install_resume_contract/android/integration-contract.md).
 
-- [x] RED/GREEN standalone compiler harness and independent Python fixtures.
-- [x] Strict original ZIP/export capability and immutable anchor/table codec.
-- [x] Public-key common artifact authority, reusing unchanged core image parser.
-- [x] Journalled abstract SWD engine and stateful failure/cancellation tests.
-- [x] C-authoritative anchor encode/decode/table/family interop and proof.
-- [ ] Independent review before integration.
+## Verify changes
 
-The isolated harness compiles the unchanged existing portable core sources
-alongside this island into a temporary JVM module; this reuses its internal
-`PackageValidator.validateImage` without changing the core/API/Gradle or using
-reflection. Future integration belongs inside the reviewed core module.
-
-Run the isolated tests from the repository root:
+Run focused portable tests in the pinned development environment:
 
 ```sh
-work/ncs-venv/bin/python -m pytest -q tools/android/first_install_contract/tests
+python -m pytest tools/android/first_install_contract/tests
 ```
 
-The harness uses the existing cached Kotlin compiler and dependencies, with no
-Gradle or network invocation. It compiles the authoritative unchanged C anchor
-codec with undefined-behavior sanitization. Independent Python fixtures,
-the actual Kotlin backup archive producer, and the independent schema3 Python
-producer's public synthetic ONE-ZIP fixture cross the Kotlin/C boundary.
-Synthetic qualification claims in fixtures are test data only.
+The isolated harness uses cached Kotlin dependencies and independent synthetic
+Python fixtures, plus the authoritative C anchor codec with undefined-behavior
+sanitization. Stateful models exercise NOR programming, journal boundaries,
+cancellation, generation/UID changes, original mismatches, readback corruption
+and lost commit acknowledgements. `FileInstallJournal` supplies host filesystem
+persistence, not a substitute for Android adapter checks.
 
-The stateful target model enforces NOR programming and the erased commit until
-the final four-byte write. A boundary sweep injects 572 failures, covering every
-page erase, program operation and journal publication in the synthetic install,
-plus selected acquisition, close, identity and read boundaries. No target
-mutation follows an injected failure. Separate tests exercise cancellation,
-transport generation/UID changes, mismatched originals, readback corruption,
-lost commit acknowledgements and persistence acknowledgements.
+Also run the affected core/app tests and synthetic instrumentation using the
+[development guide](../../../docs/development.md). Host/JVM/emulator checks do
+not qualify a real phone, USB probe, watchdog handoff, power stage or power cut.
+Never use stock captures or household targets as automated fixtures.
 
-One synthetic successful transaction uses 256 page erases, 20 bounded programs,
-1,024 FLASH page reads and 261 UICR reads. The program count depends on artifact
-contents; the page/identity guards do not hash UICR for every word.
+## Historical isolated-engine evidence (2026-10-23)
 
-`FileInstallJournal` is a host-filesystem implementation with exclusive initial
-creation, forced file/directory writes and atomic replacement. It preserves
-existing/incomplete records and monotonic uncertainty flags. Its Linux/JVM
-tests establish that contract here; this is not an Android SAF journal adapter.
-The export port likewise requires a future actual document implementation.
-Neither interface supplies physical I/O or qualifies a first installation.
-
-See `analysis/app/first-install-engine-2026-10-23.md` and
-`work/first-install-contract-proof-v2/proof-manifest.json` for the frozen source
-pins and verification commands.
+The source-phase boundary sweep injected 572 failures around page erase, program,
+journal publication and selected identity/read/ownership boundaries. No target
+mutation followed an injected failure. One synthetic successful transaction
+used 256 erases, 20 bounded program calls, 1024 FLASH-page reads and 261 UICR
+reads. Program count depended on synthetic content; the guards did not hash
+UICR per word. These are historical model observations, not real USB/FLASH
+timing, current-suite counts or physical qualification. Later Android integration
+and explicit resume supersede that phase's original “not wired” limitation.

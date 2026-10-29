@@ -1,8 +1,9 @@
 # Known Facts
 
 Only directly supported findings belong here. Historical dates and versions
-bound each result; current firmware 1.0.0 remains a qualification candidate. See
-the [current evidence summary](research-summary.md).
+bound each result; none independently qualifies a later release or route. See
+the [evidence summary](research-summary.md), native `firmware/VERSION` and the
+exact distribution manifest for their separate scopes.
 
 ## Hardware / firmware family
 
@@ -214,7 +215,7 @@ adding native500ms boot-GPIO confirmation, the Vimar main0.4.5 completed a decla
 cold-power cycle without SWD intervention. Authenticated main uptime2096ms confirms
 a new kernel; one successful trial is recorded, not a reliability campaign or a
 physical UP-at-power-on validation. Detailed bench evidence remains local. This historical result does not qualify
-the current 1.0.0 common first-install route.
+a later common first-install route.
 
 ## Stock input-driven output inhibit (2026-10-20)
 

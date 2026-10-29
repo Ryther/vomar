@@ -7,7 +7,7 @@ separately and is not implied by route presence.
 | Capability | Desktop GUI | CLI | Core / failure evidence |
 | --- | --- | --- | --- |
 | Names, rooms, registry | Devices | devices | Registry strict import; labels grant no authority |
-| Signed local/GitHub release | Settings → Updates | releases | schemas1/2/3 and 20 shared Python/Kotlin package vectors |
+| Signed local/GitHub release | Settings → Updates | releases | schemas 1/2/3 and shared Python/Kotlin golden package vectors |
 | Multi-asset discovery | Check latest | releases latest | explicit firmware role/name/hash; duplicate assets rejected |
 | Authenticated BLE update | Review Bluetooth update | updates | identity changes, wrong images, one-use review, reset uncertainty |
 | Interrupted BLE upload | Activity review | updates resume | same session and fresh journal/identity review; no auto restart |
@@ -23,7 +23,7 @@ separately and is not implied by route presence.
 | Fleet organization | Devices batch / Activity | fleet | mixed saved routes, sequential or network-parallel scheduling, partial outcomes and fresh paused-batch review |
 | Appearance | Settings | settings | native light/dark/system palette and keyboard focus test |
 
-Outstanding qualification must remain visible: all native OS BLE/USB permissions,
-probe drivers, live watchdog/start behavior and the thirteen firmware physical
-checks need real hardware evidence. The shared golden corpus establishes parser
+Outstanding qualification must remain visible: native OS BLE/USB permissions, probe drivers, live watchdog/start behavior and
+firmware physical checks require exact-artifact hardware evidence. Consult the
+release manifest/acceptance record for which checks remain unverified. The shared golden corpus establishes parser
 agreement; it is not a substitute for these checks.

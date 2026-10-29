@@ -8,39 +8,34 @@ uses recovered PWM/GPIO behavior and a conservative candidate P0.31 protection
 monitor; it does not report physical lamp measurements or power-stage
 acknowledgement. Electrical protection coverage remains unresolved.
 
-Firmware **1.0.0 is a signed qualification candidate**. Its bounded standalone-DK
-runtime/recovery trial passed and the DK's prior FLASH/UICR/FICR were restored
-exactly. All thirteen physical qualification flags remain false. Earlier exact
-images passed DK OTA/power-interruption trials, Vimar updates and a dedicated
-stock-restoration trial. Those results do not qualify the new common first-install,
-generic restore or complete 1.0.0 update routes. See the
+Read [`VERSION`](VERSION) for this checkout's native firmware version and the
+exact release manifest for shipped component versions. The distribution tag is
+not the firmware version or a qualification claim. APS-105-5241 remains unresolved.
+Historical DK and Vimar trials apply to their recorded images and routes; all
+thirteen flags on the experimental common candidate remain false. See the
 [research and evidence summary](../docs/research-summary.md).
 
 ## Connection selector and Zigbee pairing
 
-The feature-branch implementation adds a five-second two-button selector, bounded
-two-minute Zigbee pairing and an explicit authenticated Bluetooth request. See
-[Connection modes](../docs/connection-modes.md) for exact colours, network replacement,
-timeouts and compatibility/qualification limits. It needs matching MAIN/recovery;
-its source presence does not change qualification of the existing 1.0.0 package.
+The source implements a five-second two-button selector, bounded two-minute
+Zigbee pairing and an explicit authenticated Bluetooth request. See
+[Connection modes](../docs/connection-modes.md) for colors, network replacement,
+timeouts and compatibility limits. It requires matching MAIN/recovery;
+implementation alone does not establish physical qualification.
 
 ## Build dependencies
 
-[west.yml](west.yml) pins nRF Connect SDK `v3.4.0` and Nordic Zigbee R23 add-on
-`v1.4.0`; the development environment uses Zephyr SDK `v1.0.1`. From the repository
-root, bootstrap into ignored local storage:
+Use the pinned [development environment](../docs/development.md). From the
+repository root, install the frozen SDK graph with:
 
 ```sh
-python3 -m venv work/ncs-venv
-. work/ncs-venv/bin/activate
-pip install west
-west init -l "$PWD/firmware" work/ncs-workspace
-cd work/ncs-workspace
-west update
-west zephyr-export
-west packages pip --install
-west sdk install --version 1.0.1 --gnu-toolchains arm-zephyr-eabi
+python tools/dev/bootstrap.py firmware
 ```
+
+[`west.yml`](west.yml) and `tools/dev/` own the exact Nordic/Zephyr revisions;
+do not replace the frozen graph with an unrestricted upstream `west update`.
+The examples below assume a local west workspace at `work/ncs-workspace`;
+substitute your prepared workspace and build paths consistently.
 
 Use the repository's absolute `firmware` directory as the application source if
 your west workspace is elsewhere. Builds need a matching local signing setup;
@@ -111,9 +106,9 @@ in [the Android installation guide](../docs/android-first-install.md).
 The original [dedicated restore gate](restore_gate/README.md) and the newer
 [common restore engine](common_restore/README.md) have different evidence scopes.
 A historical full Vimar stock restore succeeded with the dedicated path; the
-new common-loader/generic helper route remains physically unqualified and has
-no operational stock-restoration UI in the current Android app. Carrying signed
-helpers does not make that user workflow available.
+new common-loader/generic helper route remains physically unqualified.
+Android has an explicit stock-restoration flow using the retained matching
+original; carrying signed helpers alone does not qualify that workflow.
 
 See [Zigbee OTA](../docs/zigbee-ota.md), the
 [Zigbee2MQTT converter](../integrations/zigbee2mqtt/README.md) and

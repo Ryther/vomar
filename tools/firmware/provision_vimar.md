@@ -1,143 +1,117 @@
-# Flashing Vimar30805, un dispositivo alla volta
+# Bench provisioning with a device-bound original
 
-Questa procedura sostituisce FLASH del solo nRF52840; non riprogramma il
-controller di potenza. Usare solo il dimmer da banco collegato al DK, senza rete
-230V. Non collegare il DK al dimmer già installato e alimentato dalla rete.
+This advanced helper replaces nRF52840 FLASH while retaining the secondary
+power-controller firmware. Use only a separately authorized bench dimmer attached
+to an identified DK, disconnected from mains. Never connect the DK to an installed
+mains-powered unit. For the native client workflow use
+[Android first installation](../../docs/android-first-install.md) or
+[desktop](../../docs/desktop.md); this helper uses a distinct legacy pair/dossier
+contract and is not a substitute for their retained-session machinery.
 
-## Avvio
+## Prepare the target and artifacts
 
-Dalla radice del repository, chiudere gli altri monitor SWD:
+Install the pinned SDK/Python environment, OpenOCD/J-Link access, `intelhex` and
+existing approved signing inputs. Close other SWD monitors/debuggers. Set the
+local DK FICR DEVICEID in address order as `UID0:UID1`, eight hexadecimal digits
+per word. Pass `--dk-id` for every connectable DK or set comma-separated
+`VIMAR_DK_DEVICE_IDS`. Do not put the dimmer UID in that exclusion list. Missing
+local exclusions block all hardware access.
 
-```sh
-python tools/firmware/provision_vimar.py --serial SERIAL_DK --dk-id "$VIMAR_DK_DEVICE_ID" --ota-release /percorso/release/pair.json
-```
-
-Configura `VIMAR_DK_DEVICE_ID` con le due parole FICR DEVICEID del DK locale,
-nel formato `UID0:UID1` (otto cifre esadecimali per parola, in ordine di
-indirizzo). Ripeti `--dk-id` per ogni DK collegabile; in alternativa imposta
-`VIMAR_DK_DEVICE_IDS` con lo stesso elenco separato da virgole. Non inserire
-l’UID del dimmer in questo elenco di esclusione. Senza un elenco locale
-configurato il programma termina prima di accedere all’hardware.
-
-Lo script attende tre letture identiche del target esterno, esclude tutti i DK configurati e
-mostra UID/IEEE candidato. Dopo il backup cerca anche la rappresentazione
-little-endian del candidato nella FLASH originale e registra gli offset. Questo
-riscontro locale non decodifica il record Zigbee attivo: se disponibile, un
-inventario Z2M o l'indirizzo già registrato conferma l'associazione al dispositivo.
-La sola lettura identifica un nRF52840, non prova il modello commerciale.
-
-Per ciascun UID crea una sessione in `experiments/provisioning/UID/timestamp/`:
-
-1. ferma il target per due copie coerenti di FLASH1MiB, UICR e FICR;
-2. confronta le copie, registra SHA256 e crea `stock-backup.zip`;
-3. genera il ripristinatore BLE dal backup del dispositivo, bootstrap firmato e
-   bootloader con autorizzazione corrispondente; verifica firme, limiti, LDO e
-   controlli noti contro scritture UICR;
-4. crea `ble-stock-restore.zip` **prima** di consentire il flash;
-5. prepara la coppia main/recupero OTA firmata e qualificata selezionata, con storage inizializzato;
-6. mostra il piano e chiede di digitare l'IEEE prima della scrittura;
-7. verifica di nuovo UID, snapshot originale, UICR e immagini; programma i settori
-   necessari senza recover o mass erase; rilegge tutta FLASH e UICR;
-8. richiede l'avvio solo dopo verifica completa, conservando tutti i risultati.
-
-I build specifici del ripristino richiedono alcuni minuti per dispositivo. Il
-firmware applicazione è riutilizzato, mentre ripristinatore e autorizzazione sono
-specifici per UID e backup. Nessuna chiave privata è inclusa negli ZIP.
-
-## Preparazione e ripresa
+A programming invocation requires explicit operator approval for the exact
+target, signed artifacts and bootloader/FLASH writes. Then select the qualified
+pair manifest explicitly:
 
 ```sh
-python tools/firmware/provision_vimar.py --serial SERIAL_DK --dk-id "$VIMAR_DK_DEVICE_ID" --ota-release /percorso/release/pair.json --prepare-only
-python tools/firmware/provision_vimar.py --serial SERIAL_DK --dk-id "$VIMAR_DK_DEVICE_ID" --ota-release /percorso/release/pair.json --resume /percorso/sessione
+python tools/firmware/provision_vimar.py --serial SERIAL_DK \
+  --dk-id "$VIMAR_DK_DEVICE_ID" --ota-release /absolute/path/to/pair.json
 ```
 
-`--prepare-only` lascia il target fermato. Anche in caso di errore può rimanere
-fermato: il messaggio indica il dossier da controllare. I backup completati non
-vengono sovrascritti; i tentativi incompleti vengono conservati in `partial/`.
-Ripresa di preparazione/contatto supportata; dopo una scrittura parziale lo
-snapshot originale potrebbe non coincidere e la ripresa si ferma per diagnosi,
-senza cancellazioni automatiche. Dopo un flash già verificato ma prima del boot
-lo script segnala lo stato e lascia decidere l'operatore.
+There is no implicit application default. `ota_release.py` validates schema1,
+exact hashes, signatures and physical qualification before probing. Profile2
+requires its additional exact pair/loader and split checks. See
+[OTA qualification](../../docs/zigbee-ota.md#guided-initial-installation-and-qualification-gate).
+Do not select a newest filename or invent a qualification report to bypass it.
 
-Uso non interattivo, solo dopo autorizzazione del dispositivo specifico:
+## What the helper does
 
-```sh
-python tools/firmware/provision_vimar.py --serial SERIAL_DK --dk-id "$VIMAR_DK_DEVICE_ID" --ota-release /percorso/release/pair.json --expected-id UID0:UID1 --yes
-```
+It requires three identical external target identity reads, excludes configured
+DKs and displays UID/candidate IEEE. Searching original FLASH for little-endian
+IEEE bytes is a correlation, not a decoder of active Zigbee state or commercial
+model proof. An independent known inventory can confirm the mapping.
 
-Non esiste più un firmware predefinito implicito. `--ota-release` seleziona una
-coppia verificata tramite il manifest schema1 di `ota_release.py`: main, recovery
-e rapporto di qualifica hanno percorsi relativi al manifest e SHA-256 vincolati.
-Le firme e i quattro controlli fisici previsti vengono verificati prima di accedere
-al DK. Non selezionare automaticamente il file più recente in una cartella.
+Each UID gets a new private `experiments/provisioning/UID/timestamp/` dossier:
 
-Il percorso precedente rimane disponibile solo selezionando esplicitamente
-`--main /percorso/immagine.hex`: usa il recupero BLE precedente e **non** installa
-la coppia necessaria per OTA Zigbee. Non usarlo per aggirare la qualifica OTA.
+1. Halt for two coherent FLASH (1 MiB), UICR and FICR captures; compare copies,
+   hash them and create `stock-backup.zip`.
+2. Build device/original-bound signed restoration/bootstrap/loader authorization;
+   validate signatures, partitions and known UICR/DC/DC constraints. Create
+   `ble-stock-restore.zip` **before** permitting installation.
+3. Freeze the qualified MAIN/recovery pair and initialized-storage installation
+   image. The restoration helper remains UID/original-specific.
+4. Display the plan and request the target IEEE as confirmation.
+5. Recheck UID/original/UICR/images, program only required sectors without recover
+   or mass erase, then read back complete FLASH/UICR.
+6. Request boot only after full verification and keep all evidence. Requested
+   boot is not autonomous startup or functional qualification.
 
-Per il solo backup, senza scegliere firmware o avviare build:
+## Backup, preparation and interrupted work
+
+For a backup only, authorize the temporary processor halt separately; no firmware
+selection, build, FLASH/UICR programming or erase occurs:
 
 ```sh
 python tools/firmware/provision_vimar.py --serial SERIAL_DK --dk-id "$VIMAR_DK_DEVICE_ID" --backup-only
 ```
 
-Il backup richiede un arresto temporaneo del processore per ottenere copie
-coerenti; non programma né cancella FLASH/UICR. Un nuovo tentativo può riprendere
-lo stesso dossier con `--resume`, senza sovrascrivere le copie già verificate.
+`--prepare-only` prepares evidence/artifacts and leaves the CPU halted. `--resume`
+selects an existing dossier without overwriting complete backups. Incomplete
+attempts stay in `partial/`. After partial programming, mismatch against the
+original blocks ordinary continuation for diagnosis; there is no automatic erase
+or blind retry. A verified install stopped before boot remains an operator
+decision. Errors can leave the target halted: inspect the named dossier first.
 
-## Configurazione locale e distribuzione del sorgente
+```sh
+python tools/firmware/provision_vimar.py --serial SERIAL_DK --dk-id "$VIMAR_DK_DEVICE_ID" --ota-release /absolute/path/to/pair.json --prepare-only
+python tools/firmware/provision_vimar.py --serial SERIAL_DK --dk-id "$VIMAR_DK_DEVICE_ID" --ota-release /absolute/path/to/pair.json --resume /absolute/path/to/session
+```
 
-Impostare una volta `VIMAR_JLINK_SERIAL` e `VIMAR_OTA_RELEASE` permette di lanciare
-lo script senza ripetere quei due argomenti. Lo script non richiede accesso a
-Zigbee2MQTT: legge FICR e ricava un IEEE candidato usando la convenzione stock.
-Il confronto con un inventario Z2M è una conferma esterna dell'associazione
-IEEE/nome, non una dipendenza del backup o un lettore dello storage Zigbee stock.
+The helper has a noninteractive mode only for an already authorized exact device:
+`--expected-id UID0:UID1 --yes`. This flag is not universal native-client consent.
+The explicit legacy `--main /absolute/path/image.hex` option uses old BLE recovery
+and does not install the required Zigbee OTA pair; never use it to evade pair
+qualification.
 
-I percorsi di build e firma sono configurabili tramite variabili d'ambiente:
+## Local configuration and retained material
 
-| Variabile | Contenuto |
+| Variable | Meaning |
 | --- | --- |
-| `VIMAR_NCS_WORKSPACE` | Workspace SDK inizializzato dal manifest west del progetto |
-| `VIMAR_BUILD_PYTHON` | Eseguibile Python con dipendenze di build e imgtool |
-| `VIMAR_WEST` | Eseguibile west dell'ambiente SDK |
-| `VIMAR_SIGNING_PRIVATE_KEY` | Percorso della propria chiave privata ECDSA-P256 |
-| `VIMAR_SIGNING_PUBLIC_KEY` | Percorso della corrispondente chiave pubblica |
+| `VIMAR_JLINK_SERIAL` | Local probe serial |
+| `VIMAR_OTA_RELEASE` | Explicit pair manifest |
+| `VIMAR_DK_DEVICE_IDS` | DK UID exclusion list |
+| `VIMAR_NCS_WORKSPACE` | Prepared pinned SDK workspace |
+| `VIMAR_BUILD_PYTHON` | Build/imgtool Python |
+| `VIMAR_WEST` | SDK west executable |
+| `VIMAR_SIGNING_PRIVATE_KEY` | Existing approved ECDSA-P256 private key path |
+| `VIMAR_SIGNING_PUBLIC_KEY` | Matching public key path |
 
-Usare percorsi assoluti. I default di build rimangono sotto `work/` e
-`firmware/keys/`; nessuna chiave privata viene inclusa negli ZIP. L'ambiente che
-esegue lo script richiede `intelhex`; quello di build deve avere anche le
-dipendenze della versione SDK fissata in `firmware/west.yml`.
-Una release firmata da una chiave diversa richiede il relativo loader: non
-mescolare pacchetti di ripristino memorizzati e nuove chiavi. La cache del
-ripristino rifiuta una chiave pubblica diversa da quella configurata.
+Use absolute local paths. Build defaults live under ignored `work/`; private
+keys never enter ZIPs. Restoration cache rejects a differing configured public
+key: do not mix retained restoration packages and a replacement trust root.
+The helper needs no Zigbee2MQTT credentials and an instance lock prevents two
+copies, though other debuggers must still be closed manually.
 
-La pubblicazione GitHub del sorgente rimane distinta dalla qualifica hardware.
-Prima della pubblicazione occorrono licenza scelta dal titolare, dipendenze e
-attribuzioni, prova da checkout pulito e controllo dei file inclusi. Non pubblicare
-backup stock, ZIP di ripristino per dispositivo, cookie, credenziali, chiavi
-private o dump; `inputs/`, `experiments/` e `work/` restano privati e ignorati.
-Lo stato corrente non equivale a una distribuzione pubblica già pronta.
+## Verify and retain after provisioning
 
-## Verifiche successive e conservazione
+Before mounting, independently check autonomous startup without debugger,
+BLE recovery entrances/return, join/rejoin, buttons, lamp and restoration scope
+for the exact signed set. For an existing Z2M entry, re-interview **and Configure**
+the exact IEEE (`bridge/request/device/interview`, then
+`bridge/request/device/configure`). Interview alone can leave the server's
+custom-cluster metadata stale and produce `UNSUPPORTED_CLUSTER vimarDimmer`.
 
-Lo script verifica programmazione e avvio richiesto, **non** dichiara verificati
-join, avvio autonomo senza debugger, prova fisica della lampada o ripristino BLE
-completo. Il join su L1 resta una fase separata con finestra esplicita. Prima di
-montare il dispositivo verificare recupero BLE, ingresso e ritorno all'applicazione,
-join/rejoin e funzioni fisiche secondo checklist. Per dispositivi già registrati in
-Zigbee2MQTT occorrono nuova intervista **e riconfigurazione** del converter
-(`bridge/request/device/interview`, poi `bridge/request/device/configure`,
-entrambi con `id` uguale al solo IEEE target). La sola intervista può lasciare
-il cluster personalizzato non registrato sul server e produrre
-`UNSUPPORTED_CLUSTER vimarDimmer`.
-
-Salvare in cloud entrambi gli ZIP della sessione. Contengono dati privati del
-dispositivo/rete: conservarli come backup privati. Il README dentro il pacchetto
-BLE descrive come entrare nel recupero e riportare l'intera FLASH originale.
-Quel ripristino sostituisce il nostro firmware e richiede autorizzazione esplicita.
-La presenza del pacchetto validato non equivale a una prova fisica di ripristino
-sul singolo dispositivo. Il backup originale rimane anche ripristinabile via SWD.
-
-Dipendenze: OpenOCD, J-Link visibile, SDK/workspace e chiave di sviluppo già presenti,
-`work/ncs-venv`, `work/smpclient-venv` con intelhex. Un lock impedisce due istanze
-dello script; altri debugger/monitor vanno comunque chiusi.
+Keep both stock-backup and matching BLE restoration ZIPs in protected external
+storage. They contain device/network data and stay out of Git/public artifacts.
+A restoration ZIP's README describes its exact route; its existence is not proof
+of a successful restoration trial. Full stock restoration replaces custom
+firmware and requires its own explicit approval. Preserve original evidence,
+journals and signer continuity; passing source checks does not qualify the device.

@@ -1,50 +1,46 @@
-# Prepare a legacy dimmer for Android Bluetooth updates
+# Legacy Zigbee-to-Bluetooth migration reference
 
-The local0.6.3 intermediate updates a compatible MAIN0.5.5/REC0.7.1 device
-through its existing Zigbee OTA path, then enters REC0.8.3. That recovery keeps
-eight stored Bluetooth associations, so the existing PC association can coexist
-with a phone. One Bluetooth connection is active at a time; no bond is evicted.
+This page explains a historical compatibility bridge, not a general recipe for
+all old dimmers. Use [Android Bluetooth trial](android-bluetooth-trial.md) or
+[desktop](desktop.md) for current supported actions. A device already running a
+compatible independent recovery does not need an arbitrary intermediate update.
 
-The current prepared files are in
-`experiments/firmware/releases/0.6.3/`. The intermediate `.ota` is sent through
-Zigbee2MQTT after an exact target/source/OFF check. The common
-`qualification-candidate.zip` is selected in the existing Android0.6.3 app,
-**Settings → Bluetooth trial**, after the intermediate enters Bluetooth.
-They are common artifacts for the finite supported loader set, not per-device
-identity packages. Original private stock backups remain separate.
+## Supported transition and purpose
 
-## Operator sequence
+The recorded 0.6.3 intermediate targeted the finite MAIN 0.5.5 / RECOVERY 0.7.1
+source set through its existing Zigbee OTA path and installed RECOVERY 0.8.3.
+That recovery retained up to eight Bluetooth associations, allowing an existing
+PC association and phone association to coexist; one connection was active at
+a time and the bridge did not evict a bond. These are properties of that exact
+historical set, not version-only permission to use any similarly named file.
 
-1. Save the new complete0.6.3 common ZIP on the phone. Use the existing APK0.6.3.
-2. Once preparation is confirmed, switch off the relevant lighting breaker
-   for30seconds, then restore power with the dimmer buttons released.
-3. Confirm the exact dimmer returns to its original Zigbee network. The update
-   operator must verify current source0.5.5 and lamp OFF before sending the
-   intermediate; use the intended coordinator and exact target identity.
-4. Keep the dimmer powered through Zigbee download and recovery replacement.
-   Bluetooth recovery at the end is intentional and remains active until the
-   final normal application is installed.
-5. Near the dimmer, choose the new ZIP in **Bluetooth trial**, then **Find and
-   inspect dimmer**. Complete Android pairing with824005 if requested.
-6. Review the selected target and start the trial. After completion verify the
-   same Zigbee network, lamp and physical buttons. Save the trial report if
-   inspection or transfer fails; inspect durable state before retrying.
+Current migration admission must verify the signed package, finite loader/source
+policy, exact live target, OFF state, image roles and embedded recovery binding.
+An unsupported source, missing original or mismatching identity blocks the
+operation. Do not substitute a package from an old experiment directory or pick
+the newest filename as authority. Preserve private original stock backups.
 
-## Preparation status
+## Operator boundary
 
-Native builds, public signatures, exact embeddedREC binding, legacy stage bounds,
-the frozen old C verifier/SDK decoder, host fault tests and actual Android-core
-candidate admission pass. Independent review found no confirmed Critical or
-Important source/artifact issue. These checks prepare a controlled local trial;
-a later owner-reported phone update through this bridge was corroborated by
-post-trial radio diagnostics, without a fresh authenticated full-image hash.
-Additional-phone enrollment, output continuity and exact current-release power-cut
-qualification remain separate. The thirteen candidate qualification flags stay false.
+Migration changes installed firmware. Obtain explicit review for the exact
+target, signed artifacts and expected recovery transition. Keep power available
+through download/recovery replacement and close other Bluetooth clients.
+Recovery remaining active after the intermediate can be intentional; final MAIN
+installation is a separately reviewed operation. Pairing or discovering it does
+not grant update authority. Do not perform a breaker/power cycle merely because
+an earlier trial did so; use the current target-specific reviewed procedure.
 
-The final normal application also fixes the confirmed SDK fatal-reset write
-that unintentionally selected the loader's recovery mode. The original Zigbee
-assertion is still under investigation; the reset-routing correction is not
-proof that the originating stack error has been eliminated.
+After a final update, independently verify image identity where available,
+Zigbee network return, settings, buttons and lamp. On interruption, retain
+reports/journals and inspect durable state before a fresh action. Do not
+recapture mixed firmware as an original or discard a PC bond to free a slot.
 
-Exact sources, transformations, hashes, review results and limits are recorded
-in `experiments/firmware/builds/0.6.3/2026-10-24-legacy-bridge/`.
+## Evidence limits
+
+Historical native/signature/decoder/host checks supported a controlled trial.
+One owner-reported phone update was corroborated by post-trial radio diagnostics,
+without a fresh authenticated complete-image hash. Additional-phone enrollment,
+output continuity and exact-route power-cut qualification were separate gaps.
+The fatal-reset routing correction did not resolve APS-105-5241. Published
+acceptance or a completed trial does not convert false qualification flags into
+physical proof. See [research summary](research-summary.md).

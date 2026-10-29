@@ -1,150 +1,111 @@
-# Coordinated distribution release
+# Release a coordinated distribution
 
-Distribution VERSION begins at 0.0.0. Release Please proposes its first version
-from Conventional Commits and creates drafts with vMAJOR.MINOR.PATCH tags.
-Firmware, Android versionName/versionCode, desktop and converter versions are
-independent native owners; no release step resets them to the distribution tag.
+Use this runbook to prepare, review and publish one exact source/artifact set.
+Release Please owns distribution `VERSION`, changelog proposals and tags.
+Firmware, Android versionName/versionCode, desktop and converter retain their
+independent native versions. A distribution filename does not change an embedded
+version or make an older native artifact an upgrade.
 
-The planned first official distribution is **1.0.0**. Put `Release-As: 1.0.0`
-in the actual integration squash commit body on main, then review the generated
-Release Please proposal. The footer must survive the squash; a PR comment alone
-cannot select the release version. Release Please continues to own `VERSION`,
-the release manifest state, changelog and tag. Do not hand-edit those files.
+Read `tools/release/manifest.py`, `evidence.py`, `assemble.py`, `publish.py` and
+`.github/workflows/` when changing this contract. Configure protected settings
+with [GitHub setup](github-setup.md). Never modify published tags/assets or create
+replacement production signing identities.
 
-Distribution filenames use 1.0.0 while embedded native versions remain independent.
-For example, a distribution can contain firmware 1.1.2, Android 1.1.4/code34,
-desktop 1.1.1 and converter 1.0.1. This example does not qualify those binaries
-for publication. Android upgrade ordering uses its monotonically increasing
-versionCode; signed firmware admission uses the firmware identity and version,
-never the distribution tag. Compare each native candidate with the installed
-versions before qualification; calling the distribution 1.0.0 cannot make an older
-native image an upgrade.
+## Choose the release route
 
-The distribution manifest requires all four component owners and binds every
-artifact's componentVersion to its owner. Notices, guide and inventory use the
-distribution version. Desktop packaging verifies frozen CLI output, Windows
-installer/executable version resources and both macOS bundle version fields
-against the native desktop owner before writing a successful package report.
+| Route | Required physical evidence | Firmware behavior |
+| --- | --- | --- |
+| Qualified | Exact-source firmware report with all thirteen checks true and independent native platform evidence | Promote outer metadata only; preserve signed components/carrier. |
+| Explicit accepted experimental | Dated protected owner acceptance of actual issues and unverified checks | Preserve the candidate ZIP and OTA bytes, purpose and false flags; no promotion. |
+
+APS-105-5241 remains unresolved in this source. Software checks, signing and an
+accepted publication do not qualify the firmware or establish working lights.
 
 ## Candidate and signing
 
-Validate one full immutable source SHA through the reusable workflow. Build/test
-jobs receive no production signing, publication or Sonar token. Native packages
-are built for Linux x64, Windows x64 and macOS Apple Silicon (arm64); Android
-emits an unsigned APK. Intel Mac packages are not currently required or produced.
-Public DK compilation uses an explicit ephemeral development signer and cannot
-produce official firmware. Source and generated caches are separate.
-
-A protected signer job downloads exact-run artifacts as data and runs helpers
-from the protected workflow revision. It receives the **existing** firmware key
-and Android keystore only through protected inputs. Their public fingerprints
-are pinned in tools/release/signing-identities.json. Missing/mismatched identities
-fail; official identities are never generated automatically.
-
-A signed firmware qualification candidate is downloaded by exact SHA-256 and
-verified. Promotion requires a separately protected report with all thirteen
-literal physical checks true, exact component hashes and loader contracts.
-It preserves component/loader/carrier bytes and signs qualified outer metadata.
-A candidate with any physical flag false cannot be promoted or published as
-qualified firmware. Host, GUI and hosted-runner tests cannot fill those flags.
-The explicit accepted route below can distribute that unchanged experimental
-candidate alongside the official applications; it does not qualify the firmware.
+1. Review the Release Please proposal and select the exact immutable source SHA.
+   Read native versions from their owners in that source and compare them with
+   installed versions. Do not hand-edit release-owned version/changelog state.
+2. Run the reusable validation workflow for that exact SHA. Build/test jobs have
+   no production signing/publication credentials. Native packages are built on
+   Linux x64, Windows x64 and macOS Apple Silicon; Android produces an unsigned
+   APK. DK compilation uses an ephemeral development signer.
+3. Pass exact-run artifacts as data into protected signing jobs. Helpers execute
+   from the protected revision. Firmware and Android signer fingerprints must
+   match `tools/release/signing-identities.json`; missing/mismatched keys fail.
+4. Verify the firmware candidate by exact SHA-256. Qualified promotion requires
+   separately protected source/component/loader evidence with all thirteen
+   literal physical flags true. Host tests cannot populate those flags.
 
 ## Complete immutable draft
 
-The assembler requires common firmware, its exact OTA carrier, signed APK, three
-native desktop archives, the Windows per-user installer, converter, notices and
-the offline guide plus the complete dependency inventory archive (eleven artifact
-roles, release-manifest.json and SHA256SUMS). release-manifest.json schema1 records roles, sizes, hashes,
-component versions and the source commit. SHA256SUMS covers the full asset set.
+The normal set has eleven payload roles: common firmware, its exact OTA carrier,
+signed APK, three native desktop archives, Windows per-user installer, converter,
+notices, offline guide and dependency inventory (`source-sbom`). Alongside them,
+`release-manifest.json` binds source commit, role, size, SHA-256 and native
+component version; `SHA256SUMS` covers the full asset set. The accepted route
+adds the owner acceptance payload, for twelve payload roles and fourteen files.
 
-The publisher defaults to dry-run. It discovers the exact draft, rejects duplicate
-or already published releases, requires immutable target/tag SHA and successful
-stable checks, then checks Sonar's exact revision, OK quality status, zero open
-security issues and zero unreviewed hotspots. It also requires exact-revision
-CodeQL analyses in all five categories with no
-open high/critical security or error alerts. It rechecks mutable remote gates
-before publication. Existing identical uploads are retained; differing bytes or
-unreviewed extra assets fail. Upload completeness/readback precedes draft=false.
-A source fix creates a new reviewed candidate; never overwrite published bytes.
+The publisher defaults to dry-run. It rejects duplicate/published releases,
+wrong target/tag SHA, missing required checks, incomplete or extra assets,
+nonmatching signatures and stale evidence. It requires exact-revision Sonar OK
+with zero open security issues and unreviewed hotspots, plus successful current
+CodeQL analyses for all five configured categories and zero open high/critical
+security or error alerts. It checks mutable remote gates again immediately
+before publication. Existing identical uploads are retained; differing bytes
+are rejected. Complete upload/readback precedes `draft=false`.
 
-Use the release workflow in dry-run mode before enabling publication. After
-successful main validation, automatic assembly uses the repository variables
-`FIRMWARE_CANDIDATE_URL` and `FIRMWARE_CANDIDATE_SHA256`. When both are absent,
-the resolver records that assembly is not configured and downstream jobs skip;
-no assets are assembled or published. A partially configured pair, malformed
-values or an incomplete manual request fails with a named configuration error.
-Manual exact-candidate dry runs remain available. `AUTO_PUBLISH_RELEASES` enables
-the final publication step only after exact physical evidence and protected
-environments are configured. A successful unconfigured resolver is not a release
-or qualification result.
+Automatic qualified assembly uses `FIRMWARE_CANDIDATE_URL` and
+`FIRMWARE_CANDIDATE_SHA256` together. Both absent means “not configured” and no
+assembly; only one present is an error. `AUTO_PUBLISH_RELEASES` must remain false
+until protected environments, complete evidence, a successful dry run and owner
+authorization exist. Source changes require a new candidate and matching evidence.
 
 ## Explicit release with experimental firmware
 
-An official application distribution may include experimental firmware after
-the owner accepts its actual known issues and unverified physical checks.
-For the planned 1.0.0 release, the known firmware issue is **APS-105-5241**:
-the Zigbee stack can assert and restart. Its cause remains unresolved. An
-accepted distribution is not an overall physical qualification statement.
-The standard qualified route above remains unchanged.
+This route is manual. Actions must use `workflow_dispatch`; automatic triggers
+cannot select it. The candidate remains byte-identical, purpose
+`qualification-candidate`, with all thirteen physical flags false. Its firmware
+filenames end in `-qualification-candidate.zip` and
+`-qualification-candidate.ota`. Applications retain their native versions.
 
-This route is manual only. In GitHub Actions it requires `workflow_dispatch`;
-automatic main/release triggers cannot select it. It never invokes firmware
-promotion. The signed ZIP remains byte-identical with purpose
-`qualification-candidate`, all thirteen physical flags false and the existing
-signer. Its two firmware filenames end in `-qualification-candidate.zip` and
-`-qualification-candidate.ota`. Application filenames and embedded native
-versions remain independent of firmware qualification.
-
-Stage the actual signed payloads before requesting final acceptance. Use exact
-candidate-run downloads and a local signed candidate ZIP; this does not require
-a draft asset to be publicly downloadable. Set the following variables to the
-reviewed source SHA, paths and existing Android signing identity, then run in
-the pinned development environment:
+Prepare new private staging paths, exact-run inputs, the signed candidate and
+existing Android signing inputs. Set `DISTRIBUTION_VERSION` to the Release
+Please-selected version and `CANDIDATE_SHA` to the full reviewed source SHA:
 
 ```sh
 python -m tools.release.assemble --accepted-with-known-issues \
   --inputs "$RELEASE_INPUTS" --output "$STAGED_ASSETS" \
-  --version 1.0.0 --sha "$CANDIDATE_SHA" \
+  --version "$DISTRIBUTION_VERSION" --sha "$CANDIDATE_SHA" \
   --firmware-candidate "$FIRMWARE_CANDIDATE" \
   --keystore "$ANDROID_KEYSTORE" --password-file "$ANDROID_PASSWORD_FILE" \
   --android-tools "$ANDROID_TOOLS"
 ```
 
-Staging writes eleven payloads, `release-manifest.json` and `SHA256SUMS`.
-It validates the signed candidate, signs/audits the APK and checks the firmware
-version against `firmware/VERSION` exported from the exact source. It creates
-no owner acceptance and grants no publication authority.
+Staging creates eleven payloads plus manifest/checksums. It validates the signed
+candidate, signs/audits the APK and compares firmware with the exact exported
+`firmware/VERSION`. It creates no acceptance and authorizes no publication.
 
-Review those concrete files, then prepare a separate protected owner acceptance
-JSON. `owner_acceptance` in `tools/release/evidence.py` defines its strict schema;
-the fictional tests are examples of shape only, never release evidence. The
-document requires schema1, kind `accepted-with-known-issues`, `sourceCommit`,
-`distributionVersion`, a UTC `acceptedAt` within fourteen days, `acceptedBy`,
-an explicit `statement`, and `artifacts` mapping all eleven payload roles to
-their actual SHA-256 values. `knownIssues` must disclose unresolved
-`APS-105-5241` with its impact and evidence. `firmwarePurpose` remains
-`qualification-candidate`; every `firmwareChecks` value and every platform's
-`nativeChecks` value remains literal false. Do not claim a test happened merely
-because its risk was accepted. Native checks use the four names and three
-platforms described below.
+Review the actual files before collecting protected owner acceptance. The strict
+schema in `owner_acceptance()` requires schema1, kind
+`accepted-with-known-issues`, `sourceCommit`, `distributionVersion`, UTC
+`acceptedAt` within fourteen days, `acceptedBy`, a statement and the eleven
+payload role/hash bindings. `knownIssues` discloses unresolved APS-105-5241 with
+impact/evidence. `firmwarePurpose` stays `qualification-candidate`; every
+`firmwareChecks` and per-platform `nativeChecks` value stays literal false.
+Risk acceptance must never claim an unperformed test passed.
 
-Finalise only after the owner has accepted that exact artifact set:
+After the owner accepts those exact bytes:
 
 ```sh
 python -m tools.release.assemble --finalize-accepted "$STAGED_ASSETS" \
   --acceptance "$OWNER_ACCEPTANCE"
 ```
 
-This adds `vomar-release-acceptance-1.0.0.json` unchanged as role
-`release-acceptance`, then refreshes the manifest/checksums. The complete set is
-twelve payload roles and fourteen files. Acceptance binds the eleven other
-payload hashes; the manifest and checksums bind acceptance itself. Payloads are
-not rebuilt or changed. Changed approval or payload bytes require a new stage.
-
-Prepare the protected dependency review against this final twelve-role manifest,
-including the acceptance artifact and all five delivered inventory graphs.
-Then independently verify locally:
+This copies the acceptance document unchanged as `release-acceptance`, refreshes
+manifest/checksums and does not rebuild payloads. Changed payload or approval
+bytes require a new reviewed stage. Prepare dependency review for all twelve
+final roles, then verify with independently available acceptance bytes:
 
 ```sh
 python -m tools.release.publish --directory "$STAGED_ASSETS" \
@@ -153,117 +114,85 @@ python -m tools.release.publish --directory "$STAGED_ASSETS" \
   --public-key firmware/keys/dev-public.pem --android-tools "$ANDROID_TOOLS"
 ```
 
-Missing/mismatched acceptance or advisory review fails. APK/firmware signature
-continuity, exact source checks, Sonar/security requirements and immutable upload
-readback still apply. The final authorised publication adds `--publish` in the
-protected publication context; dry-run alone uploads nothing. Release notes must
-identify official applications and experimental firmware, the unresolved assert
-and the unverified native checks. Do not call the firmware qualified.
-The publisher requires this exact sentence in the draft body and rechecks it
-immediately before publication:
+Dry-run uploads nothing. The final explicitly authorized publication adds
+`--publish` in the protected context and rechecks the same gates. The draft body
+must contain this exact sentence, required by the publisher:
 
 ```text
 Experimental firmware: APS-105-5241 remains unresolved; firmware and native physical qualification checks are unverified.
 ```
 
-All release assets remain individually downloadable. Android Updates reports the
-project release version and native firmware version
-with an explicit **Experimental** label and an **Open release notes** action.
-This metadata check does not download or select candidate firmware, change a
-previously selected qualified package, or start a device operation. Download its
-ZIP from the release notes and use **Devices → dimmer → Update firmware → Choose
-firmware** for a manual trial. The **Updates → Choose local ZIP…** action accepts
-qualified packages. Desktop catalogues continue to refuse automatic firmware admission
-with **Firmware is experimental; import ZIP through Bluetooth trial**.
-Use the explicit existing manual trial path and fresh device-operation review;
-the acceptance file does not authorise a device write. The experimental OTA
-carrier is not automatically selected from the normal firmware catalogue.
+For hosted review use **Publish accepted experimental distribution**
+(`publish-accepted.yml`) on `main`. Pin the Release Please draft and tag to the
+reviewed source SHA, upload the fourteen frozen files and configure protected
+`OWNER_ACCEPTANCE_JSON`/`DEPENDENCY_REVIEW_JSON`. Dispatch `sha`, the selected
+`version` and `publish=false`; review success before separately authorizing
+`publish=true`. This workflow downloads/verifies existing files and performs no
+build or promotion. A draft asset need not be publicly downloadable to stage it.
 
-For protected hosted verification/publication, use the separate manual
-**Publish accepted experimental distribution** workflow on `main`. First pin
-the Release Please draft and tag to the exact final source SHA and upload the
-fourteen already frozen files. Configure `OWNER_ACCEPTANCE_JSON` and
-`DEPENDENCY_REVIEW_JSON` in `release-publication`, then dispatch with `sha`,
-`version=1.0.0` and `publish=false`. It authenticates private-draft downloads,
-verifies the same bytes and performs no rebuild. A later explicitly authorised
-`publish=true` dispatch rechecks the complete candidate and mutable publication
-gates. See [GitHub setup](github-setup.md#retain-existing-signing-identities-and-qualification)
-for the exact credentials and preparation. Automatic qualified assembly remains
-a separate route.
+Android may announce project-release availability with **Experimental** and a
+release-notes action. Metadata discovery never selects candidate firmware or
+starts an operation. Normal catalogue admission rejects experimental firmware;
+use the explicit manual candidate path and fresh device review. Desktop retains
+its explicit Bluetooth trial route. The acceptance asset is no device-write
+permission and does not make its OTA carrier eligible for automatic selection.
 
 ## Evidence and limits
 
-Credentialed Sonar analysis uses protected settings/helpers and candidate source
-as data. Every language needs its actual reports. Missing coverage, target
-compilation, extraction scope or current analysis fails the gate. Fork/Dependabot
-must not receive reusable Cloud/signing/release credentials. PR Community
-analysis covers Python, JavaScript and Kotlin; its complete findings and
-baseline comparison are published as artifacts. Firmware C has the separate
-mandatory CodeQL check. The PR result cannot replace the full protected
-main/release Sonar analysis with actual C compilation/coverage.
+Credentialed analysis uses protected settings/helpers with candidate source as
+data. Every covered language requires actual matching compilation/coverage
+reports. PR Python/JavaScript/Kotlin Sonar and firmware CodeQL checks do not
+replace full protected main/release Sonar including C compilation/coverage.
+Fork/Dependabot analysis uses a disposable instance without reusable secrets.
 
-Repository workflows are configuration, not evidence that GitHub protections,
-credentials, Pages or Sonar are live. Configure and inspect them through the
-[GitHub setup guide](github-setup.md). Native BLE/USB and physical qualification
-are separate recorded checks per platform/probe/target.
-
-The protected qualification JSON must also include `sourceCommit` with the full
-40-character distribution source commit. This is an operator attestation linking
-the measured binaries to the reviewed source; it must be collected with the
-exact build provenance, never inferred from a passing host test. Assembly and
-publication reject evidence from another commit. The loader contracts and every
-role image hash remain bound by the signed common package.
+Firmware qualification must include the full forty-character `sourceCommit`
+and exact component/loader bindings, collected with build provenance. Neither
+passing host tests nor the existence of a workflow establishes physical evidence,
+remote settings, Pages deployment or signer custody.
 
 ## Delivered dependencies and native qualification
 
-Every distribution includes `source-sbom`: a ZIP of the actual Gradle release
-runtime inventory, the complete pinned public Nordic SDK graph, and each native
-bundle's runtime package closure, shipped-file hashes and artifact hashes.
-Android/SDK OSV queries, per-platform Python/native inventory queries and the
-assistant npm audit are mandatory CI checks. A query failure fails validation.
-OSV does not cover every Qt, OpenOCD, system-library or Nordic/ZBOSS vendor binary.
+`source-sbom` contains actual Gradle release runtime inventory, the complete
+frozen Nordic SDK graph and each native bundle's dependency closure, shipped-file
+and artifact hashes. CI advisory queries are mandatory and query failures fail.
+Automated OSV/npm checks do not cover every Qt/OpenOCD/system/Nordic binary.
 
-`DEPENDENCY_REVIEW_JSON` therefore records a separately protected advisory review
-of every delivered inventory graph. It binds the source commit, every release
-artifact hash, every inventory hash, a UTC review date within fourteen days, and
-explicit evidence/dispositions. Missing scope, stale evidence or unresolved
-advisories keep publication blocked. Inspect vendor advisories and the exact
-bundled files for unsupported automated scopes; an empty OSV response is not
-proof of full coverage. A confirmed advisory must be fixed or receive a protected
-`not-affected` disposition with reproducible evidence. Never ignore it in a CI
-allowlist to obtain a green result.
+Protected `DEPENDENCY_REVIEW_JSON` binds source, every final artifact, every
+inventory graph and a UTC review date within fourteen days. Record vendor
+advisory review with explicit dispositions and reproducible evidence. Missing
+scope, stale review or unresolved software advisories blocks publication. Use
+`fixed` or demonstrated `not-affected`; do not suppress an advisory in CI just
+to obtain a green check. Unreachable vulnerable APIs can justify `not-affected`
+with an input-path analysis; that does not mean the library is fixed.
 
-The manual accepted experimental route has one explicit hardware-risk exception:
-Nordic **SA-2025-380** concerns nRF52840 CC310 AES confidentiality under precisely
-timed voltage fault injection with physical access and dedicated equipment. The
-hardware is not claimed fixed or resistant to that attack, and no fault-injection
-qualification is implied. Review the [original Nordic advisory](https://docs-be.nordicsemi.com/bundle/SA/raw/resource/enus/SA-2025-380-v1_0.pdf)
-against the product's physical threat model. This exception does not admit any
-other advisory, software defect or remote attack.
+The accepted route has one bounded physical-risk exception: Nordic SA-2025-380,
+covering nRF52840 CC310 AES confidentiality under precisely timed physical voltage
+fault injection. Review the original advisory and actual physical threat model.
+It is not a fix, fault-injection qualification or waiver of remote/software
+security review. Only `firmware-sdk` may use
+`reviewed-with-accepted-physical-risk`, with one `accepted-physical-risk`
+disposition for that exact ID. Public owner acceptance must disclose the same ID
+as unresolved with exactly matching `impact` and `evidence`. Both documents still
+bind source/hashes/dates. Qualified publication rejects this exception.
 
-Only `firmware-sdk` may use graph status
-`reviewed-with-accepted-physical-risk`. It must contain one disposition with
-`id: SA-2025-380`, `status: accepted-physical-risk`, and descriptive `impact` and
-`evidence` strings. The protected `OWNER_ACCEPTANCE_JSON` and its byte-identical
-published asset must include that same ID as an `unresolved` known issue with
-exactly matching `impact` and `evidence`. Both dated documents still bind the exact
-source and all required artifact/inventory hashes. The publisher admits this
-assessment only with the explicit manual accepted mode and validated public
-owner acceptance. The qualified route rejects it; all other advisories still
-require `fixed` or evidence-backed `not-affected` dispositions. An affected
-component whose vulnerable API is unreachable in this product can be assessed as
-`not-affected` with a reproducible input-path review; do not call its library fixed.
-
-`NATIVE_QUALIFICATION_JSON` is separate from firmware qualification. For Linux
-x64, Windows x64 and macOS Apple Silicon (arm64) it binds exact native asset hashes
-(including both Windows packages) and literal true observations for:
+`NATIVE_QUALIFICATION_JSON` independently binds Linux x64, Windows x64 and macOS
+arm64 assets (including both Windows packages) and real observations for
 `filesystemTransactions`, `bluetoothPermissionsAndUpdate`,
-`dkDriverInstallRepairStart` and `stopAndRestartRecovery`. Each platform entry
-requires an independent bench evidence reference. Build smoke checks cannot
-populate these fields. The qualified publisher requires both protected JSON
-documents even for a local dry run; the accepted experimental route instead
-requires protected owner acceptance disclosing unverified native checks plus the
-same dependency review. Their strict shapes are implemented in
-`tools/release/evidence.py` and demonstrated with fictional test data in
-`tools/release/tests/test_protected_evidence.py`. Do not reuse synthetic test data
-as release evidence. Store actual evidence outside the public source tree.
+`dkDriverInstallRepairStart` and `stopAndRestartRecovery`. Each platform needs its
+own bench reference. Hosted smoke builds cannot populate these fields. The
+qualified route requires firmware and native evidence even in dry-run; the
+accepted route instead discloses false native/firmware checks and retains the
+same dependency review. Shapes and fictional examples live in `evidence.py` and
+`tools/release/tests/test_protected_evidence.py`; never submit fixture evidence
+for a release. Keep actual private bench records outside public source.
+
+## Android version discovery in Obtainium
+
+Publication names the release `Vomar bundle BUNDLE · Android NATIVE_VERSION` using
+the Android version from the independently verified `release-manifest.json`.
+Obtainium's import configuration selects the release title, extracts only the
+Android version and compares it with the installed APK using OS version detection.
+A firmware-only bundle therefore does not appear as an Android app update. The
+tag, asset filenames and Release Please distribution owner remain unchanged.
+Keep this title metadata when editing release notes; do not substitute the bundle
+version for Android's version. Published APK bytes and signing identity stay immutable.

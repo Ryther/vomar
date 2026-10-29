@@ -3,6 +3,11 @@
 - Status: accepted for the DK prototype
 - Date: 2026-08-24
 
+This historical decision applies to the original equal-slot DK prototype.
+The later [independent recovery decision](0003-independent-ble-recovery-dk.md)
+and [current architecture](../architecture.md) describe its successor. The build
+sizes and feasibility decisions below belong to the dated prototype.
+
 ## Context
 
 The first nRF Connect SDK 3.4.0 build combining Nordic Zigbee R23, Bluetooth,

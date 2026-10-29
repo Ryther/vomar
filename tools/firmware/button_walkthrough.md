@@ -1,68 +1,58 @@
-# Verifica guidata dei pulsanti Vimar
+# Check Vimar recovery-button gestures
 
-Dalla radice del progetto, nel terminale del devcontainer:
+This bench guide checks two recovery entrances on the historical BLE research
+profile with a **simulated output backend**. It does not test front-button lamp
+control, color/polarity or power-stage behavior. Before use, obtain explicit
+operator approval for the exact target, manual power actions and reset back to
+MAIN. Keep the approved isolated bench wiring; do not attach a DK to a live
+mains-powered dimmer. Close other BLE clients.
+
+Prepare an existing BlueZ bond and set the exact target BLE address and expected
+MAIN/recovery SMP hashes (SHA-256 of the signed region, not the complete file):
 
 ```sh
-work/smpclient-venv/bin/python tools/firmware/button_walkthrough.py \
+python tools/firmware/button_walkthrough.py \
   --address "$VIMAR_BLE_ADDRESS" --main-hash "$VIMAR_MAIN_SMP_HASH" \
   --recovery-hash "$VIMAR_RECOVERY_SMP_HASH"
 ```
 
-Il firmware nel profilo simulato e il bond BlueZ del Vimar devono essere già presenti.
-Imposta le tre variabili locali con l’indirizzo BLE del tuo dispositivo e gli hash
-SMP delle due immagini attese (SHA-256 della regione firmata, non dell’intero file).
-Lo script richiede esplicitamente questi valori per ogni prova reale; non modifica firmware, associazioni, configurazione
-Bluetooth o uscita luce. Il comando SMP di reset viene usato soltanto per tornare
-all'applicazione dopo aver verificato il contenuto della recovery.
-
-Mantieni l'attuale collegamento da banco e la molletta SWD. I pulsanti da premere
-sono quelli del **Vimar**, non BUTTON 1/RESET del DK. Per il test all'accensione
-si interrompe soltanto l'alimentazione USB del DK/Vimar; la chiavetta Bluetooth del
-PC deve restare collegata. Non serve coordinarsi con la chat.
-
-La sequenza è:
-
-1. Controllo BLE dell'applicazione simulata, senza comandi alla luce.
-2. Premi Invio per armare; attendi **ORA**, poi tieni UP e DOWN insieme per almeno
-   sei secondi e rilasciali. Il monitor ascolta già quando compare il segnale.
-3. Lo script verifica il servizio di recovery autenticato e gli hash di entrambe
-   le immagini. Conferma se hai eseguito il gesto indicato. Rilascia tutti i
-   pulsanti e premi Invio per rientrare nell'applicazione.
-4. Premi Invio per armare il secondo test; attendi **ORA**. Scollega l'USB di
-   alimentazione, tieni UP, ricollega l'USB e mantieni UP fino al messaggio di rilascio della guida.
-5. Segue lo stesso controllo BLE e il ritorno guidato all'applicazione.
-
-`SALTA` evita una prova e viene registrato come prova incompleta. `Ctrl+C` annulla
-e conserva i risultati parziali. Il timeout predefinito è 180 secondi per ciascuna attesa BLE, compreso
-il controllo iniziale dell’app e il ritorno dalla recovery. La guida mostra
-i tentativi di riconnessione e li registra nel log. Puoi usare `--timeout 300`
-se preferisci più tempo. Non viene misurata la durata effettiva
-della pressione: il tempo include lettura delle istruzioni e riconnessione BLE.
-
-Per leggere le istruzioni senza collegarsi al dispositivo:
+Use the prepared BLE Python environment from the [development guide](../../docs/development.md).
+For instructions without BLE access, run:
 
 ```sh
-work/smpclient-venv/bin/python tools/firmware/button_walkthrough.py --plan
+python tools/firmware/button_walkthrough.py --plan
 ```
 
-Ogni esecuzione crea una nuova cartella ignorata
-`experiments/vimar-button-check-<timestamp>/`, contenente:
+## Follow the terminal prompts
 
-- `events.jsonl`: eventi e risposte dell'operatore con timestamp UTC;
-- `results.json`: riepilogo aggiornato dopo ogni fase, con hash, osservazioni e
-  stato distinto per prova superata, saltata, non confermata, fallita o annullata.
+1. The tool checks the simulated MAIN over authenticated BLE without lamp commands.
+2. Press Enter to arm. Wait for **ORA** (“now”), then hold both Vimar UP/DOWN
+   buttons for at least six seconds and release. These are the Vimar buttons,
+   not DK BUTTON 1 or RESET. Monitoring starts before the cue.
+3. The tool authenticates recovery and verifies both image hashes. Confirm
+   whether you performed the gesture. Release every button, then press Enter
+   to authorize the SMP reset back to MAIN.
+4. Arm the boot test with Enter. At **ORA**, disconnect the approved bench USB
+   power, hold Vimar UP, reconnect power and keep UP held until the release cue.
+   Leave the PC Bluetooth adapter connected.
+5. The tool repeats authenticated recovery/hash checks and the reviewed return.
 
-Puoi scegliere una cartella nuova con `--output percorso`. I risultati già
-esistenti non vengono sovrascritti. Codici di uscita: 0 entrambe superate,
-2 incompleto, 1 errore, 130 annullamento.
+`SALTA` skips a test and records it incomplete. `Ctrl+C` stops and saves partial
+results. The default timeout is 180 seconds for each BLE wait, including initial
+MAIN and return; `--timeout 300` allows more time. Elapsed time includes reading
+and reconnecting and is not a measurement of actual button hold duration.
 
-Un errore BLE o un timeout non valgono come prova dei pulsanti. Dopo un errore
-non vengono inviati ulteriori reset: il Vimar potrebbe essere ancora in
-recovery, oppure essersi già riavviato se hai interrotto la fase di ritorno.
-Gli eventi `reset_request_sending` e `reset_acknowledged` distinguono questi casi. Conserva la cartella indicata e condividi l'esito prima di ripetere
-operazioni manuali. Non avviare altri client BLE contemporaneamente alla guida.
+## Read results and handle interruption
 
-Il firmware non espone gli eventi delle singole pressioni: questa guida verifica
-i due ingressi recovery, non toggle, dimmerazione, polarità dei singoli pulsanti,
-LED o effetti sulla luce. La conferma dell'operatore è registrata separatamente
-dall'osservazione automatica BLE.
+Each run creates a new ignored `experiments/vimar-button-check-<timestamp>/`
+(`--output` selects another new directory). `events.jsonl` retains UTC events and
+operator responses; `results.json` is refreshed after each phase and distinguishes
+passed, skipped, unconfirmed, failed and cancelled outcomes. Existing results
+are not overwritten. Exit codes: 0 both passed, 2 incomplete, 1 error, 130 cancelled.
+
+A BLE timeout is not button evidence. After error, no further reset is sent;
+the target may remain in recovery or may already have restarted during return.
+Inspect `reset_request_sending` and `reset_acknowledged`, retain the report and
+inspect current state before retry. The tool observes authenticated services and
+hashes; operator confirmation is separate evidence. It does not upload firmware,
+remove bonds or change adapter configuration.

@@ -1278,3 +1278,5 @@
 !/tools/release/tests/test_codeql_gate.py
 !/apps/android-updater/obtainium.json
 !/.github/code-scanning-ruleset.json
+
+!/tools/release/tests/test_obtainium_native.py

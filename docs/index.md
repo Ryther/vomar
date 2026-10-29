@@ -1,39 +1,37 @@
 # Vomar documentation
 
-![Vomar — Independent open-source firmware](images/vomar-banner.png)
+Vomar manages compatible Vimar 30805 dimmers with custom firmware, Android and
+desktop clients, and an optional Zigbee2MQTT converter. It is independent of Vimar.
 
-Vomar is an independent firmware and updater project for compatible Vimar 30805
-dimmers. A coordinated distribution contains firmware, Android, desktop GUI/CLI
-and a Zigbee2MQTT converter. Firmware 1.0.0 remains a qualification candidate;
-its thirteen physical checks are pending. Installing a client or checking source
-code does not qualify a physical device.
+## Install and use
 
-## What do you want to do?
+Start with **[Install Vomar](installation.md)**. No device, broker, development
+SDK or GitHub account is needed to install the app.
 
-- **[Install or update the client](installation.md):** Choose Android or the
-  matching native desktop package and verify first startup.
-- **[Use Android](android-updater.md)** or **[use desktop GUI/CLI](desktop.md):**
-  Select a package, connect deliberately and review an operation.
-- **[Fix a problem](troubleshooting.md):** Diagnose a failure or interrupted
-  session while preserving originals and uncertain target state.
-- **[Understand package and recovery rules](offline-guide.md):** Distinguish
-  shared firmware from device-private originals and operation consent.
-- **[Review first installation](android-first-install.md)** or a
-  **[Bluetooth qualification trial](android-bluetooth-trial.md):** Separate,
-  explicitly authorized procedures with physical checks still pending.
-- **[Give an assistant the user guide](https://github.com/Ryther/vomar/blob/main/.agents/skills/vomar-guide/SKILL.md):**
-  Self-contained setup, diagnosis, upgrade and removal guidance.
+| Your task | Guide |
+| --- | --- |
+| Install Android or move from a manually installed APK to Obtainium | [Android](android-updater.md#install-and-track-with-obtainium) |
+| Install Linux, Windows or macOS software | [Desktop](desktop.md#install) |
+| Connect Android to Zigbee2MQTT | [Android connections](android-updater.md#automatic-zigbee2mqtt-connection) |
+| Update one already-custom dimmer | [Bluetooth update](android-bluetooth-trial.md) |
+| Join a Zigbee network or enter Bluetooth service | [Connection modes](connection-modes.md) |
+| Understand a rejected package, failed connection or interruption | [Troubleshooting](troubleshooting.md) |
+| Preserve originals and choose the correct ZIP | [Packages and recovery](offline-guide.md) |
+| Install custom firmware for the first time with a DK | [First installation](android-first-install.md) |
 
-## Contribute or understand the design
+Installing a client never installs device firmware automatically. Experimental
+firmware needs its explicit manual route and fresh device review. Keep each
+original backup independently of the app; Android uninstall deletes private data.
 
-- [Architecture](architecture.md): component ownership, trust and persistence.
-- [Development](development.md) and [contribution rules](../CONTRIBUTING.md):
-  container, test environments, commands and review evidence.
-- [Release a distribution](releasing.md) and [configure GitHub](github-setup.md):
-  version proposals, exact candidate checks, credentials and publication.
-- [Research evidence](research-summary.md): confirmed observations, hypotheses
-  and remaining hardware limits.
+## Develop and research
 
-The guides track repository source. Compare installed app/package versions with
-release notes before applying steps from a newer revision. A downloaded package,
-green badge or acknowledged reset does not prove physical operation.
+- [Contribute](../CONTRIBUTING.md) and [set up the development container](development.md).
+- [Architecture](architecture.md) and [client support](desktop-parity.md).
+- [Release a bundle](releasing.md) and [configure GitHub](github-setup.md).
+- [Zigbee controls](zigbee-controls.md) and [OTA reference](zigbee-ota.md).
+- [Research evidence](research-summary.md), [known facts](known-facts.md) and
+  [open hypotheses](hypotheses.md).
+
+Guides describe the source revision you are reading. Check the exact release
+manifest for delivered component versions and qualification. Historical research
+and an earlier successful bench trial do not certify a newer package.

@@ -1,15 +1,15 @@
 # SWD identity monitor and automatic state capture
 
-Set your local J-Link serial and the two expected FICR DEVICEID words (hex, in
-address order), then use the continuous monitor:
+Use an explicitly authorized isolated bench connection; never attach a DK to a
+mains-powered dimmer. Set your local J-Link serial and the two expected FICR
+DEVICEID words (hex, in address order), then use the continuous monitor:
 
 ```sh
 python tools/hardware/watch_vimar_swd.py --jlink-serial "$VIMAR_JLINK_SERIAL" \
   --uid "$VIMAR_DEVICEID0" "$VIMAR_DEVICEID1" --interval 1
 ```
 
-To capture the next complete response from the exact Vimar, without coordinating
-with the chat:
+To capture the next complete response from that exact target:
 
 ```sh
 python tools/hardware/watch_vimar_swd.py --jlink-serial "$VIMAR_JLINK_SERIAL" \

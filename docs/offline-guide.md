@@ -1,47 +1,53 @@
-# Installation and recovery guide
+# Packages, originals and recovery
 
-This guide accompanies the coordinated Vomar distribution. It contains no device
-backup, household configuration, account credential or signing key.
+A Vomar release contains shared installers and firmware. A device's original
+backup belongs to that device and stays private. These files are not interchangeable.
 
-1. Choose the Android APK or native desktop package for your actual platform.
-   Desktop packages target Linux x64, Windows x64 and macOS Apple Silicon (arm64).
-   Check SHA256SUMS against release-manifest.json. Desktop trusted OS signing is
-   deferred; firmware/APK cryptographic signing remains mandatory.
-2. For qualified firmware choose `vomar-firmware-VERSION.zip`. An explicitly
-   accepted experimental distribution instead contains
-   `vomar-firmware-VERSION-qualification-candidate.zip` and
-   `vomar-release-acceptance-VERSION.json`. Read the acceptance record and known
-   issues before selecting those bytes through manual candidate import. Android
-   uses **Devices → dimmer → Update firmware → Choose firmware**; its normal
-   **Updates → Choose local ZIP…** action accepts qualified packages. Desktop uses
-   the separate Bluetooth trial tool.
-   Automatic firmware catalog/fleet/Zigbee selection rejects the experimental
-   package. The app independently verifies signatures, roles, layout and loader.
-   Desktop ZIPs are installers. Do not unpack firmware to bypass admission.
-3. For an already compatible dimmer, enter the project's Bluetooth recovery,
-   select the nearby target, read its live identity and review the operation.
-   Do not approve from a radio name or saved room alone. A stable HTTPS carrier
-   can alternatively support a qualified eligible Zigbee2MQTT update after fresh
-   checks. The experimental OTA asset is not an automatic update approval.
-4. First installation is an isolated bench procedure, with mains disconnected.
-   Select the exact DK, explicitly review HALT, acquire two equal full originals,
-   save privately and reopen the same bytes. Android 1.0.6 keeps this verified
-   original on the phone and offers an additional export; desktop requires its
-   explicit export/reopen. Keep an independent original copy before deleting app
-   data. Only then review installation.
-   Preserve the original permanently; it is specific to that physical target.
-5. Successful FLASH readback ends halted. Review verified start separately.
-   Acknowledged transfer/reset is not proof that lamp, buttons, Zigbee or BLE work.
-   Observe those functions physically and retain qualification separately.
-6. After interruption, stop and retain the target state, original and journal.
-   Review explicit repair/resume for the same target/release/original. Never
-   recover, mass erase, change UICR or release an uncertain CPU automatically.
-7. Ordinary uninstall preserves private sessions, originals and credentials.
-   Diagnostic export is intentional and may contain device identity: share it
-   privately after review, never as a public GitHub release asset.
+## Choose the right file
 
-Experimental firmware retains all thirteen pending physical-check flags. The
-release acceptance binds the owner's distribution decision to exact payload
-hashes and discloses unverified native checks; it does not certify those tests.
-The known APS-105-5241 assert can restart Zigbee firmware and remains unresolved.
-A passing host test or downloaded package is not physical qualification.
+| File | Purpose |
+| --- | --- |
+| `vomar-android-VERSION.apk` | Install/update the Android app. |
+| Desktop tar.gz, DMG, setup executable or portable ZIP | Install the matching native desktop client. |
+| `vomar-firmware-VERSION.zip` | Qualified common firmware, when such a release is available. |
+| `vomar-firmware-VERSION-qualification-candidate.zip` | Experimental firmware; requires explicit manual admission and review. |
+| `.ota` | Exact Zigbee OTA carrier; not a manually selected common firmware ZIP. |
+| Device original ZIP | Private FLASH/FICR/UICR recovery material, specific to one target. |
+| Diagnostic report | Recorded observations for troubleshooting; not an original backup. |
+
+`VERSION` in distribution filenames is the bundle version. Native versions are
+in `release-manifest.json`; checksums are in `SHA256SUMS`. The app separately
+checks firmware signatures, component roles, layout and loader compatibility.
+Never unpack, rename or edit a package to bypass rejection.
+
+## Experimental firmware
+
+Read the exact release's known issues and acceptance record. Android chooses
+experimental firmware through **Devices → dimmer → Update firmware → Choose
+firmware**; desktop has a separate Bluetooth trial route. Ordinary catalog,
+fleet and Zigbee admission remains closed for candidates. A published OTA asset
+is not automatic-update approval.
+
+The published experimental acceptance records pending physical checks and the
+unresolved APS-105-5241 restart issue. A host test, signature or green badge does
+not complete those checks. See [release preparation](releasing.md) for the
+publisher contract and [research evidence](research-summary.md) for bounded observations.
+
+## Keep recovery material
+
+Keep one immutable original archive per device in independent private storage.
+Android captures and reopens a private copy; external export is an additional
+user action. Desktop requires its explicit export/reopen. Before uninstalling
+Android, export each original you need: uninstall/Clear storage deletes private
+originals, sessions, settings and credentials. Files already exported elsewhere
+survive independently; an original export is not a complete app-state backup.
+
+After interruption, preserve the package, original and journal. Use explicit
+resume/repair for the same target and bytes, with a fresh review. Missing or
+changed evidence blocks repair. Successful first-install readback ends halted;
+start is separately reviewed. Never use mass erase, recover, UICR writes or an
+automatic CPU release as generic repair.
+
+Follow [First installation](android-first-install.md),
+[Bluetooth updates](android-bluetooth-trial.md) or
+[Troubleshooting](troubleshooting.md) for the operation you were performing.

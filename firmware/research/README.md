@@ -1,7 +1,7 @@
 # BLE research firmware
 
 This page describes the historical BLE research application and its opt-in
-profiles. For current common firmware 1.0.0 and the scope of earlier successful
+profiles. For the common firmware architecture and the scope of earlier successful
 Vimar trials, see the [public research summary](../../docs/research-summary.md).
 Build-only statements below describe the original candidate stage.
 
