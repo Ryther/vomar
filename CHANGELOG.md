@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/Ryther/vomar/compare/v1.0.0...v1.1.0) (2026-10-29)
+
+
+### Features
+
+* **firmware:** integrate phase selection, Identify and release safeguards ([0aca5cb](https://github.com/Ryther/vomar/commit/0aca5cb3e1169a5e30e620e9539f6825628309b8))
+
+
+### Bug Fixes
+
+* **firmware:** retain SDK failures across compatible recovery updates ([e1daedd](https://github.com/Ryther/vomar/commit/e1daedd9e360a44bfd24934fee2c2c7187416ffe))
+
 ## [1.0.0](https://github.com/Ryther/vomar/compare/v2.0.0...v1.0.0) (2026-10-28)
 
 
