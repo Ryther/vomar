@@ -1,5 +1,7 @@
 # Vomar documentation
 
+![Vomar — Independent open-source firmware](images/vomar-banner.png)
+
 Vomar manages compatible Vimar 30805 dimmers with custom firmware, Android and
 desktop clients, and an optional Zigbee2MQTT converter. It is independent of Vimar.
 

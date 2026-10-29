@@ -150,6 +150,6 @@ version, last phase and sanitized error. Do not publish originals, passwords,
 raw network captures or full device identities. An acknowledged reset is not
 proof of working lights, radio or recovery.
 
-Developers: [environment and builds](development.md),
+Developers: [Android checks and local builds](development.md#android-checks-and-local-builds),
 [interface reference](android-updater-ui.md), [wording rules](android-updater-language.md)
 and [qualification evidence](ux-evidence.md).

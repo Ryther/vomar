@@ -16,9 +16,12 @@ historical set, not version-only permission to use any similarly named file.
 
 Current migration admission must verify the signed package, finite loader/source
 policy, exact live target, OFF state, image roles and embedded recovery binding.
-An unsupported source, missing original or mismatching identity blocks the
-operation. Do not substitute a package from an old experiment directory or pick
-the newest filename as authority. Preserve private original stock backups.
+An unsupported source or mismatching identity blocks the operation. Retaining
+the matching private stock original before a trial is an operator prerequisite;
+the Android Bluetooth migration route does not accept a stock-original archive
+or check its availability. A package code field named `originalZip` refers to
+the release package bytes, not a stock backup. Do not substitute a package from
+an old experiment directory or pick the newest filename as authority.
 
 ## Operator boundary
 

@@ -127,8 +127,9 @@ saved but unused in dynamic mode.
 The legacy `led` endpoint retains `state_led`, `brightness_led`, `color_led` and
 `effect_led`. `effect_led=automatic` clears the override; `steady`/`slow_blink`
 keep it indefinitely. Profile edits do not remove an active override. Priority
-is fault, override, temporary indication, automatic profile; Identify is a
-temporary indication with its own standard command.
+is fault → Identify → manual override → other temporary indication → automatic
+profile. Identify uses its own standard command and temporarily supersedes an
+override; the underlying state resumes when Identify ends.
 
 For a fifteen-second amber override, publish to
 `zigbee2mqtt/YOUR_DEVICE/set`:
