@@ -119,9 +119,14 @@ class AutomaticConnectionUiTest:ActivityInstrumentationTestCase2<MainActivity>(M
             control.requestRectangleOnScreen(Rect(0,0,control.width,control.height),true)
         }
         instrumentation.waitForIdleSync()
-        instrumentation.runOnMainSync {
-            val control=nodes().filterIsInstance<TextView>().first {it.text.toString()==text&&it.isShown&&it.isEnabled}
-            check(root.hasWindowFocus()&&control.getGlobalVisibleRect(bounds))
+        // Scrolling and keyboard transitions can outlive the first idle frame.
+        awaitCondition("Connection control must be focused and visible: $text") {
+            var ready=false
+            instrumentation.runOnMainSync {
+                val control=nodes().filterIsInstance<TextView>().firstOrNull {it.text.toString()==text&&it.isShown&&it.isEnabled}
+                ready=root.hasWindowFocus()&&control?.isAttachedToWindow==true&&control.getGlobalVisibleRect(bounds)
+            }
+            ready
         }
         val started=SystemClock.uptimeMillis()
         for(action in listOf(MotionEvent.ACTION_DOWN,MotionEvent.ACTION_UP)) {
