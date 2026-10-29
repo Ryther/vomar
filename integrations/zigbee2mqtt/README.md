@@ -159,3 +159,6 @@ restored when Identify ends. A front long press while OFF now keeps the lamp OFF
 
 See the [firmware guide](../../firmware/README.md) for v5 settings migration,
 downgrade limits and remaining physical qualification.
+
+Zigbee2MQTT displays the custom devices under vendor **Vomar**, including its OTA
+list. Model identifiers and matching remain unchanged for existing devices.

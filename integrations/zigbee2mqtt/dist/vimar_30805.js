@@ -543,7 +543,7 @@ function buildDefinition({light, addCustomCluster, expose, dataTypes = {}}) {
         command('enter_recovery', 'enterRecovery'),
         command('clear_led_override', 'clearLedOverride'), command('request_snapshot', 'requestSnapshot'), command('bypass_on', 'bypassOn')];
     return {zigbeeModel: ['Vimar30805-DK', 'Vimar30805'], ota: true, endpoint: () => ({default: 1, led: 1, led_off: 1, led_on: 1}),
-        meta: {multiEndpoint: true, multiEndpointSkip: ['state', 'brightness']}, toZigbee: [profileLightConverter('led_off'), profileLightConverter('led_on'), ledLightConverter(), ordinaryLightConverter(standardLight)], model: '30805-custom', vendor: 'OpenVimar',
+        meta: {multiEndpoint: true, multiEndpointSkip: ['state', 'brightness']}, toZigbee: [profileLightConverter('led_off'), profileLightConverter('led_on'), ledLightConverter(), ordinaryLightConverter(standardLight)], model: '30805-custom', vendor: 'Vomar',
         description: 'Vimar 30805 custom dimmer firmware',
         extend: [addCustomCluster(CLUSTER_NAME, clusterDefinition(dataTypes)),
             standardLight,

@@ -11,7 +11,7 @@ def prepare_update(ieee,path,block_size=64):
  magic,version,hlen,flags,manufacturer,kind,release,stack=struct.unpack_from('<IHHHHHIH',data)
  total,hwmin,hwmax,tag,payload=struct.unpack_from('<IHHHI',data,52)
  if (magic,version,hlen,flags,manufacturer,kind,stack,hwmin,hwmax,tag)!=(0x0beef11e,0x100,60,4,0xfff1,0x3085,2,1,1,0) or total!=len(data) or payload!=len(data)-66:raise ValueError('Wrong OTA model/header/length')
- return {'id':ieee,'hex':{'file_name':f'openvimar-{release:08x}-{hashlib.sha256(data).hexdigest()[:12]}.ota','data':data.hex()},'image_block_request_timeout':150000,'image_block_response_delay':10,'default_maximum_data_size':block_size}
+ return {'id':ieee,'hex':{'file_name':f'vomar-{release:08x}-{hashlib.sha256(data).hexdigest()[:12]}.ota','data':data.hex()},'image_block_request_timeout':150000,'image_block_response_delay':10,'default_maximum_data_size':block_size}
 def correlated_result(message,transaction):
  p=message.get('payload')
  return p if message.get('topic')==UPDATE_TOPIC and isinstance(p,dict) and p.get('transaction')==transaction else None
