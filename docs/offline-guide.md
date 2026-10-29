@@ -100,9 +100,10 @@ packages use
 **Settings → Tools → Choose Bluetooth trial candidate**, then **Review Bluetooth
 trial** for the selected target. Review live identity, loader and package, then
 type the displayed challenge to approve the operation. A local ZIP needs no
-GitHub token. Manual admission may relax outer package signatures; image
-signatures, roles, layout, identity and loader checks still apply. It cannot
-grant an unsigned watchdog capability.
+GitHub token. Android's manual local/beta route may relax outer package
+signatures; desktop candidate import requires the signed candidate. Both retain
+image signatures, roles, layout, identity and loader checks. Unsigned descriptors
+grant no watchdog capability.
 
 ## First installation and original capture
 

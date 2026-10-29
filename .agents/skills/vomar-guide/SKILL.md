@@ -97,9 +97,10 @@ start a fleet job or approve a device operation.
 
 For an experimental manual trial use Devices → dimmer → Update firmware → Choose
 firmware. Updates → Choose local ZIP… accepts qualified packages. Desktop uses a
-separate Bluetooth trial route. Manual local/beta admission can relax outer
-signatures, never image signatures/identity/geometry/loader checks. It cannot
-grant an unsigned watchdog capability. Automatic catalog/fleet/Zigbee admission
+separate Bluetooth trial route that requires the signed candidate. Android-only
+manual local/beta admission may relax outer package signatures. Both retain image
+signatures, roles, layout, identity, geometry and loader checks; unsigned
+descriptors grant no watchdog capability. Automatic catalog/fleet/Zigbee admission
 remains closed for candidates.
 
 ## Devices and optional connections

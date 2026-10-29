@@ -123,6 +123,17 @@ separate checks. The command above starts neither an emulator nor hardware.
 
 ### Maintainer local APK helper and signing continuity
 
+**Official updates require the existing Android signing identity.** Before using
+this maintainer helper for an official update, ensure the existing private
+`work/private/android-updater/signing.jks` and `signing-password.txt` are present
+through the authorized private custody process. The helper creates a new local
+identity if **both** files are absent, and refuses an incomplete pair. A clean
+checkout therefore does not reproduce the shipped signer. A newly created local
+identity is only for disposable local builds; it cannot update the official app
+in place. Never regenerate or replace official signing material to fix a build
+or signer error, and never uninstall an owner's app to bypass continuity.
+Unsigned contributor checks above need no private Android signing identity.
+
 For a local maintainer build, return to the repository root. The helper uses
 `ANDROID_HOME` (default `work/android-sdk`), Java and the prepared offline cache;
 its supported invocation is:
@@ -141,16 +152,6 @@ it builds no firmware bundle and runs no instrumentation or physical checks.
 Retain the matching Gradle R8 mapping separately; the helper does not copy it to
 the output directory. It does not run the coverage/runtime-inventory tasks above.
 
-**Official updates require the existing Android signing identity.** Before using
-this maintainer helper for an official update, ensure the existing private
-`work/private/android-updater/signing.jks` and `signing-password.txt` are present
-through the authorized private custody process. The helper creates a new local
-identity if **both** files are absent, and refuses an incomplete pair. A clean
-checkout therefore does not reproduce the shipped signer. A newly created local
-identity is only for disposable local builds; it cannot update the official app
-in place. Never regenerate or replace official signing material to fix a build
-or signer error, and never uninstall an owner's app to bypass continuity.
-Unsigned contributor checks above need no private Android signing identity.
 
 Android signing is separate from firmware signing. The APK audit compares its
 firmware public DER trust anchor with `firmware/keys/dev-public.pem`, checks
