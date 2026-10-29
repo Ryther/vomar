@@ -33,8 +33,7 @@ firmware and Android builds additionally require the explicit SDK setup in
 [Development](docs/development.md). Their authoritative CI commands are in
 `.github/workflows/validate.yml` and `security.yml`.
 
-Run
-relevant focused tests while working and all affected required checks before
+Run relevant focused tests while working and all affected required checks before
 handoff. Preserve reported skips: unavailable private artifacts and physical
 tests are not successful qualification.
 
@@ -98,3 +97,30 @@ Pages publication is opt-in with `ENABLE_PAGES=true`. Build the site locally
 with the locked environment, follow install → verify → troubleshoot and
 contribute → checks → release links, and review rendered navigation after
 changes. A local strict build does not prove Pages is deployed.
+
+## Commits and push readiness
+
+Use the Conventional Commit types/scopes accepted by `.cz.toml`, for example
+`fix(android): preserve retained installation evidence`. Component names are
+scopes, not types. Release Please owns version/changelog proposals; never use
+`cz bump`.
+
+Before calling a branch ready to push, refresh the actual destination and check
+every outgoing commit, including inherited merge/rebase commits. For main:
+
+```sh
+git fetch origin main
+cz check --rev-range origin/main..HEAD
+git diff --check
+python -m tools.release.public_tree --include-untracked --output _test/public-tree.json
+python -m tools.release.install_check_tools --output _test/check-tools
+_test/check-tools/gitleaks git --redact --no-banner --log-opts=HEAD
+```
+
+Run the range validator only when outgoing commits exist, and substitute the
+actual destination for another branch. Review author/committer names and email
+addresses as well as secret findings before OSS publication. Correct unpublished
+invalid messages while preserving contents; rewriting pushed history needs
+explicit authorization. Push only the authorized branch and verify its remote
+SHA afterward. A successful secret scan is not an anonymity audit, and local
+checks do not establish remote protection settings.

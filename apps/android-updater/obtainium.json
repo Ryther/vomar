@@ -3,5 +3,5 @@
   "url": "https://github.com/Ryther/vomar",
   "author": "Ryther",
   "name": "Vomar",
-  "additionalSettings": "{\"apkFilterRegEx\":\"^vomar-android-[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\\\.apk$\",\"versionDetection\":false,\"includePrereleases\":false,\"includeDrafts\":false,\"trackOnly\":false}"
+  "additionalSettings": "{\"apkFilterRegEx\":\"^vomar-android-[0-9]+\\\\.[0-9]+\\\\.[0-9]+\\\\.apk$\",\"releaseTitleAsVersion\":true,\"versionExtractionRegEx\":\"\\\\bAndroid\\\\s+([0-9]+\\\\.[0-9]+\\\\.[0-9]+)\\\\b\",\"matchGroupToUse\":\"$1\",\"versionDetection\":true,\"includePrereleases\":false,\"includeDrafts\":false,\"trackOnly\":false}"
 }

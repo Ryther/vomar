@@ -35,6 +35,13 @@ def decode_record(data,expected_build=None):
   result['matches_expected_build']=build==expected_build
  for name,offset,bit,signed in FIELDS:
   if valid&(1<<bit):result[name]=struct.unpack_from('<i' if signed else '<I',data,offset)[0]
+ if kind==2:
+  source=result['source'];tag=source>>24;severity=(source>>16)&0xff
+  if tag==0xa0 and severity!=1 and source&0xffff==0 and result['line']==-2147483648:
+   result.update(kind='sdk_error',severity=severity,original_location_present=False)
+  elif tag==0xa1 and severity==0xff:
+   result.update(kind='sdk_error',severity=severity,original_location_present=True,
+                 original_file_id=source&0xffff,original_line=result['line'])
  return result
 
 def decode_chunks(state,expected_build=None):

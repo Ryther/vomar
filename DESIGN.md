@@ -16,8 +16,9 @@ only to review a specific mutation; ordinary navigation and settings use inline
 panels. Errors preserve entered values and name the next action. Transfer,
 requested restart, verified readback and observed device return are distinct.
 
-The inherited palette is established; the desktop rail/row composition is an
-implementation assumption while the user is unavailable, not a new user approval.
+Treat this page as the interface contract. Check the implemented destinations
+and layouts against [UX evidence](docs/ux-evidence.md); intended layout alone
+does not establish accessibility or usability at a particular viewport.
 
 The supplied Vomar concept 01 artwork lives in `assets/branding`; its manifest
 pins the original image bytes. Use the banner in the README and documentation

@@ -1,114 +1,89 @@
-# Install, configure and update Vomar
+# Install Vomar
 
-Start with the client, without connecting a probe or approving a device write.
-Vomar's current firmware 1.0.0 is a qualification candidate with thirteen physical
-checks pending. Ordinary release/fleet routes reject candidates. Use a separately
-authorized qualification procedure when evaluating a candidate; installing the
-client does not authorize that procedure.
+Install the app first. You do not need a connected dimmer, broker, DK, GitHub
+account or development SDK. App installation does not start a device operation.
 
-## Before downloading
+## Android
 
-- Choose Android or the native desktop package for your OS and architecture.
-  Desktop targets are Linux x64, Windows x64 and macOS Apple Silicon (arm64);
-  target contracts and platform limitations are in [Desktop](desktop.md).
-- Obtain artifacts from a reviewed project distribution. Check its version,
-  source commit, component versions, qualification scope and `SHA256SUMS`.
-  The repository and its badges do not prove that a distribution is published.
-- Preserve the device's original backup privately, independently of shared
-  firmware. Client installation needs neither a device registry nor a Nordic SDK.
-- For Bluetooth use, the OS must support the selected adapter and grant the
-  app's requested Bluetooth permissions. USB/DK access is needed only for the
-  separately reviewed bench path.
+Requires Android 8.0 (API 26) or later.
 
-If no suitable published distribution is available, stop at source development
-or an authorized qualification exercise. Do not rename a candidate to make it
-look like a stable release. The GitHub source setting is
-`https://github.com/Ryther/vomar`; local signed ZIP selection remains available
-without a GitHub account.
+Use **[Install with Obtainium](android-updater.md#install-and-track-with-obtainium)**
+to receive Android app updates. If Vomar is already installed from an APK, update
+over it with the same signing identity. **Do not uninstall or clear app data.**
 
-## Install the Android client
+Alternatively, download the signed `vomar-android-VERSION.apk` from the
+[project releases](https://github.com/Ryther/vomar/releases/latest), check its
+entry in `SHA256SUMS`, open it and confirm Android's installer. Review permission
+for the installer source when Android requests it. `VERSION` in an asset filename
+is the **bundle** version; the APK has its own Android version.
 
-1. Obtain the signed APK for the intended app version and verify its distribution
-   checksum. App and firmware versions are independent.
-2. On the phone, open the APK through the system installer. If Android requests
-   permission for that installer source, review and grant it deliberately.
-3. Open the app. Devices and Settings should be available without a broker or
-   a connected dimmer. Check the installed app version in Settings.
-4. In Settings → Updates, select the common firmware ZIP or configured release
-   source. Android 1.0.6 detects qualified, beta and local packages in one chooser;
-   local/beta selection needs explicit confirmation. Component image signatures
-   and compatibility remain mandatory. Package selection starts no write.
-5. Grant Bluetooth permissions when using a Bluetooth action. An optional
-   Zigbee2MQTT connection is configured separately under Settings → Zigbee2MQTT.
+Open Vomar and check its app version in **Settings**. Devices and Settings are
+available before connecting a broker or dimmer. Grant Bluetooth or USB permission
+only when using the corresponding action.
 
-A signed upgrade must preserve package identity and signing continuity. Do not
-uninstall merely to bypass an Android signature mismatch: preserve private state
-and investigate the selected APK. See [Android](android-updater.md) for current
-client behavior and [troubleshooting](troubleshooting.md).
+## Desktop
 
-## Install the desktop client
+Download the package for your platform from the same release. Check its checksum
+before opening it. The package includes its runtime: no Python or SDK installation
+is required.
 
-Use the package instructions in [Desktop → Install](desktop.md#install):
+| Platform | Install |
+| --- | --- |
+| Linux x64, Ubuntu 22.04+ target | Extract the tar.gz into a new directory, run `sh Vomar/install.sh` there, then launch Vomar from the desktop menu. |
+| Windows x64, Windows 10 1809+/11 target | Run the per-user setup executable, or extract the portable ZIP. |
+| macOS Apple Silicon, macOS 14.4+ target | Open the arm64 DMG and copy Vomar to Applications. Intel Mac packages are not provided. |
 
-- **Linux x64:** extract the downloaded archive into a new directory. From that
-  directory run `sh Vomar/install.sh`. Launch Vomar from the desktop menu, or use
-  the installed `vomar-gui` and `vomar` launchers under `~/.local/bin`.
-- **Windows x64:** run the per-user installer or extract the portable ZIP.
-  Review the normal first-launch approval for the unsigned desktop application.
-- **macOS Apple Silicon:** choose the arm64 DMG and copy Vomar to Applications.
-  The current packaging uses ad-hoc signing, without trusted developer signing
-  or notarization; review the normal OS approval rather than disabling platform
-  protection globally.
+Desktop trusted OS signing/notarization is deferred; macOS packages use ad-hoc
+integrity signing. Use the OS's normal approval flow after verifying the download,
+without disabling system protection globally. Native driver and Bluetooth/USB
+compatibility still need verification on the actual platform.
 
-Open the app without a device attached. Devices, Activity and Settings should
-appear. Desktop users do not install Python or SDKs. `vomar --version` and
-`vomar --help` check the installed CLI without starting a device operation.
+Open Devices, Activity and Settings. On Linux, `vomar --version` and
+`vomar --help` also verify the installed command without a device operation.
+See [Desktop](desktop.md) for packaged CLI locations and optional connections.
 
-In Settings → Updates, select the signed common ZIP or release source. Preserve
-the ZIP as a package: desktop ZIP assets are installers, while the canonical
-firmware ZIP is selected by role and verified content. See the
-[offline package and recovery checklist](offline-guide.md).
+## Before selecting device firmware
 
-## Optional broker configuration
+Read the release notes, component versions and qualification record. The
+`release-manifest.json` identifies each artifact and native component version;
+`SHA256SUMS` checks download integrity. The app separately verifies firmware
+signatures and device compatibility.
 
-Use a broker and Zigbee2MQTT environment you control. Desktop credentials use
-the OS credential store; Android uses encrypted private storage. One active
-broker may serve up to three configured Zigbee2MQTT base topics. Broker login,
-topic selection and saved device names never approve firmware work.
+Use a complete firmware ZIP, not a desktop archive, OTA carrier or extracted
+binary. The published experimental package uses
+`vomar-firmware-VERSION-qualification-candidate.zip`. Android selects it through
+**Devices → dimmer → Update firmware → Choose firmware**. The ordinary
+**Updates → Choose local ZIP…** route accepts qualified packages. Desktop has a
+separate Bluetooth trial route. See [packages and backups](offline-guide.md).
 
-For plaintext local connections, review the separate consent. Use the exact
-broker port and a client-supported transport. Connect explicitly and check the
-connection result before interpreting device metadata. Saved/retained readings
-may be stale and are not authenticated update eligibility. See
-[Android](android-updater.md) or [Desktop](desktop.md#optional-mqtt-and-fleet).
+Package selection alone grants no write permission. First installation is a
+separate [isolated bench procedure](android-first-install.md); an update of an
+already-custom dimmer uses [Bluetooth review](android-bluetooth-trial.md).
 
-## First use and observable success
+## Optional Zigbee2MQTT connection
 
-Client installation succeeds when the selected app opens and reports the
-expected app version. Package inspection succeeds when the app accepts the
-signature, roles and compatibility contract. Neither result proves a working
-device or authorizes a write.
+Configure a broker only if you use Zigbee2MQTT. Android's entry is
+**Settings → Zigbee2MQTT**; desktop provides MQTT settings. Save the exact host,
+port, transport and base topics, then connect explicitly. Plaintext local
+connections require separate consent. Credentials remain private.
 
-For an existing compatible custom target, use its explicit review flow and
-confirm live identity before deciding on an update. In Android 1.0.6 the entry
-is Devices → device → Update firmware. Initial bench installation is a separate
-guided procedure. Manual local/beta admission may relax outer signatures but
-never image signatures, compatibility or consent. See:
-[Bluetooth trial](android-bluetooth-trial.md) and
-[first installation](android-first-install.md). Physical intervention requires
-the operator's separate approval; do not start it from an installation check.
+A connected broker provides observations, not firmware permission. Saved readings
+may be stale. Follow [Android connections](android-updater.md#automatic-zigbee2mqtt-connection)
+or [Desktop MQTT](desktop.md#optional-mqtt-and-fleet) for verification.
 
 ## Upgrade or remove a client
 
-Read the release's migration notes, preserve private originals and sessions,
-then install the matching signed Android upgrade or replacement desktop package.
-Reopen the client and verify the installed app version and retained state.
-Installing a newer client does not install newer firmware automatically.
+Wait for any active operation to end. Keep originals and interrupted-session
+records, install the matching app upgrade, then check the version and retained
+state. Updating the app never updates dimmer firmware automatically.
 
-The Linux bundle's `uninstall.sh` removes its owned runtime and launchers while
-preserving private application state. Android uninstall can remove app-private
-state: export originals and required records before proceeding. Do not assume
-that an exported original is retained merely because it was once captured.
-Removing a client does not restore stock device firmware or cancel an already
-submitted remote OTA operation. Use [troubleshooting](troubleshooting.md) before
-changing anything when a session is interrupted or uncertain.
+**Android uninstall or Clear storage deletes private originals, sessions,
+settings and credentials.** Export each required original to independent private
+storage first. Files exported to Documents or a PC survive independently, but
+an exported original is not a complete backup of app state. Automatic Android
+backup is disabled for this app.
+
+The Linux `uninstall.sh` removes the owned runtime and launchers while retaining
+private application state. Removing a client does not restore stock firmware or
+cancel an OTA request already submitted to Zigbee2MQTT. For interrupted work,
+read [Troubleshooting](troubleshooting.md) before removing anything.

@@ -1,45 +1,43 @@
-# Prova manuale di perdita di alimentazione sul DK
+# Manual DK power-cut during BLE upload
 
-Dal terminale **del devcontainer**, nella radice del repository:
+This destructive-to-the-test-application experiment requires explicit approval
+for the isolated DK, selected signed MAIN and manual USB power cut. Disconnect
+the Vimar completely. Have an independent recovery route and a known signed MAIN
+ready; the DK remains in recovery after the test. Do not apply this procedure to
+a mounted dimmer or assume a USB disconnect removes every power source.
+
+Use the prepared BLE Python environment and existing BlueZ bond. The exact DK
+address, expected active recovery SMP hash and complete MAIN file SHA-256 are
+required:
 
 ```sh
-work/smpclient-venv/bin/python tools/firmware/manual_power_cut.py --address "$VIMAR_DK_BLE_ADDRESS" \
+python tools/firmware/manual_power_cut.py --address "$VIMAR_DK_BLE_ADDRESS" \
   --image "$VIMAR_DK_IMAGE" --image-sha256 "$VIMAR_DK_IMAGE_SHA256" \
   --recovery-hash "$VIMAR_DK_RECOVERY_SMP_HASH"
 ```
 
-Lo script usa il BlueZ del PC tramite il D-Bus già condiviso col container e
-l'associazione BLE esistente. Il Vimar deve restare scollegato. La destinazione
-è l’indirizzo DK esplicito passato con `--address`; imposta le variabili locali
-per il tuo DK isolato e la sua build. Sono verificati l’hash SMP atteso della
-recovery attiva e lo SHA-256 atteso dell’intero file MAIN prima dell’upload.
+1. Enter recovery with DK B1 + RESET, release B1 and prepare the USB power cable.
+2. Press Enter to start the reviewed upload.
+3. At **STACCA ORA LA USB DEL DK** (“disconnect DK USB now”), disconnect it
+   immediately. Upload continues after the cue; terminal sound depends on settings.
+4. Leave the DK off until asked. Confirm only if you observed complete power loss.
+5. Reconnect USB **without B1** when asked, then press Enter. The tool checks that
+   the same authenticated recovery returned automatically.
 
-1. Entra nel recupero con B1 + RESET, rilascia B1 e preparati sul cavo USB.
-2. Premi Invio nel terminale per iniziare.
-3. Quando compare **STACCA ORA LA USB DEL DK**, scollega subito il cavo.
-   L'upload continua dopo il segnale; il beep dipende dalle impostazioni del terminale.
-4. Lascia il DK spento finché lo script chiede conferma. Conferma soltanto se
-   hai visto che si è spento completamente.
-5. Quando richiesto, ricollega la USB **senza B1** e premi Invio. Lo script
-   verifica che sia ripartita automaticamente la stessa recovery BLE.
+The default cue follows 65536 acknowledged bytes; `--signal-at` accepts
+4096–262144. If upload reaches 90% without interruption, the tool stops it and
+does not pass the trial. Ctrl+C cancels without reset or automatic restoration.
+An incomplete MAIN can require B1 + RESET. The helper does not modify loader or
+recovery and sends no SWD commands. Restore MAIN afterward only through its
+separately reviewed supported BLE upload flow; this helper does not do that.
 
-La soglia predefinita è 65536 byte confermati; `--signal-at` permette valori
-da 4096 a 262144. Se l'upload arriva al 90% senza interruzioni, lo script lo
-ferma e non valida la prova. Ctrl+C annulla senza reset o ripristino automatico.
-In caso di errore, il DK può avere un'app incompleta e richiedere B1 + RESET.
+Events, complete file hash, final acknowledged offset and operator confirmation
+are stored in a new ignored `experiments/dk-manual-power-cut-*/events.jsonl`.
+A BLE disconnect alone is not power-loss evidence. The manual cue follows an
+ACK while upload continues; it does not measure an interruption during an exact
+FLASH programming pulse or qualify all power-cut boundaries.
 
-Il DK resta in recovery al termine: occorre ripristinare l'app principale via
-BLE con la procedura di upload già usata nelle prove del 19 ottobre.
-Lo script non modifica bootloader o recovery e non invia comandi SWD.
-
-Gli eventi, l'hash del file trasmesso, l'ultimo offset confermato e la conferma
-dell'operatore sono registrati in `experiments/dk-manual-power-cut-*/events.jsonl`.
-Una disconnessione BLE da sola non conferma la perdita di alimentazione.
-La temporizzazione manuale non dimostra un'interruzione nel preciso istante
-di una scrittura flash. Il segnale parte dopo un ACK e durante l'upload
-successivo, non da una misura dell'attività del controller flash.
-
-Verifica senza hardware:
+For synthetic host checks without hardware:
 
 ```sh
 python -m unittest discover -s tools/firmware/tests -p test_manual_power_cut.py

@@ -15,24 +15,41 @@ extra_css:
   - stylesheets/branding.css
 nav:
   - Home: index.md
-  - Get started:
-      - Install and update: installation.md
-      - Android: android-updater.md
-      - Desktop: desktop.md
+  - Install the app:
+      - Choose a client: installation.md
+      - Android and Obtainium: android-updater.md
+      - Desktop and CLI: desktop.md
+  - Use a dimmer:
+      - Bluetooth firmware update: android-bluetooth-trial.md
+      - Bluetooth or Zigbee pairing: connection-modes.md
+      - Packages and private originals: offline-guide.md
+      - First installation on the bench: android-first-install.md
       - Troubleshooting: troubleshooting.md
-  - Device operations:
-      - Connection modes and Zigbee pairing: connection-modes.md
-      - Package and recovery rules: offline-guide.md
-      - Android first installation: android-first-install.md
-      - Bluetooth qualification trial: android-bluetooth-trial.md
-  - Development:
+  - Zigbee2MQTT:
+      - Controls and settings: zigbee-controls.md
+      - OTA reference: zigbee-ota.md
+  - Develop and release:
+      - Development environment: development.md
       - Architecture: architecture.md
-      - Dev Container: development.md
-      - Releasing: releasing.md
-      - GitHub setup: github-setup.md
-      - Client parity: desktop-parity.md
-      - UX evidence: ux-evidence.md
-      - Research evidence: research-summary.md
+      - Client support: desktop-parity.md
+      - Android interface: android-updater-ui.md
+      - Interface wording: android-updater-language.md
+      - UX verification: ux-evidence.md
+      - Release a bundle: releasing.md
+      - GitHub configuration: github-setup.md
+      - Legacy compatibility: legacy-zigbee-bluetooth-bridge.md
+  - Research reference:
+      - Evidence and limits: research-summary.md
+      - Goals: goals.md
+      - Known facts: known-facts.md
+      - Open hypotheses: hypotheses.md
+      - Stock application layout: firmware-layout.md
+      - Roadmap: roadmap.md
+      - Evidence rules: research-rules.md
+      - Design decisions:
+          - Dimmer behavior: adr/0001-configurable-dimmer-behavior.md
+          - Firmware profiles: adr/0002-separate-zigbee-dk-and-ble-recovery-profiles.md
+          - Independent recovery: adr/0003-independent-ble-recovery-dk.md
 validation:
   links:
     not_found: warn

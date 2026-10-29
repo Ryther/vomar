@@ -1,6 +1,6 @@
 # ADR 0001: Configurable local and Zigbee dimmer behavior
 
-- Status: accepted incrementally; living during product-design discussion
+- Status: historical design record; implemented behavior is owned by current source
 - Date opened: 2026-08-19
 - Scope: desired behavior of the custom Vimar 30805 nRF52840 firmware
 
@@ -12,9 +12,13 @@ Zigbee. It must preserve the stock secondary power-controller firmware where saf
 and practical. Unconfirmed proprietary interfaces remain gated on static analysis
 and hardware measurements.
 
-This ADR is updated whenever a design decision is accepted so that conversation
-compaction cannot discard the product decisions. A later implementation spec may
-split these decisions into milestones without changing their meaning.
+This record preserves the original design intent, including plans that later
+changed. It is not a current wire contract or physical qualification report.
+Use [Zigbee controls](../zigbee-controls.md), `firmware/src/dimmer_config.c`,
+`application_controller.c`, `zigbee_custom_codec.h` and `platform_io_vimar.c`
+for implemented behavior. The TWI interface below was later identified as a
+probable configuration EEPROM, not a proven power-controller command bus; see
+[research summary](../research-summary.md#recovered-stock-interfaces).
 
 ## Overall approach
 

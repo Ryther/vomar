@@ -1,7 +1,8 @@
 # Zigbee2MQTT external converter
 
-Converter **1.1.0** adds schema 8 phase-cut selection and standard Identify. Its
-native version is independent of the distribution and firmware versions.
+The converter implements schema-gated configuration, phase-cut selection and
+standard Identify. Its native version is owned by `package.json`, independently
+of distribution and firmware versions.
 
 `dist/vimar_30805.js` is the standalone ESM external converter for the custom DK firmware identity
 `Vimar30805-DK` and Vimar hardware identity `Vimar30805`. It registers cluster `0xFC00`, retains the standard dimmable-light
@@ -50,8 +51,8 @@ modules exactly.
 
 The Vimar hardware profile also exposes `enter_recovery`: writing `true` requests
 independent BLE recovery while preserving the current output. This command is not
-implemented by the DK simulator. Hold both physical keys for five seconds as the
-local fallback. The Zigbee main image does not advertise BLE during normal use.
+implemented by the DK simulator. For the local selector and compatibility requirements, see
+[connection modes](../../docs/connection-modes.md). The Zigbee main image does not advertise BLE during normal use.
 
 The converter enables Zigbee2MQTT's standard OTA provider with `ota: true`, as
 supported by the [current herdsman converter definition](https://github.com/Koenkk/zigbee-herdsman-converters/blob/master/src/lib/types.ts).
@@ -79,47 +80,25 @@ Zigbee2MQTT publishes transfer progress through the device's `update` state.
 Completed transfer alone does not prove successful recovery installation; verify
 the new firmware version and preserved network, settings and physical output.
 
-## Firmware 0.5.4 controls
+## Controls and compatible schemas
 
-The current converter is paired with firmware0.5.4 or later. Deploy the matching
-firmware before activating the converter: ordinary output commands now use
-custom command0x05 to honor local default delay/ramps; older applications do
-not implement it. Explicit Zigbee transitions retain the standard light path.
+Use the target's reported schema/capabilities, not only its displayed firmware
+version. Ordinary light commands use custom `setOutput` command 5 for local
+default delays/ramps; an older application without that command is unsupported.
+Explicit transitions use the standard SDK light path.
 
-The automatic LED profiles have two native color-light endpoints, `led_off`
-and `led_on`, both mapped to physical endpoint1 and marked as HA configuration
-entities. They write existing profile attributes only. The ON brightness slider
-edits fixed intensity in `fixed`, and maximum intensity in `follow_level` or
-`inverse_level`. Lowering the maximum below the minimum lowers the minimum first.
-Profile edits never command the lamp or install a runtime override.
+The `led_off` and `led_on` logical configuration endpoints edit saved automatic
+LED profiles on physical endpoint 1. They never change the lamp or install an
+override. The advanced `led` endpoint retains legacy MQTT automation keys.
+Percent aliases drive light/numeric UI controls; legacy raw brightness keys stay
+0–254 and Home Assistant keeps `brightness_scale: 254`. Do not send both scales
+in one command. Schema 4 adds four timer templates and ramp endpoints; later
+schemas add protection, recovery-contract and fault diagnostics.
 
-The original `led` endpoint and all35 persistent MQTT settings remain compatible.
-The runtime light is now named "LED override manuale avanzato"; its HA discovery
-is disabled by default only for new entities. Legacy RGB/intensity numbers also
-use disabled-by-default discovery while remaining exposed in Zigbee2MQTT.
-For existing devices, use the exact per-device discovery exclusions and runtime
-entity registry migration documented in `../../docs/zigbee-controls.md`.
-Do not remove the runtime entity if existing automations target it; hide it while
-keeping it enabled. Existing saved settings always take precedence over defaults.
-
-Verification: converter tests exercise native installed26.105.0 expose creation,
-prepared definition validation, cached native HA metadata handling, profile-only
-writes, mode-aware feedback and per-device partial reports. This is software
-verification; live discovery and device readback are deployment checks.
-
-Light brightness sliders now display0–100% in Zigbee2MQTT. Their feature
-properties are `brightness_percent`, `brightness_percent_led_off`,
-`brightness_percent_led_on` and the advanced `brightness_percent_led`.
-They coexist with legacy raw `brightness` properties (0–254); supplying both
-scales in one command is rejected. Home Assistant keeps native MQTT JSON
-`brightness_scale:254` and the raw state keys, while displaying percentages
-in its UI. Firmware settings and their raw min/max level contracts are unchanged.
-
-Schema4 adds four reusable timer templates and ramp endpoint brightness controls;
-see `docs/zigbee-controls.md` for actions and legacy MQTT compatibility.
-Advanced lamp configuration brightness is exposed as percent aliases while raw
-MQTT get/set remains supported. New controls are gated on the cached device
-schema version; configure reads it before reading persistent settings.
+See the [control reference](../../docs/zigbee-controls.md) for exact defaults,
+ranges, LED priority, timer actions, settings/downgrade behavior and per-device
+Home Assistant discovery migration. New disabled-by-default discovery never
+silently disables an existing entity or migrates an automation.
 
 After replacing a converter that adds custom attributes, run Z2M's **Configure**
 action for each affected device (`bridge/request/device/configure`, with its
@@ -139,8 +118,8 @@ MQTT boolean `true` still invokes the action; `false` does nothing. Other values
 are rejected before sending a command. Physical Vimar reporting mode is a
 read-only diagnostic (`optimistic`); the DK retains its configurable modes.
 
-`extensions/vimar_recovery_audit.mjs` is an optional Z2M external extension. Its
-current target list contains the three researched device IEEE addresses. It
+`extensions/vimar_recovery_audit.mjs` is an optional Z2M external extension. Configure its target list with the local `VIMAR_RECOVERY_AUDIT_TARGETS`
+environment variable; with no configured targets it observes no devices. It
 observes requests containing `enter_recovery` on exact target `/set` or
 `/set/enter_recovery` topics, and endpoint1 `vimarDimmer.enterRecovery` commands.
 It sends no Zigbee commands. Records contain UTC time, IEEE, accepted/invalid
@@ -156,8 +135,8 @@ Z2M's internal endpoint methods, so recheck compatibility after Z2M upgrades.
 An acknowledgement does not prove a completed reboot. This trace cannot name an
 HA automation, distinguish frontend WebSocket from broker MQTT, or observe local
 button/boot-selector/OTA installer recovery entry. An absent entry alone does
-not establish the cause. Device-side reset/recovery reason logging is planned
-with the shared P0.31 protection work.
+not establish the cause. Device-side boot/recovery reasons and build-bound fault diagnostics are separate
+schema-gated evidence; a recorded request is not proof of reset cause.
 
 ## Schema 8 phase selection and Identify
 
@@ -180,3 +159,6 @@ restored when Identify ends. A front long press while OFF now keeps the lamp OFF
 
 See the [firmware guide](../../firmware/README.md) for v5 settings migration,
 downgrade limits and remaining physical qualification.
+
+Zigbee2MQTT displays the custom devices under vendor **Vomar**, including its OTA
+list. Model identifiers and matching remain unchanged for existing devices.

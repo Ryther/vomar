@@ -1,9 +1,9 @@
 # Choose Zigbee pairing or Bluetooth
 
-This connection selector needs matching
-MAIN, recovery and Android components. It is not a claim that a published package
-or installed 1.0.0 firmware supports it. Host checks and native compilation do not
-qualify the physical buttons, radio, LED colour order or power-cut behavior.
+Use this selector only with MAIN/recovery components that implement it. Check
+the exact installed package's capabilities and release notes. Source support or
+a successful software build does not qualify physical buttons, radio or power-cut
+behavior. The desktop client has no equivalent pairing command yet.
 
 ## Use the wall buttons
 

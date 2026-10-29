@@ -26,14 +26,19 @@ static bool high_version;
 #define PAYLOAD_SIZE 256429
 static uint8_t container[66+PAYLOAD_SIZE];
 static int pair_error;
+static uint8_t accepted_pair=3,accepted_loader=4;
+static bool replace_recovery_on_check;
+static unsigned pair_checks;
 #if defined(CONFIG_VIMAR_LOADER_RUNTIME_V2)
-int loader_pair_verify_zephyr(const uint8_t expected[32],uint8_t loader[32],struct ota_image_info*info){
- assert(expected);if(pair_error)return pair_error;
+int loader_pair_authenticate_zephyr(uint8_t loader[32],struct ota_image_info*info){
 #else
-int ota_pair_verify(const uint8_t*m,size_t n,const uint8_t(*a)[32],size_t count,const uint8_t expected[32],uint8_t loader[32],struct ota_image_info*info){
- (void)m;(void)n;assert(a&&count&&expected);if(pair_error)return pair_error;
+int ota_pair_authenticate(const uint8_t*m,size_t n,const uint8_t(*a)[32],size_t count,uint8_t loader[32],struct ota_image_info*info){
+ (void)m;(void)n;assert(a&&count);
 #endif
- memset(info,0,sizeof(*info));info->output_size=197006;info->output_digest[0]=3;info->signed_digest[0]=5;loader[0]=4;return 0;
+ if(pair_error)return pair_error;
+ ++pair_checks;memset(info,0,sizeof(*info));info->output_size=197006;
+ info->authenticated_profile=2;info->authenticated_role=2;
+ info->output_digest[0]=accepted_pair;info->signed_digest[0]=accepted_pair+2;loader[0]=accepted_loader;return 0;
 }
 int ota_image_authenticate_reader(const struct ota_reader*r,uint32_t limit,struct ota_image_info*info){
  static uint8_t data[PAYLOAD_SIZE];assert(r->profile==2&&r->size==PAYLOAD_SIZE&&limit==transfer.bounds.start-OTA_PRIMARY_START);
@@ -136,6 +141,9 @@ static void download(void)
  for(uint32_t off=97;off<sizeof(container);){size_t n=MIN(211,sizeof(container)-off);assert(receive(off,n)==ZB_ZCL_OTA_UPGRADE_STATUS_OK);off+=(uint32_t)n;}
  assert(erases==PAYLOAD_SIZE/4096 && writes==PAYLOAD_SIZE/4096 && !saves && !recovery);
  assert(receive(66,31)==ZB_ZCL_OTA_UPGRADE_STATUS_OK); /* persisted duplicate */
+#if defined(CONFIG_VIMAR_OTA_SPLIT_STAGING)
+ if(replace_recovery_on_check)accepted_pair++;
+#endif
  assert(callback(ZB_ZCL_OTA_UPGRADE_STATUS_CHECK)==ZB_ZCL_OTA_UPGRADE_STATUS_BUSY);drain();
 }
 int main(void)
@@ -181,5 +189,33 @@ int main(void)
  reset();assert(start(VIMAR_OTA_IMAGE_TYPE,0x01000100,sizeof(container))==ZB_ZCL_OTA_UPGRADE_STATUS_OK);
  assert(receive(0,80)==ZB_ZCL_OTA_UPGRADE_STATUS_OK);container[66]^=1;
  assert(receive(66,1)==ZB_ZCL_OTA_UPGRADE_STATUS_ERROR && !writes && !erases);
+#if defined(CONFIG_VIMAR_OTA_SPLIT_STAGING)
+ /* The same compiled MAIN accepts every authenticated recovery of this ABI.
+  * Each transaction preserves its actual recovery, including a new file hash. */
+ const uint8_t versions[]={3,7,9,33};
+ for(size_t v=0;v<sizeof(versions);v++){
+  accepted_pair=versions[v];pair_checks=0;reset();
+  assert(pair_ready&&pair_checks==1);
+  assert(zigbee_ota_recovery_snapshot(diagnostic_digest)&&diagnostic_digest[0]==accepted_pair+2);
+  download();assert(checked&&pending.recovery_digest[0]==accepted_pair);
+  assert(pending.loader_digest[0]==4);
+ }
+ pair_error=-EACCES;reset();
+ assert(!pair_ready&&!zigbee_ota_recovery_snapshot(diagnostic_digest));
+ assert(start(VIMAR_OTA_IMAGE_TYPE,0x01000100,sizeof(container))==ZB_ZCL_OTA_UPGRADE_STATUS_ERROR);
+ assert(!erases&&!writes&&!saves&&!recovery);
+ pair_error=0;
+ accepted_pair=3;reset();assert(pair_ready);
+ assert(start(VIMAR_OTA_IMAGE_TYPE,0x01000100,sizeof(container))==ZB_ZCL_OTA_UPGRADE_STATUS_OK);
+ accepted_pair=7;assert(receive(0,80)==ZB_ZCL_OTA_UPGRADE_STATUS_ERROR);
+ assert(!erases&&!writes&&!saves&&!recovery);
+ accepted_pair=3;accepted_loader=4;reset();
+ assert(start(VIMAR_OTA_IMAGE_TYPE,0x01000100,sizeof(container))==ZB_ZCL_OTA_UPGRADE_STATUS_OK);
+ accepted_loader=5;assert(receive(0,80)==ZB_ZCL_OTA_UPGRADE_STATUS_ERROR);
+ assert(!erases&&!writes&&!saves&&!recovery);
+ accepted_loader=4;reset();replace_recovery_on_check=true;download();
+ assert(!checked&&last_resume==ZB_ZCL_OTA_UPGRADE_STATUS_ERROR&&!saves&&!recovery);
+ replace_recovery_on_check=false;accepted_pair=3;reset();assert(pair_ready);
+#endif
  return 0;
 }

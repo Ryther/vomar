@@ -86,6 +86,83 @@ when invoking Gradle from another shell. Device coverage uses an isolated API 35
 emulator and the synthetic first-install UI/adapter tests. Ordinary unit tests
 and `jacocoDebugReport` never start an emulator or access physical hardware.
 
+## Android checks and local builds
+
+Use the pinned container and complete `python tools/dev/bootstrap.py workspace`
+and `python tools/dev/bootstrap.py android` from the repository root. Accept the
+SDK licenses and install `platforms;android-37.0` and `build-tools;36.0.0` as
+printed by setup. Java 21 runs Gradle; Java 17 remains the bytecode target.
+Set `ANDROID_HOME` to that prepared SDK and `VOMAR_PYTHON` to the locked workspace
+Python, which generates signed synthetic test fixtures. No attached device is
+needed for the contributor checks below.
+
+From `apps/android-updater`, with the pinned dependencies available, run:
+
+```sh
+export VOMAR_PYTHON=/home/vscode/.cache/vomar/dev-venv/bin/python
+./gradlew --dependency-verification=strict :core:test :core:jacocoTestReport :app:testDebugUnitTest :app:jacocoDebugReport :app:lint :app:verifyReleaseObfuscation :app:writeRuntimeInventory :app:assembleRelease
+```
+
+Gradle uses the checked-in dependency locks and strict artifact verification.
+Add `--offline` only after populating the pinned cache; a clean checkout cannot
+resolve uncached dependencies offline. Do not regenerate locks or verification
+metadata merely to bypass a failure. The unsigned contributor APK is
+`app/build/outputs/apk/release/app-release-unsigned.apk`, relative to this working
+directory. Runtime inventory is `app/build/reports/dependencies/android-runtime.json`;
+core/app coverage reports are under their respective `build/reports/jacoco` trees.
+
+Release builds use R8 obfuscation and resource shrinking.
+`verifyReleaseObfuscation` depends on `assembleRelease` and inspects the actual
+unsigned APK and `app/build/outputs/mapping/release/mapping.txt` for renamed
+project classes. Retain that mapping with the exact APK and its revision/hash;
+a mapping from a later rebuild cannot reliably decode its stack traces. Debug
+JVM tests and coverage do not execute optimized release code. Optimized-runtime
+checks must run the corresponding release APK, while synthetic emulator
+instrumentation and physical Bluetooth/USB/power-cut qualification remain
+separate checks. The command above starts neither an emulator nor hardware.
+
+### Maintainer local APK helper and signing continuity
+
+**Official updates require the existing Android signing identity.** Before using
+this maintainer helper for an official update, ensure the existing private
+`work/private/android-updater/signing.jks` and `signing-password.txt` are present
+through the authorized private custody process. The helper creates a new local
+identity if **both** files are absent, and refuses an incomplete pair. A clean
+checkout therefore does not reproduce the shipped signer. A newly created local
+identity is only for disposable local builds; it cannot update the official app
+in place. Never regenerate or replace official signing material to fix a build
+or signer error, and never uninstall an owner's app to bypass continuity.
+Unsigned contributor checks above need no private Android signing identity.
+
+For a local maintainer build, return to the repository root. The helper uses
+`ANDROID_HOME` (default `work/android-sdk`), Java and the prepared offline cache;
+its supported invocation is:
+
+```sh
+python tools/android/build_updater.py --output experiments/android-updater/builds/local-review
+```
+
+Use a new output directory inside the repository, outside `inputs/`; an existing
+directory is refused. Omitting `--output` creates a timestamped directory under
+`experiments/android-updater/builds/APP_VERSION/`. The helper runs strict offline
+core/app tests, lint and release-obfuscation verification/assembly, aligns and
+signs the APK, then audits it before publishing the local
+`vimar-updater-APP_VERSION.apk`. It writes logs, `SHA256SUMS` and `report.json`;
+it builds no firmware bundle and runs no instrumentation or physical checks.
+Retain the matching Gradle R8 mapping separately; the helper does not copy it to
+the output directory. It does not run the coverage/runtime-inventory tasks above.
+
+
+Android signing is separate from firmware signing. The APK audit compares its
+firmware public DER trust anchor with `firmware/keys/dev-public.pem`, checks
+release identity/manifest settings and notices, and rejects debug signers,
+synthetic fixture anchors, unexpected firmware/private-key material and private
+PEM markers. These bounded audits are not an exhaustive secret scan and do not
+establish that a newly created local Android signer is the official signer.
+Changing the download source never changes firmware trust. Preserve the existing
+public trust identity; runtime license text is in the APK asset
+`third_party_notices.txt` and [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
 ## Isolated native desktop runtime
 
 The desktop native jobs use CPython 3.13.18 and OpenSSL 3.5.9 from the whole
@@ -128,6 +205,44 @@ OpenSSL may load hashed CA directories lazily, so zero cached CA certificates
 alone is not an empty trust store. User `SSL_CERT_FILE`/`SSL_CERT_DIR` choices are
 retained; no global certificate override is installed. These checks do not
 qualify Bluetooth, USB, a broker or physical firmware behavior.
+
+## Run and inspect the desktop GUI
+
+Install `requirements-desktop.lock` in a disposable Python 3.13 environment and
+install this project with `--no-deps`; keep this environment separate from the
+firmware SDK. From the repository root, use synthetic private state:
+
+```sh
+PYTHONPATH="$PWD/apps/desktop-updater/src" python -m vomar_updater.gui.app --state "$PWD/_test/desktop-manual-state"
+```
+
+The development image includes Qt's X11 runtime dependencies. The default
+container does not forward a host display. Interactive use needs a deliberately
+mounted host X11 socket, matching `DISPLAY` and host display authorization;
+setting `DISPLAY` alone is insufficient. With the socket mounted and container
+UID matching the host desktop user's UID, grant access in a **host** terminal:
+
+```sh
+xhost +SI:localuser:"$(id -un)"
+```
+
+After the GUI session, revoke that grant on the host:
+
+```sh
+xhost -SI:localuser:"$(id -un)"
+```
+
+For a bounded startup smoke check without a host display:
+
+```sh
+QT_QPA_PLATFORM=xcb PYTHONPATH="$PWD/apps/desktop-updater/src" xvfb-run -a python -m vomar_updater.gui.app --state "$PWD/_test/desktop-smoke-state" --smoke-test
+```
+
+A missing Qt library differs from display authorization failure: inspect native
+library resolution (for example with `ldd`) before changing display permissions.
+Use `QT_QPA_PLATFORM=offscreen` for the synthetic Qt test suite. Smoke/offscreen
+checks do not establish host interaction, native dialogs or BLE/USB behavior.
+See [UX evidence](ux-evidence.md) for the required review journeys.
 
 ## Optional Linux bench connections
 
@@ -227,10 +342,11 @@ against the original product source archive, rather than included as nonexistent
 paths in Python extraction. Successful uploads also require the GitHub code
 scanning configuration described in [GitHub setup](github-setup.md).
 
-Host C coverage instruments only durable firmware sources, including inline
-functions in that source tree. Disposable test harnesses and synthetic SDK
-headers are excluded before compilation. GCC maps and executed profiles must
-still match exactly, and gcovr errors remain fatal. Run the actual native suites
+Host C coverage compiles all translation units with coverage enabled, then
+uses GCC filename filtering to retain durable firmware sources, including code
+included by a synthetic harness. gcovr selects product firmware files and
+excludes disposable harnesses and synthetic headers from the report. GCC maps
+and executed profiles must still match exactly, and gcovr errors remain fatal. Run the actual native suites
 and produce XML with:
 
 ```sh

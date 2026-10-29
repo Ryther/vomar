@@ -8,39 +8,34 @@ uses recovered PWM/GPIO behavior and a conservative candidate P0.31 protection
 monitor; it does not report physical lamp measurements or power-stage
 acknowledgement. Electrical protection coverage remains unresolved.
 
-Firmware **1.0.0 is a signed qualification candidate**. Its bounded standalone-DK
-runtime/recovery trial passed and the DK's prior FLASH/UICR/FICR were restored
-exactly. All thirteen physical qualification flags remain false. Earlier exact
-images passed DK OTA/power-interruption trials, Vimar updates and a dedicated
-stock-restoration trial. Those results do not qualify the new common first-install,
-generic restore or complete 1.0.0 update routes. See the
+Read [`VERSION`](VERSION) for this checkout's native firmware version and the
+exact release manifest for shipped component versions. The distribution tag is
+not the firmware version or a qualification claim. APS-105-5241 remains unresolved.
+Historical DK and Vimar trials apply to their recorded images and routes; all
+thirteen flags on the experimental common candidate remain false. See the
 [research and evidence summary](../docs/research-summary.md).
 
 ## Connection selector and Zigbee pairing
 
-The feature-branch implementation adds a five-second two-button selector, bounded
-two-minute Zigbee pairing and an explicit authenticated Bluetooth request. See
-[Connection modes](../docs/connection-modes.md) for exact colours, network replacement,
-timeouts and compatibility/qualification limits. It needs matching MAIN/recovery;
-its source presence does not change qualification of the existing 1.0.0 package.
+The source implements a five-second two-button selector, bounded two-minute
+Zigbee pairing and an explicit authenticated Bluetooth request. See
+[Connection modes](../docs/connection-modes.md) for colors, network replacement,
+timeouts and compatibility limits. It requires a compatible signed MAIN/recovery contract;
+implementation alone does not establish physical qualification.
 
 ## Build dependencies
 
-[west.yml](west.yml) pins nRF Connect SDK `v3.4.0` and Nordic Zigbee R23 add-on
-`v1.4.0`; the development environment uses Zephyr SDK `v1.0.1`. From the repository
-root, bootstrap into ignored local storage:
+Use the pinned [development environment](../docs/development.md). From the
+repository root, install the frozen SDK graph with:
 
 ```sh
-python3 -m venv work/ncs-venv
-. work/ncs-venv/bin/activate
-pip install west
-west init -l "$PWD/firmware" work/ncs-workspace
-cd work/ncs-workspace
-west update
-west zephyr-export
-west packages pip --install
-west sdk install --version 1.0.1 --gnu-toolchains arm-zephyr-eabi
+python tools/dev/bootstrap.py firmware
 ```
+
+[`west.yml`](west.yml) and `tools/dev/` own the exact Nordic/Zephyr revisions;
+do not replace the frozen graph with an unrestricted upstream `west update`.
+The examples below assume a local west workspace at `work/ncs-workspace`;
+substitute your prepared workspace and build paths consistently.
 
 Use the repository's absolute `firmware` directory as the application source if
 your west workspace is elsewhere. Builds need a matching local signing setup;
@@ -111,9 +106,9 @@ in [the Android installation guide](../docs/android-first-install.md).
 The original [dedicated restore gate](restore_gate/README.md) and the newer
 [common restore engine](common_restore/README.md) have different evidence scopes.
 A historical full Vimar stock restore succeeded with the dedicated path; the
-new common-loader/generic helper route remains physically unqualified and has
-no operational stock-restoration UI in the current Android app. Carrying signed
-helpers does not make that user workflow available.
+new common-loader/generic helper route remains physically unqualified.
+Android has an explicit stock-restoration flow using the retained matching
+original; carrying signed helpers alone does not qualify that workflow.
 
 See [Zigbee OTA](../docs/zigbee-ota.md), the
 [Zigbee2MQTT converter](../integrations/zigbee2mqtt/README.md) and
@@ -198,3 +193,87 @@ the renewed interval by less than one second.
 These behaviors have host-test coverage. Electrical phase-cut behavior,
 load compatibility and mounted-device timing still require physical validation;
 software tests alone do not qualify this candidate.
+
+## Original SDK error diagnostics
+
+`CONFIG_VIMAR_FAULT_DIAGNOSTICS` requires the pinned SDK, an immutable build ID,
+settings storage and reset-on-assert. It registers an application error callback
+before application Zigbee setup. The callback retains the original signed SDK
+error code and severity before a later generic assert such as `116:81`. MINOR
+severity `1` is recoverable in the pinned SDK archive and does not consume the
+first-cause slot. The inspected production link has MAJOR/FATAL direct callers;
+its optimized raiser omits the unused MINOR branch. The callback always returns
+false, preserving normal SDK error handling.
+
+For FATAL severity `255`, the callback copies the documented verifier file ID and
+signed line only when the additional-info pointer is aligned and the two fields
+fit within nRF52840 SRAM. It never follows the caller's additional-info pointer.
+An invalid pointer produces a record without an original location. SRAM bounds
+protect field reads; they do not prove that damaged in-range data is truthful.
+No allocation, logging, SDK service, settings or flash operation runs in this
+callback. Existing bounded interrupt masking protects the RAM journal.
+
+The 128-byte v1 format, ERROR kind `2`, CRC, reserved words, first-cause policy and
+eight opaque export chunks remain unchanged. The numeric `source` token reserves
+these namespaces (all examples are synthetic):
+
+| Source token | Line field | Meaning |
+| --- | --- | --- |
+| `0xA0ss0000` | `INT32_MIN` | SDK severity `ss`, original location unavailable |
+| `0xA1FFffff` | Original signed line | FATAL verifier file ID `ffff` |
+
+For example, source `0xA1FF007C`, line `652`, error `-29` records the original
+verifier location. Source `0xA0FE0000`, line `INT32_MIN`, error `-2305` records a
+MAJOR error without a verifier location. The valid LINE bit in the latter case
+marks the sentinel, not an observed original line. Old v1 readers preserve the
+raw values. Existing checked-error site IDs `1` and `2` retain their meaning.
+
+Decode a previously saved JSON export without accessing hardware:
+
+```sh
+python -m tools.firmware.read_fault_diagnostics exported-state.json \
+  --build-id <32-hex-character-archived-build-id>
+```
+
+The decoder reports recognized records as `sdk_error`, retaining raw fields and
+build identity. `original_location_present` distinguishes a captured verifier
+location from the sentinel. Unknown or inconsistent tags remain uninterpreted
+`checked_error` records; integrity checks still apply. Match the stored build ID
+to its archived ELF, including when a newer firmware exports older evidence.
+
+Persistence occurs at healthy next startup: settings save and independent
+readback precede acknowledgement of retained SRAM. Earlier unacknowledged
+records intentionally block replacement. Capture starts after SDK initialization
+and journal setup; earlier errors, lost SRAM on power failure and failures before
+callback entry can remain unobservable. This diagnostic change cannot recover
+missing origins from old `116:81` records or establish their relationship to an
+APS ownership error.
+
+## Recovery compatibility across releases
+
+From source candidate 1.1.6, MAIN admits the stable signed RECOVERY/profile2
+update contract independently of recovery version or file hash. The same MAIN
+image works with compatible older and newer recoveries; no per-device package
+or enumerated recovery-version list is needed. The temporary 1.1.5 pin list is
+superseded. Existing signed artifacts and installed recoveries are unchanged.
+
+Admission still requires the approved loader/anchor, pinned project signing key,
+model `VIMAR30805`, authenticated role RECOVERY, profile2, slot bounds and valid
+recovery vectors. Profile2 freezes the split-staging layout, journalV2 and
+32 KiB LZMA2/ARMThumb update format. An incompatible ABI requires another signed
+profile and an explicit migration. Unsupported or roleless experimental
+recoveries do not gain admission by version comparison.
+
+Each boot captures the actual authenticated recovery and loader identities.
+First-block admission and final CHECK reject a change to either; the immutable
+boot recovery extent defines staging bounds. JournalV2 then pins the actual
+full-file recovery and full48KiB loader hashes, which the installer verifies
+again before writing. Exact operation verification never falls back to generic
+contract admission. Read-only runtime identity continues to use the distinct
+signed-region/SMP hash.
+
+The canonical candidate builder checks the actual recovery configuration before
+signing profile2 and emits MAIN bindings without a recovery-version pin. Host
+regressions exercise different signed recovery versions, unknown/wrong contract
+rejection, changed in-flight identities and exact journal preservation. These
+checks do not establish physical power-cut or electrical qualification.

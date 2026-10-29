@@ -9,6 +9,7 @@ class QualificationTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/'test.ota';p.write_bytes(data);v=m.prepare_update('0x0011223344556677',p)
    self.assertEqual(v['id'],'0x0011223344556677');self.assertEqual(bytes.fromhex(v['hex']['data']),data)
+   self.assertTrue(v['hex']['file_name'].startswith('vomar-'))
    with self.assertRaises(ValueError):m.prepare_update('Bagno',p)
    data[10]=0;p.write_bytes(data)
    with self.assertRaises(ValueError):m.prepare_update('0x0011223344556677',p)

@@ -45,9 +45,9 @@ audits remain required independently of product-quality metrics.
    for the original or automatically release an uncertain halted CPU.
 
 First installation has a separate reviewed HALT, two byte-equal original reads,
-private save/reopen, bounded FLASH installation and a separately reviewed
-start. Android 1.0.6 offers an additional original export; desktop requires
-its export/reopen contract. It never implies consent to erase, recover, rewrite UICR or replace a
+verified archive save/reopen, bounded FLASH installation and a separately reviewed
+start. Android performs save/reopen in private app storage after capture and
+offers an additional external export; desktop requires explicit export/reopen. It never implies consent to erase, recover, rewrite UICR or replace a
 bootloader. See [installation](installation.md) and
 [the Android first-install contract](android-first-install.md).
 
@@ -55,9 +55,11 @@ bootloader. See [installation](installation.md) and
 
 Private application state retains settings, optional names, sessions and
 originals. Broker passwords belong to the OS credential store on desktop and
-Android's encrypted private storage. They are not release assets. Ordinary
-uninstall and removal of an optional saved device are distinct from deliberate
-deletion of recovery material.
+Android's encrypted private storage. They are not release assets. Android
+uninstall or app-data clearing deletes private originals, journals and
+credentials; automatic Android backup is disabled. Export originals externally
+first. The Linux uninstall script preserves private state. Removing a saved
+device label is a different action from deleting recovery material.
 
 The shared engine owns admission and cancellation. BLE work is serialized;
 fleet scheduling also limits work per Zigbee network. A Zigbee request already

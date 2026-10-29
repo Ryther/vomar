@@ -1,15 +1,17 @@
-# Development signing key
+# Firmware signing identities
 
-`dev-public.pem` belongs only to this research platform. The matching
-`dev-private.pem` is deliberately ignored by Git and must never be reused for a
-production trust root.
+`dev-public.pem` is a public verification key used by the existing research and
+release trust chain. Its filename does not make it disposable. Its matching
+private key is ignored and must never enter Git, release ZIPs, test fixtures or
+container images. Production release tooling pins signer continuity in
+[`signing-identities.json`](../../tools/release/signing-identities.json).
 
-Generate or rotate the local pair with:
+For local tests, use an ephemeral key in a new ignored directory and explicitly
+select it in the test/build helper. Do not overwrite this public key or create a
+replacement production identity during setup. Images signed with another key
+belong to another trust root and are not admitted by an existing device loader.
 
-```sh
-openssl ecparam -name prime256v1 -genkey -noout -out firmware/keys/dev-private.pem
-openssl ec -in firmware/keys/dev-private.pem -pubout -out firmware/keys/dev-public.pem
-```
-
-Rotating the key invalidates images signed with the previous key. No key rotation,
-bootloader update, or programming is authorized on physical hardware by this file.
+Changing a trust root requires a separately reviewed migration and explicit
+physical authorization where applicable. Key creation, signature verification
+or a successful build grants no programming, bootloader-write or publication
+permission. See [releasing](../../docs/releasing.md).

@@ -105,6 +105,23 @@ def write_recovery_config(firmware,destination):
  typed='CONFIG_VIMAR_LOADER_RUNTIME_V2=y\nCONFIG_MAIN_STACK_SIZE=12288\nCONFIG_MCUBOOT_SIGNATURE_KEY_FILE=""\nCONFIG_MCUBOOT_GENERATE_UNSIGNED_IMAGE=n\n'
  Path(destination).write_text((Path(firmware)/'recovery/migration-exec.conf').read_text()+typed+'CONFIG_MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE=8192\n')
 
+def validate_recovery_contract(config):
+ """Profile2 is a stable update ABI, independent of recovery SemVer/hash.
+
+ Breaking the journal, layout or codec requires another authenticated profile
+ and an explicit migration. Never sign a different ABI as RECOVERY2/profile2.
+ """
+ required=('CONFIG_VIMAR_OTA_INSTALLER','CONFIG_VIMAR_OTA_SPLIT_STAGING',
+  'CONFIG_VIMAR_P031_PROTECTION','CONFIG_NRF_COMPRESS_DECOMPRESSION',
+  'CONFIG_NRF_COMPRESS_LZMA_VERSION_LZMA2','CONFIG_NRF_COMPRESS_ARM_THUMB')
+ fixed={'CONFIG_NRF_COMPRESS_LZMA_MAX_DICT_SIZE':'32768',
+  'CONFIG_NRF_COMPRESS_LZMA_MAX_LC_LP':'3','CONFIG_NRF_COMPRESS_LZMA_LP':'0'}
+ if (any(config.get(k)!='y' for k in required) or
+     any(config.get(k)!=v for k,v in fixed.items()) or
+     config.get('CONFIG_DISABLE_FLASH_PATCH')=='y'):
+  raise ValueError('incompatible profile2 recovery contract configuration')
+ return 'vimar30805-split-v2'
+
 def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=False,release_version=None):
  if watchdog_handoff is not None:validate_watchdog_handoff(watchdog_handoff)
  versions=candidate_versions(watchdog_handoff,multi_bond,release_version)
@@ -160,6 +177,7 @@ def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=
   if name=='main' and release_version is not None:
    report['fault_diagnostic_proof']=require_release_main(build,out,cfg)
   if name=='recovery' and (any(cfg.get(k)!='y' for k in ['CONFIG_VIMAR_RECOVERY_IDENTITY','CONFIG_VIMAR_RECOVERY_BOOT_HISTORY','CONFIG_VIMAR_RECOVERY_MIGRATION_EXEC','CONFIG_MCUMGR_TRANSPORT_BT_PERM_RW_AUTHEN']) or int(cfg['CONFIG_MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE'])<8192):raise ValueError('recovery feature/stack guard failed')
+  if name=='recovery':report['recovery_contract']=validate_recovery_contract(cfg)
   if name=='recovery' and multi_bond:
    from tools.firmware.bond_capacity import validate_bond_capacity
    validate_bond_capacity(cfg)
@@ -189,7 +207,9 @@ def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=
  extras=[fw/'research/vimar-candidate.conf',fw/'ota/crypto.conf',fw/'ota/recovery.conf',rec_conf]
  rec_args=make_native('recovery',fw/'recovery',fw/'recovery/prj.conf',extras,overlays,['-DVIMAR_OTA_PAIR_BINDINGS_HEADER='+str(recovery_pair),'-DVIMAR_LOADER_CONTRACT_BINDINGS_HEADER='+str(all_header)])
  recovery=sign('recovery',native('recovery',rec_args,0xb0000,0x34000),0xb0000,0x34000)
- main_pair=gen/'main-pair.h';main_pair.write_text(recovery_pair.read_text()+c_bytes('ota_expected_recovery_digest',hashlib.sha256(recovery.read_bytes()).digest()))
+ # MAIN authenticates the stable signed recovery ABI. The actual live digest
+ # belongs to each operation's journal, not this release's compiled inputs.
+ main_pair=gen/'main-pair.h';main_pair.write_text(recovery_pair.read_text())
  main_conf=configs/'main.conf';main_conf.write_text(typed)
  main_overlays=[fw/'boards/nrf52840dk_nrf52840_ota.overlay',fw/'research/vimar-candidate.overlay']
  main_options=['-DVIMAR_OTA_PAIR_BINDINGS_HEADER='+str(main_pair),'-DVIMAR_LOADER_CONTRACT_BINDINGS_HEADER='+str(all_header)]

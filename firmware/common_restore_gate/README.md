@@ -1,27 +1,20 @@
-# Opt-in common RESTORE admission gate — source/unsigned probe
+# Common RESTORE admission gate
 
-Historical scope: this page records the initial unsigned probe and its host/native
-validation. Later common-package integration is implemented, but the new generic
-restoration route remains physically unqualified. See the
-[current evidence summary](../../docs/research-summary.md#architecture-and-current-status).
-Statements about pending consumers and unsigned outputs below describe that
-original probe stage.
-
-This new module defaults to disabled and is not included by current firmware
-profiles. It leaves `firmware/restore_gate/` and the existing signed candidate
-pair unchanged. It implements only the extra protection-exception decision;
-it does not implement generic stock restoration, an Android anchor writer,
-loader-family approval in runtime consumers, signing, deployment or physical
-qualification. Do not enable a privileged consumer until its own anchor/page
-checks have been reviewed.
+This opt-in nRF52840 MCUboot module permits one precise boot-protection exception
+for a signed RESTORE-role image and a committed local backup anchor. It is wired
+by the common-candidate builder and remains disabled in ordinary configurations.
+The older [exact-restorer gate](../restore_gate/README.md) is separate and cannot
+be enabled simultaneously. Current consumers include the
+[common restorer](../common_restore/README.md) and
+[first-install contract](../../tools/android/first_install_contract/README.md).
+Their physical qualification remains separate from integration and signing.
 
 ## Exact trust boundary
 
 The owner initial SWD installation and normal loader/anchor hardware protection
 establish this common loader's authority. It does **not** compile its own code
-family hash into itself. Future external main/recovery/migration/packaging
-consumers must approve exact code-family digests under their explicit contract;
-that separate integration remains pending.
+family hash into itself. External main/recovery/migration/packaging consumers approve exact code-family
+digests under their explicit typed contract; the loader does not approve itself.
 
 `__wrap_boot_go` clears its private authorization on every call, then invokes
 `FIH_CALL(__real_boot_go, ...)`. Only fresh real FIH success with actual flash
@@ -48,9 +41,9 @@ argument is a trusted adapter precondition, never a protocol/request field.
 
 Additional admission failure preserves the real boot result and normal loader
 protection. It does not introduce a global halt for a missing/invalid anchor.
-The future generic RESTORE program must independently revalidate the anchor,
+The generic RESTORE program independently revalidates the anchor,
 live UICR and anchored page table before the first write, and each page before
-writing it. It must check the logical complete original-FLASH digest before
+writing it. It checks the logical complete original-FLASH digest before
 the final SRAM-only boot replacement; the complete backup cannot be buffered
 in the target's RAM before all page writes.
 
@@ -74,66 +67,54 @@ promise. FIH APIs with profile OFF do not claim fault-injection hardening.
 The physical loader partition stays48KiB (`0..0xc000`); app/recovery/settings
 addresses do not move. The link assertion requires `_flash_used <= 0xb000`,
 including ROM load images of initialized data and RAM functions. No anchor
-bytes are linked: future first-install software writes that data page only
+bytes are linked: first-install software writes that data page only
 after saving and verifying the original archive. The native helper additionally
 checks all mapped HEX addresses and the complete physical partition map.
 
-## Tests and actual unsigned native evidence
 
-`tools/firmware/tests/test_common_restore_gate.py` has **96 passing tests**.
-Its pure fixtures are independent Python wire bytes; shape tests deliberately
-use fake crypto bytes and do not claim cryptographic proof. Separate ephemeral
-real ECDSA/OpenSSL fixtures prove that valid signatures for other roles do not
-authorize RESTORE, and corrupt payload/signature or wrong key cannot be replaced
-by valid-looking role bytes. The SDK-shaped adapter test compiles the actual
-adapter C with host stand-ins to check call order, cleared private state,
-selection checks, UICR-error refusal, precise protection delegation and preserved
-FIH result. It is explicitly separate from target CC310 execution.
+## Inherited watchdog handoff
 
-Negative compile tests cover each mandatory/forbidden guard and non-SHA256.
-Link tests use initialized-data-only images on both sides of the44KiB bound.
-The original parser/admission stub failed50 semantic tests; the wrapper stub
-failed27 adapter/config cases before implementation. All94 tests also pass
-with undefined-behavior sanitization for the pure policy, and the adapter test
-always uses UBSan. No production signing key is used by these tests.
+`CONFIG_VIMAR_INHERITED_WATCHDOG_HANDOFF` adds the reviewed early loader hook.
+For the signed `paused-reset-before-main-v1` capability and admitted live profile,
+first installation captures with the watchdog paused on HALT and ends halted.
+A separate verified start lets the loader wait for a genuine watchdog reset
+before ordinary boot, without feeding the inherited watchdog. Inactive WDT adds
+no delay. The option alone grants no install/start authority.
 
-Independent review found that the initial guard omitted `BOOT_GO_HOOKS` and
-`BOOT_FLASH_AREA_HOOKS`. Those configurations now fail compilation and the
-native probe's effective-config check. Both new negative cases first failed,
-then passed after correction. The inspected earlier ELF already had these
-hooks disabled; no bypass was established in that exact image. The fresh v3
-unsigned probe uses the corrected source and still occupies27524 FLASH bytes,
-with17532 bytes before the reserved anchor page. Earlier proofs remain intact.
-
-Actual probe:
+## Verify the gate
 
 ```sh
-work/ncs-venv/bin/python tools/firmware/build_common_loader_probe.py \
-  --output experiments/<new-empty-directory>
+python -m pytest tools/firmware/tests/test_common_restore_gate.py
 ```
 
-The helper accepts only an existing public-key PEM, builds only the MCUboot ELF
-without sysbuild children or signing, and freezes a firmware source copy without
-keys. Successful output:
-`experiments/common-loader-admission-20261023-v2/`. V1's failed configuration is
-preserved: directly assigning hidden `BOOT_USE_NRF_CC310_BL` is invalid, so the
-helper uses the user-facing `BOOT_ECDSA_CC310` choice and verifies the resulting
-hidden backend flags.
+Independent synthetic wire fixtures check strict image/anchor parsing. Separate
+real ephemeral ECDSA fixtures exercise role/signature boundaries; SDK-shaped host
+adapters check call order, cleared authority and precise protection delegation.
+Compile/link checks enforce mandatory configuration and the 44 KiB code limit,
+including initialized ROM data. Source/host tests do not execute target CC310,
+prove physical protection or qualify interruption recovery.
 
-V2 native compile/link passes with **27524 bytes FLASH**, **15104 bytes RAM**,
-leaving **17532 bytes** before the anchor. `_flash_used=0x6b84`; nonempty ELF
-load segments have physical extents `[0,26988)`, `[26988,27520)`,
-`[27520,27524)`. All are below `0xb000`, including initialized ROM data.
-The complete physical layout still matches the existing48KiB boot partition.
+For an unsigned native link probe with a prepared pinned SDK:
 
-`link-inspection.json` records SDK commit/source hashes and saved disassemblies.
-Actual main contains `r1=49152`, `r0=0`, then calls `__wrap_fprotect_area`.
-Wrapper disassembly calls real `boot_go` and `common_restore_admit` in order;
-selected-slot validation calls `boot_image_validate`, then
-`bootutil_img_validate`. This confirms the linked crypto call chain and
-protection geometry, not a hardware signature-operation trial. No anchor,
-signed loader, signed generic restorer or installable firmware set was produced.
+```sh
+python tools/firmware/build_common_loader_probe.py --output experiments/new-common-loader-probe
+```
 
-Detailed probe counts and frozen review records remain local. The
-[public evidence summary](../../docs/research-summary.md#architecture-and-current-status)
-separates this historical native evidence from current physical qualification.
+Use a new output directory. The probe builds MCUboot ELF with a public key,
+records link inspection and checks mapped HEX bounds. It produces no signed
+installable set and performs no hardware operation. Exact historical sizes and
+counts are properties of the recorded probe, not budgets for a later build.
+
+## Historical unsigned probe (2026-10-23)
+
+The corrected native probe occupied 27524 FLASH bytes and 15104 RAM bytes;
+`_flash_used=0x6b84` left 17532 bytes before the anchor page. Mapped initialized
+data/RAM-function load extents also remained below `0xb000`. Linked inspection
+confirmed the real boot validation chain and exact `(0, 49152)` protection call.
+This measured one unsigned source snapshot, not a signed deployable set.
+
+Review added rejection of `BOOT_GO_HOOKS` and `BOOT_FLASH_AREA_HOOKS`; both new
+negative cases failed before correction. The previously inspected ELF already
+had those hooks disabled, so no bypass was established in that exact ELF.
+Historical parser/adapter/configuration suites reported 96 passing tests; these
+counts are dated observations and must not stand in for running current suites.

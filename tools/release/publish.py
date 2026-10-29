@@ -183,7 +183,12 @@ class GitHub:
             self.request('git/refs','POST',{'ref':'refs/tags/'+tag,'sha':sha});existing=self.tag_sha(tag)
         if existing!=sha:raise ValueError('Existing tag differs from exact candidate')
         return draft
-    def publish(self,release):return self.request(f'releases/{release}','PATCH',{'draft':False,'make_latest':'true'})
+    def publish(self,release,name):return self.request(f'releases/{release}','PATCH',{'draft':False,'make_latest':'true','name':name})
+
+
+def release_name(manifest):
+    """Expose the verified native Android version without changing the tag."""
+    return f"Vomar bundle {manifest['distributionVersion']} · Android {manifest['components']['android']}"
 
 
 def verify_checks(value,sha):
@@ -228,6 +233,6 @@ def main():
     security_check(fetch,manifest['commit'],'Ryther_vomar')
     if a.accepted_with_known_issues:verify_candidate(manifest,a.directory,a.qualification,a.public_key,a.android_tools,**verify_options)
     codeql_check(remote.code_scanning,manifest['commit'])
-    remote.publish(draft['id'])
+    remote.publish(draft['id'],release_name(manifest))
 
 if __name__=='__main__':main()

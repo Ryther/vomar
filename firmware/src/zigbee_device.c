@@ -9,6 +9,7 @@
 #include "vimar_power_protection.h"
 #include "boot_trace.h"
 #include "fault_diag_zephyr.h"
+#include "fault_diag_sdk.h"
 #if defined(CONFIG_VIMAR_ZIGBEE_OTA)
 #include "zigbee_ota.h"
 #endif
@@ -1164,6 +1165,13 @@ static void restore_warm_handoff(uint8_t remembered_level)
 
 int zigbee_device_start(void)
 {
+#if defined(CONFIG_VIMAR_FAULT_DIAGNOSTICS)
+    /* After POST_KERNEL ZB_INIT and RAM journal readiness, before application
+     * SDK setup. False error-callback returns preserve ordinary assert/reset. */
+    vimar_fault_diag_sdk_register();
+    extern void zb_zdo_register_assert_indication_cb(void (*cb)(zb_uint16_t,zb_int_t));
+    zb_zdo_register_assert_indication_cb(vimar_diag_zboss_assert);
+#endif
     struct dimmer_config config = IS_ENABLED(CONFIG_VIMAR_HARDWARE) ?
         dimmer_config_vimar_defaults() : dimmer_config_defaults();
     bool initial_on = false;
@@ -1279,12 +1287,6 @@ int zigbee_device_start(void)
     vimar_identity(nrf_ficr_deviceid_get(NRF_FICR,0),
                    nrf_ficr_deviceid_get(NRF_FICR,1),stock_ieee);
     zb_set_long_address(stock_ieee);
-#endif
-#if defined(CONFIG_VIMAR_FAULT_DIAGNOSTICS)
-    /* Pinned zb_zdo.h ABI; register after POST_KERNEL ZB_INIT and before the
-     * asynchronous Zigbee thread starts. Do not change assert handling. */
-    extern void zb_zdo_register_assert_indication_cb(void (*cb)(zb_uint16_t,zb_int_t));
-    zb_zdo_register_assert_indication_cb(vimar_diag_zboss_assert);
 #endif
     initial_connection_intent=connection_intent_load();
     if(initial_connection_intent==CONNECTION_REQUESTED)

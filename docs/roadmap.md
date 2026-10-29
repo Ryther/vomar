@@ -1,61 +1,50 @@
-# Research Roadmap
+# Engineering roadmap
 
-## Phase 1 - Workspace and source inventory
+This page separates implemented architecture from remaining research. It is not
+an installation checklist or a release qualification report. See
+[architecture](architecture.md) for component ownership and
+[research summary](research-summary.md) for dated evidence.
 
-- preserve current Mesh/Zigbee/APK/JADX artifacts;
-- clone OpenVSH;
-- hash original inputs;
-- make the toolchain reproducible inside the Dev Container.
+## Implemented source
 
-## Phase 2 - OpenVSH reconnaissance
+The repository provides a pinned SDK/development graph, separate DK and Vimar
+backends, configurable Zigbee dimmer behavior, an independent authenticated BLE
+recovery application, signed compressed Zigbee OTA and typed loader contracts.
+Android and desktop provide package validation, operation review, durable
+sessions and first-install/repair machinery. The converter exposes schema-gated
+configuration and diagnostics. Implementation does not establish physical
+qualification of every route.
 
-Determine with exact source references:
+## Active engineering gaps
 
-- nRF Connect SDK / Zephyr architecture;
-- bootloader/FOTA mechanism;
-- partition layout and signing;
-- recovery behavior;
-- physical button handling;
-- LED handling;
-- Zigbee endpoint architecture;
-- reusable Vimar abstractions.
+- Resolve APS-105-5241 with causal evidence for the exact source/binary. A smaller
+  report or a no-assert interval does not demonstrate a fix.
+- Qualify common first installation, inherited-watchdog start, generic stock
+  restoration and update interruption on exact signed component sets.
+- Establish native Android/Linux/macOS/Windows BLE/USB permission, driver,
+  cancellation and restart behavior on real supported platforms.
+- Measure electrical phase-cut behavior, load compatibility, auxiliary input
+  routing and P0.31 protection/status semantics without overstating software
+  output as a physical measurement.
+- Close known compact desktop layout and accessibility gaps with actual renders
+  and interaction evidence.
 
-## Phase 3 - Automated stock-firmware analysis
+## Research scope
 
-Create Ghidra headless/scripted analyses for Mesh and Zigbee and export:
+Retain stock secondary-controller firmware where practical. Continue only the
+stock analysis needed for initialization, control, status, protection and safe
+restoration. The recovered TWI transport is probable configuration EEPROM;
+it does not establish a serial power-controller protocol. Compare Mesh/Zigbee
+where that resolves a required interface.
 
-- function inventories;
-- strings and string XREFs;
-- selected decompilation;
-- call graphs;
-- Mesh/Zigbee similarity candidates.
+Preserve immutable originals, hashes, reproducible scripts and evidence classes.
+Read-only observation precedes any separately authorized physical change. See
+[research rules](research-rules.md) and [goals](goals.md).
 
-## Phase 4 - Hardware-interface discovery
+## Release gates
 
-Determine:
-
-- physical button GPIOs;
-- LED control;
-- nRF <-> secondary-MCU physical interface;
-- initialization/handshake;
-- command framing;
-- state/fault reporting.
-
-## Phase 5 - BLE development/recovery platform
-
-Establish on a safe development target first:
-
-- known-good boot/recovery design;
-- BLE firmware transfer;
-- image validation/signing;
-- recovery from a broken application.
-
-## Phase 6 - Minimal custom application
-
-Progressively implement boot/logging, buttons, LED, secondary-MCU status,
-ON/OFF, level control, and continuous dimming.
-
-## Phase 7 - Zigbee
-
-Add On/Off, Level Control, reporting, configuration, and Home Assistant /
-Zigbee2MQTT behavior.
+Release Please owns distribution versions/changelogs/tags. Exact-source software
+checks, signer continuity, dependency/security review, physical qualification and
+publication are separate gates. Explicitly accepted experimental firmware retains
+its known issues and false qualification flags; publication does not close them.
+See [releasing](releasing.md).

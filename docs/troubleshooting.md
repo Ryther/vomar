@@ -1,110 +1,148 @@
-# Troubleshooting and recovery
+# Troubleshooting
 
-Start with the app version, selected package, exact symptom and last recorded
-operation phase. Preserve the original backup and session journal. Do not erase,
-recover, rewrite UICR, reinstall stock firmware or release a halted target as a
-generic troubleshooting step.
+Start with the app/OS version, selected package, exact error and last operation
+phase. Preserve the original backup and session journal. Do not uninstall,
+clear data, erase a target or release a halted CPU to make an error disappear.
+
+## Obtainium shows an unknown or wrong version
+
+- **Unknown Latest / placeholder / Last update check: Never:** no successful
+  source check has completed. Return to Obtainium's app list and pull down to
+  check updates. Inspect any network/API error before pressing Update.
+- **A pseudo-version is in use**, or a bundle number in place of the Android
+  version: check for the old bundle-tracking configuration. Import the current
+  [Vomar configuration](android-updater.md#install-and-track-with-obtainium), which
+  reads the native Android version from the release title and keeps OS version
+  detection enabled.
+- A bundle can change without an Android update. For example, bundle `1.0.0`
+  contains Android `1.1.4`. Download filenames do not determine the installed app
+  version; check Vomar → Settings.
+
+To migrate an older tracking configuration, re-import the current install link
+and run a fresh check; no entry removal or app uninstall is needed. A signature
+mismatch requires the matching signed APK; it is not a reason to uninstall. Private originals/journals/credentials can
+be lost on uninstall, and automatic Android backup is disabled.
 
 ## App installation or startup fails
 
-Check OS/architecture against [installation](installation.md) and verify the
-downloaded distribution checksums. For Android upgrades, a signer mismatch is
-not solved by approving a different identity or deleting the existing app's
-state. Obtain the matching signed APK and preserve originals before considering
-any uninstall.
+Verify the download checksum and [supported OS/architecture](installation.md).
+Android's package ID and signing identity must match the installed app. Wait for
+active operations to end before upgrading over it.
 
-Desktop packages contain their runtime. A missing Python/SDK on the end-user
-machine is not a reason to install development tools. Capture the startup error
-and check the matching native package and OS contract in [Desktop](desktop.md).
-Native drivers, first-launch dialogs and Bluetooth permissions need verification
-on that platform; success on Linux does not establish Windows/macOS behavior.
+Desktop includes its runtime. Missing Python or an SDK is not a reason for an
+end user to install development tools. Retain the exact startup error and check
+the matching native package. Platform drivers and Bluetooth/USB permissions
+need verification on that OS. See [Desktop](desktop.md).
 
 ## A package is rejected or no release is listed
 
-Confirm that you selected the canonical firmware common ZIP, not a desktop
-archive, OTA carrier or individual image. Check the download source, size/hash
-and package version. The app's public trust anchor is independent of GitHub;
-changing the download URL does not authorize a new signer.
+Select the complete firmware ZIP, not a desktop archive, `.ota` carrier or
+individual binary. Verify its checksum and native compatibility. Changing the
+GitHub source never approves a new firmware signer.
 
-A qualification candidate is intentionally rejected by online release/fleet
-routes. Android 1.0.6 has one manual firmware chooser with explicit local/beta
-review; desktop has a separate qualification route. Do not remove metadata or
-substitute binaries to bypass either client's image/compatibility checks. An empty release list can be a genuine current
-state: a local signed package remains usable without a GitHub token. Do not
-invent a release or treat an empty list as proof of a Bluetooth failure.
+A published project release may contain experimental firmware that ordinary
+catalog/fleet routes intentionally reject. Read its known issues and use the
+explicit manual route described in [Packages](offline-guide.md). A draft is not
+a published release; a missing release does not prevent a compatible local ZIP.
+Never alter metadata or substitute components to force admission.
 
 ## Bluetooth discovery, connection or pairing fails
 
-Check that Bluetooth is enabled and the app has the OS permissions it requested.
-Confirm which target/recovery version is actually present and whether another
-client owns the connection. A device name alone is not identity. Preserve
-existing bonds; do not delete them or repeat resets to force pairing without
-understanding the exact recovery's contract.
+Check Bluetooth and the permissions Android requested. Confirm the intended
+recovery mode and whether another client owns the connection. A saved name or
+advertisement does not identify the target securely.
 
-Distinguish discovery, connection, service discovery, pairing, upload and restart.
-A successful earlier phase does not prove the next. For the separate Android
-qualification tool, [Bluetooth trial](android-bluetooth-trial.md) describes report
-export and its diagnostic limits. Stop and collect the recorded phase before
-retrying an uncertain transfer.
+Distinguish scan, connection, service discovery, pairing, transfer and restart.
+A successful earlier step does not prove the next. Preserve existing bonds;
+do not delete them, repeat resets or assume the PIN is wrong without evidence.
+Use [Bluetooth update report export](android-bluetooth-trial.md#interrupted-attempts)
+and retain the exact failed phase before reviewing another attempt.
 
 ## Broker connection fails or device information is stale
 
-Check the active saved connection, exact host/port, transport, broker credentials
-and Zigbee2MQTT base topics. For an unencrypted local connection, confirm the
-separate consent. Do not paste passwords or expanded configuration into an issue.
+Check the active profile, exact host/port/transport, credentials and base topics.
+Plaintext local connections need separate consent; port 8883 alone does not
+prove TLS. Desktop uses the OS credential store without plaintext fallback.
 
-Unlock the desktop OS credential store if it is unavailable; there is no
-plaintext password fallback. Saved/retained device metadata may remain visible
-while disconnected. On Android, readings marked `(saved)` are historical.
-Reconnect explicitly and inspect the new result. Neither a cached firmware
-version nor generic OTA support proves that an update is currently admissible.
+Android restores an activated connection and subscriptions when opened. Choose
+**Retry connection** or **Save and reconnect** after correcting a configuration
+error. **Disconnect** disables restoration. Values marked **(saved)** are
+historical; wait for fresh reports. A generic OTA flag or cached firmware version
+does not establish update eligibility.
 
 ## Upload, first installation or restart was interrupted
 
-Use Activity/session details to identify the exact target, package, original
-and last durable phase. Stop and retain that state. Do not start an unrelated
-new installation, acquire a replacement original from partially modified FLASH
-or assume that a submitted reset completed successfully.
+Open the matching Activity/session record. Keep the same package, original and
+journal. Never capture partially rewritten FLASH as a new original or delete a
+journal to remove the interruption state.
 
-Explicit resume/repair must revalidate the same target, original and release,
-then request fresh review. Missing/corrupt journals, unknown bytes or changed
-originals block repair. Successful FLASH readback may intentionally leave the
-CPU halted; start is a separately reviewed action. Android 1.0.6 retains the original privately on the phone and associates it
-with the device; exporting an independent copy is optional but needed to retain
-recovery material across app-data deletion or uninstall. See
-[Android first installation](android-first-install.md) and
-[Desktop first installation and repair](desktop.md#first-installation-and-repair).
+Explicit repair/resume checks the same target and bytes, then requests fresh
+review. Changed originals, corrupt journals or unknown memory block repair.
+Successful first-install readback intentionally leaves the CPU halted; start is
+a separate action. An acknowledged start/reset is not observed lamp operation.
+See [First-install repair](android-first-install.md#explicit-repair-after-an-interrupted-installation)
+and [Bluetooth interruptions](android-bluetooth-trial.md#interrupted-attempts).
+
+Older Android 1.0.7 can report **Syntax error in regexp pattern** while reading
+start evidence. Once the active operation has ended, upgrade over the app with
+the matching signer. Existing originals and journals must be preserved; the
+error alone does not establish FLASH or CPU state.
 
 ## Stop was pressed during a Zigbee update
 
-Stopping the local client does not revoke an OTA request already submitted to
-Zigbee2MQTT. Preserve the uncertain session/network and use the read-only
-reconciliation path before admitting another operation. A retained broker
-message alone is insufficient evidence that installation or recovery finished.
+A submitted OTA request can continue in Zigbee2MQTT after the client stops.
+Retain the uncertain session/network and perform explicit read-only
+reconciliation before another operation. A retained broker message alone is
+not completion evidence.
 
-## Docker or development tools fail
+## A dimmer restarts unexpectedly
 
-Follow [Development](development.md). Inside the actual Dev Container, check
-`docker version` and `gh --version`; authentication is a separate step. An EOF
-or unreachable daemon with only a client version is an environment failure.
-Use Rebuild/Reopen to apply Features and socket mounts; restarting an old proxy
-cannot add a missing mount. Do not expose account credentials to a contributed
-Dockerfile merely to reproduce a failure.
+Source candidate firmware 1.1.6 adds the original SDK error code and severity to
+the existing reboot diagnostics. When the SDK supplies a verifier location, the
+record also retains its file ID and line before a later generic assertion. This
+collects evidence; APS-105-5241 remains unresolved. It is a bounded first-cause
+record, not a continuous activity log. Already stored reports from older firmware
+cannot acquire a missing original error after the update.
 
-For a failed Sonar PR check, inspect coverage inputs, the chosen Cloud/Community
-job and its linked artifact. A missing report is a failure. Community's PR
-scope is Python/JavaScript/Kotlin; firmware C has mandatory CodeQL and full
-protected main/release Sonar. The release gate still requires an analysis of
-the exact candidate SHA. See [GitHub setup](github-setup.md).
+With a matching Zigbee2MQTT converter and firmware schema 7 or later, request
+`fault_diagnostic_status` and each `fault_diagnostic_0` through
+`fault_diagnostic_7` using the device's read-only `/get` route. Request each
+32-byte fragment separately and collect fresh replies. The fragments are
+available to `/get` even though they are hidden from ordinary UI controls. Save
+the complete state JSON privately before another update. A cached status or
+partial set of fragments is insufficient to decode a report.
+
+A new fatal record is saved durably at the next healthy startup, after storage
+write and readback. Status bit 1 means capture is ready; bit 2 means a report is
+present; bit 8 means a storage error; bit 16 means an earlier pending capture
+must be preserved; bit 32 marks a report from a different build. Such an older
+report must be matched to its own archived build. Do not clear settings or
+repeatedly power-cycle the device to force a new report: retained RAM can be lost
+on a power cut, and this is not a repair procedure.
+
+For a developer with the matching source, decode the saved JSON offline:
+
+```sh
+python -m tools.firmware.read_fault_diagnostics exported-state.json
+```
+
+The decoder checks the record format, CRC and capture consistency. Match its
+`build_id` to the archived ELF before interpreting addresses or comparing causes.
+See [original SDK diagnostics](https://github.com/Ryther/vomar/blob/main/firmware/README.md#original-sdk-error-diagnostics)
+for fields and capture limits. Exporting client update reports or Bluetooth
+recovery history is a different diagnostic and does not collect these Zigbee
+reboot fragments automatically.
+
+## Development tools or CI fail
+
+Use [Development](development.md) for Docker/socket/SSH problems and
+[GitHub setup](github-setup.md) for required checks, credentials and Sonar.
+A missing compiler, scanner report or coverage file is a failed check, not
+physical evidence. Do not expose private credentials to reproduce a PR failure.
 
 ## Report a problem safely
 
-Include client/OS versions, package/distribution version, operation phase,
-sanitized error, reproduction steps and which checks were actually performed.
-Use a synthetic example where possible. Review an exported diagnostic report
-before sharing it privately: it may contain device identity or environmental
-details. Never attach original device images, signing material, credentials,
-raw broker captures or household identifiers to a public issue.
-
-State what remains uncertain. A checksum, source test, green badge or transfer
-acknowledgment cannot establish physical dimmer behavior or release qualification.
+Include app/OS and package versions, exact phase, sanitized error and reproduction
+steps. Review diagnostic exports before private sharing: they may identify the
+device or setup. Never post original images, signing material, passwords, raw
+broker captures or household identities in public issues.

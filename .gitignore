@@ -540,6 +540,8 @@
 !/firmware/src/fault_diag.c
 !/firmware/src/fault_diag.h
 !/firmware/src/fault_diag_error_hook.h
+!/firmware/src/fault_diag_sdk.c
+!/firmware/src/fault_diag_sdk.h
 !/firmware/src/fault_diag_zephyr.c
 !/firmware/src/fault_diag_zephyr.h
 !/firmware/src/gesture_classifier.c
@@ -785,6 +787,7 @@
 !/tools/firmware/tests/test_fault_diag.py
 !/tools/firmware/tests/test_fault_diag_integration.py
 !/tools/firmware/tests/test_fault_diag_persistence.py
+!/tools/firmware/tests/test_fault_diag_sdk.py
 !/tools/firmware/tests/test_gesture_classifier.py
 !/tools/firmware/tests/test_image_roles.py
 !/tools/firmware/tests/test_inherited_watchdog_boot.py
@@ -1227,6 +1230,7 @@
 !/assets/branding/vomar.ico
 !/docs/images/
 !/docs/images/vomar-banner.png
+!/docs/images/install-obtainium.svg
 !/docs/images/vomar-icon.png
 !/docs/images/vomar.ico
 !/docs/stylesheets/
@@ -1278,3 +1282,5 @@
 !/tools/release/tests/test_codeql_gate.py
 !/apps/android-updater/obtainium.json
 !/.github/code-scanning-ruleset.json
+
+!/tools/release/tests/test_obtainium_native.py

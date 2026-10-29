@@ -10,6 +10,14 @@ struct loader_pair_result {
  uint8_t loader_full_sha256[32];
  struct ota_image_info recovery;
 };
+/* Version-independent admission of the signed RECOVERY2/profile2 update ABI.
+ * Still authenticates the approved loader/anchor, key, role, model/profile,
+ * image bounds and slot vectors. Publishes the ACTUAL file/signed-region hashes.
+ * This is discovery/admission only; an active journal must use verify below. */
+int loader_pair_authenticate(const struct loader_contract_reader *,
+ const struct loader_contract_record *,size_t,const struct loader_contract_live *,
+ const struct loader_contract_hash *,const uint8_t *recovery_image,size_t capacity,
+ struct loader_pair_result *);
 /* Explicit typed authority + pinned-key signed RECOVERY2/profile2 in slot1.
  * expected_recovery_file_sha256 is the FULL signed-file digest (pair binding).
  * recovery.signed_digest separately supplies the SMP/manifest identity hash.

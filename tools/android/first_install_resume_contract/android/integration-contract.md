@@ -1,22 +1,35 @@
-Source integration pending independent review of the isolated core.
+# Android explicit repair integration contract
 
-- SAME canonical `:core` source module includes src after review; no copies.
-- Persist immutable initial OriginalExportReceipt immediately after successful
-  same-URI export/reopen and binding derivation, before installation admission.
-- Private start markers are binding-specific: intent durable before explicit
-  start; acknowledged marker suppresses routine interrupted-install offer.
-- Resume option discovery reads exact same-UID retained base record, protected
-  original, receipt, and complete hash-linked resume journal. Missing/corrupt or
-  multiple progressed bindings is blocked, never silently skipped.
-- User-selected cloud copy is reopened read-only and byte-exact compared to the
-  protected original and initial receipt. No replacement/re-export/recapture.
-- Explicit prepare holds USB token, validates current signed source, constructs
-  generation-bound ReviewedResume, and allows only its ResumeHardwareAuthority
-  to restore known NVMC CONFIG1/2 to READONLY AFTER HALT/READY and exact FICR/UICR.
-- Separate final dialog correlates request/binding/release/head and calls engine.
-- Every resume failure/cancel keeps inherited HALT uncertainty, even zero new
-  writes. No catch path restores original CPU control from partial firmware.
-- Successful complete image still requires separate receipt-gated explicit
-  reset-and-start and signed inherited-watchdog policy; never release old PC.
-- Repair UI warns rebuilding can reset current custom settings. Only complete
-  current read determines rebuild/commit-only/verify-only mode.
+`apps/android-updater/core/build.gradle.kts` includes the canonical portable
+first-install and resume sources directly. Android app adapters implement private
+persistence, document access, exclusive USB ownership and reviewed presentation.
+These are current integration requirements, not automatic recovery permission.
+
+1. Persist the immutable `OriginalExportReceipt` after successful exact-document
+   save/reopen and binding derivation, before installation admission. Android's
+   initial save/reopen can be private; the document identifier is not necessarily
+   a cloud URI.
+2. Discover repair only from the exact same-UID retained record, protected original,
+   initial receipt and complete hash-linked journal. Missing/corrupt or multiple
+   progressed bindings block admission. Do not silently skip them or recapture.
+3. Reopen the selected original read-only and compare complete bytes with the
+   protected original and receipt. No replacement export or new capture can
+   authorize repair.
+4. Explicit preparation holds the USB token, validates the signed source and
+   constructs generation-bound `ReviewedResume`. Only its
+   `ResumeHardwareAuthority` may restore known NVMC CONFIG1/2 to READONLY, after
+   HALT/READY and exact FICR/UICR checks.
+5. A separate final review correlates request, binding, release and journal head.
+   Full current readback determines REBUILD, COMMIT_ONLY or VERIFY_ONLY. Warn
+   that rebuilding may reset current custom settings.
+6. Every failure/cancel preserves inherited HALT and mutation uncertainty, even
+   with zero new writes. Never restore old CPU control from partial firmware.
+7. Verified completion still requires separate receipt-gated reset-and-start
+   and the signed inherited-watchdog policy. Persist start intent before the
+   request; acknowledgement suppresses the routine interrupted-install offer,
+   while an uncertain result requires reconciliation.
+
+Keep original/receipt/journal material private. Android uninstall and app-data
+clearing delete it; externally export originals before either action. See
+[the engine reference](../../first_install_contract/README.md) and
+[operator workflow](../../../../docs/android-first-install.md).

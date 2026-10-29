@@ -68,6 +68,7 @@ test('keeps the committed external converter synchronized', async () => {
 test('enables the standard Zigbee OTA provider for custom firmware', () => {
     const {definition} = build();
     assert.equal(definition.ota, true);
+    assert.equal(definition.vendor, 'Vomar');
 });
 
 test('registers all metadata and a standard light without power-on behavior', () => {
