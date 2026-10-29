@@ -19,6 +19,8 @@ private keys, raw network captures or original device images.
 
 ## Install Android without touching a dimmer
 
+Requires Android 8.0 (API 26) or later.
+
 **[Install Vomar with Obtainium](https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22org.openvimar.updater%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2FRyther%2Fvomar%22%2C%22author%22%3A%22Ryther%22%2C%22name%22%3A%22Vomar%22%2C%22additionalSettings%22%3A%22%7B%5C%22apkFilterRegEx%5C%22%3A%5C%22%5Evomar-android-%5B0-9%5D%2B%5C%5C%5C%5C.%5B0-9%5D%2B%5C%5C%5C%5C.%5B0-9%5D%2B%5C%5C%5C%5C.apk%24%5C%22%2C%5C%22releaseTitleAsVersion%5C%22%3Atrue%2C%5C%22versionExtractionRegEx%5C%22%3A%5C%22%5C%5C%5C%5CbAndroid%5C%5C%5C%5Cs%2B%28%5B0-9%5D%2B%5C%5C%5C%5C.%5B0-9%5D%2B%5C%5C%5C%5C.%5B0-9%5D%2B%29%5C%5C%5C%5Cb%5C%22%2C%5C%22matchGroupToUse%5C%22%3A%5C%22%241%5C%22%2C%5C%22versionDetection%5C%22%3Atrue%2C%5C%22includePrereleases%5C%22%3Afalse%2C%5C%22includeDrafts%5C%22%3Afalse%2C%5C%22trackOnly%5C%22%3Afalse%7D%22%7D)**
 
 Open the link on the phone, review/confirm the configuration import, run an update

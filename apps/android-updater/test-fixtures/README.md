@@ -94,10 +94,11 @@ contains one synthetic MAIN image with protected target TLV0xA0
 `VIMAR30805\x02` and role TLV0xA1 byte1; it contains no per-device descriptor.
 The packager's test helper generates its source bytes. Its synthetic qualification
 hash is test evidence only, never physical release qualification. Production must
-never trust either fixture public key. See
-`analysis/app/common-package-implementation-2026-10-23.md` for the implemented
-schema2 contract and runtime identity/persistence rules. The frozen schema1
-contract above is unchanged.
+never trust either fixture public key. The public schema2 contract is implemented
+by [the package reader and validator](../core/src/main/kotlin/org/openvimar/updater/core/CommonPackage.kt)
+and [the packager](../../../tools/firmware/package_common_android_update.py).
+[Runtime identity lookup](../core/src/main/kotlin/org/openvimar/updater/core/RuntimeIdentityLookup.kt)
+owns live identity resolution. The frozen schema1 contract above is unchanged.
 
 ## Optional Zigbee carrier fixture
 

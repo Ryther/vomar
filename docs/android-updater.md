@@ -1,8 +1,9 @@
 # Android app
 
 Use Vomar to organize dimmers, connect to Zigbee2MQTT, inspect firmware and review
-updates. The app's identity is `org.openvimar.updater`; its version appears in
-**Settings**. App, firmware and bundle versions are independent.
+updates on Android 8.0 (API 26) or later. The app's identity is
+`org.openvimar.updater`; its version appears in **Settings**. App, firmware and
+bundle versions are independent.
 
 ## Install and track with Obtainium
 

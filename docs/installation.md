@@ -5,6 +5,8 @@ account or development SDK. App installation does not start a device operation.
 
 ## Android
 
+Requires Android 8.0 (API 26) or later.
+
 Use **[Install with Obtainium](android-updater.md#install-and-track-with-obtainium)**
 to receive Android app updates. If Vomar is already installed from an APK, update
 over it with the same signing identity. **Do not uninstall or clear app data.**

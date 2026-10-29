@@ -158,8 +158,10 @@ connection or acknowledgment can leave the result uncertain. Keep the exact
 package, original, journal, diagnostic report and last reported CPU disposition.
 After possible first-install mutation, cleanup retains HALT and requests no
 start. Do not release an uncertain halted CPU or recapture partially modified
-FLASH as a replacement original. Restart restores records, never approval,
-connections or a running operation.
+FLASH as a replacement original. Restart restores records, never device-operation
+approval or a running device operation. Android may reconnect a previously
+activated broker profile and restore subscriptions; it never replays device
+commands or interrupted updates. **Disconnect** disables that broker restoration.
 
 For an interrupted Android first installation:
 
