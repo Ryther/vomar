@@ -20,7 +20,7 @@ thirteen flags on the experimental common candidate remain false. See the
 The source implements a five-second two-button selector, bounded two-minute
 Zigbee pairing and an explicit authenticated Bluetooth request. See
 [Connection modes](../docs/connection-modes.md) for colors, network replacement,
-timeouts and compatibility limits. It requires matching MAIN/recovery;
+timeouts and compatibility limits. It requires a compatible signed MAIN/recovery contract;
 implementation alone does not establish physical qualification.
 
 ## Build dependencies

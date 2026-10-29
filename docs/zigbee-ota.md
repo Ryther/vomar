@@ -1,6 +1,6 @@
 # Zigbee OTA contract and qualification
 
-Zigbee OTA updates a compatible custom MAIN with a matching independent installer
+Zigbee OTA updates a compatible custom MAIN with a compatible independent installer
 recovery. It does not replace stock firmware initially, install a bootloader or
 add OTA capability merely by loading a converter. Legacy pairs require explicit
 supported migration. Use the client task guides for ordinary operations; this

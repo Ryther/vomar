@@ -95,6 +95,44 @@ Retain the uncertain session/network and perform explicit read-only
 reconciliation before another operation. A retained broker message alone is
 not completion evidence.
 
+## A dimmer restarts unexpectedly
+
+Source candidate firmware 1.1.6 adds the original SDK error code and severity to
+the existing reboot diagnostics. When the SDK supplies a verifier location, the
+record also retains its file ID and line before a later generic assertion. This
+collects evidence; APS-105-5241 remains unresolved. It is a bounded first-cause
+record, not a continuous activity log. Already stored reports from older firmware
+cannot acquire a missing original error after the update.
+
+With a matching Zigbee2MQTT converter and firmware schema 7 or later, request
+`fault_diagnostic_status` and each `fault_diagnostic_0` through
+`fault_diagnostic_7` using the device's read-only `/get` route. Request each
+32-byte fragment separately and collect fresh replies. The fragments are
+available to `/get` even though they are hidden from ordinary UI controls. Save
+the complete state JSON privately before another update. A cached status or
+partial set of fragments is insufficient to decode a report.
+
+A new fatal record is saved durably at the next healthy startup, after storage
+write and readback. Status bit 1 means capture is ready; bit 2 means a report is
+present; bit 8 means a storage error; bit 16 means an earlier pending capture
+must be preserved; bit 32 marks a report from a different build. Such an older
+report must be matched to its own archived build. Do not clear settings or
+repeatedly power-cycle the device to force a new report: retained RAM can be lost
+on a power cut, and this is not a repair procedure.
+
+For a developer with the matching source, decode the saved JSON offline:
+
+```sh
+python -m tools.firmware.read_fault_diagnostics exported-state.json
+```
+
+The decoder checks the record format, CRC and capture consistency. Match its
+`build_id` to the archived ELF before interpreting addresses or comparing causes.
+See [original SDK diagnostics](https://github.com/Ryther/vomar/blob/main/firmware/README.md#original-sdk-error-diagnostics)
+for fields and capture limits. Exporting client update reports or Bluetooth
+recovery history is a different diagnostic and does not collect these Zigbee
+reboot fragments automatically.
+
 ## Development tools or CI fail
 
 Use [Development](development.md) for Docker/socket/SSH problems and

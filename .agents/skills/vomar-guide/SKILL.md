@@ -202,6 +202,24 @@ DK tools is a separate read-only monitor/backup tool and stops when backgrounded
 Read recovery history is an explicit supported Bluetooth diagnostic with optional
 private JSON export, never an implicit update step.
 
+## Unexpected firmware restarts
+
+Source candidate firmware 1.1.6 retains the original SDK error/severity, and a
+verifier file/line when supplied, before a later generic assert. It does not fix
+APS-105-5241 or reconstruct missing origins in older reports. With matching
+schema-7-or-later firmware/converter, request fresh read-only
+`fault_diagnostic_status` and all eight `fault_diagnostic_0` through
+`fault_diagnostic_7` fragments separately; preserve the complete state privately.
+These internal fragments are readable through Zigbee2MQTT `/get` but are hidden
+from ordinary controls. Client update-report export and Bluetooth recovery
+history do not collect them automatically.
+
+Persistence requires a healthy next startup and verified storage. Status bit16
+means earlier unpersisted evidence must be preserved; bit32 means the exported
+report belongs to another build. Match each recorded build ID to its archived
+ELF. Do not clear settings, force repeated resets or promise retained RAM will
+survive a power cut. This is bounded first-cause evidence, not continuous logging.
+
 ## Stop, repair and report
 
 Stop prevents subsequent requests; it cannot undo an issued write or revoke an

@@ -151,6 +151,35 @@ Keep phone, DK and target connected during active work. Opening a screen,
 granting a permission or selecting another device never approves a write/start.
 Android **DK tools** is a separate read-only monitor/backup tool.
 
+## Firmware compatibility and reboot evidence
+
+Source candidate MAIN 1.1.6 accepts compatible signed recoveries through the
+stable update contract instead of a list of recovery versions. One common MAIN
+can preserve compatible older or newer recoveries. Loader identity, firmware
+signer, model, role, profile and exact per-operation component checks still
+apply. This is not support for arbitrary stock or unsupported experimental
+firmware; older installed components may require their supported migration.
+Check the actual package and target before starting an update.
+
+The 1.1.6 diagnostic candidate also retains the original SDK error/severity and,
+when supplied, verifier file/line before a generic assertion. APS-105-5241 is
+still unresolved. This is bounded first-cause evidence, not continuous logging,
+and cannot reconstruct missing fields in reports made by older firmware.
+
+With a matching Zigbee2MQTT converter and schema7-or-later firmware, use the
+device's read-only `/get` requests to read `fault_diagnostic_status` and each
+`fault_diagnostic_0` through `fault_diagnostic_7` fragment separately. Collect
+fresh replies for all eight fragments and preserve the complete state JSON
+privately. They remain readable even though ordinary controls hide the fragments.
+Client update-report export and Bluetooth recovery history do not collect them.
+
+Reports become durable at the next healthy startup after storage verification.
+Status bit16 means an earlier pending capture must be preserved; bit32 marks a
+report from another build. Match the recorded build ID to the archived ELF.
+Do not clear settings or repeatedly power-cycle to force capture: a power cut
+can lose retained RAM. Have a maintainer decode the complete saved report;
+partial/cached fragments do not establish the reset cause.
+
 ## Interruption, repair and retention
 
 Stop prevents subsequent requests; it cannot undo a write already issued. A lost
