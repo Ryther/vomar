@@ -37,7 +37,7 @@ class ZigbeeBridgeTest {
     }
     private val ieee="0x0011223344556677"
     private val other="0x8899aabbccddeeff"
-    private fun inventory(ieee:String=this.ieee,vendor:String="OpenVimar",model:String="30805-custom")="""[{"ieee_address":"$ieee","friendly_name":"Desk","supported":true,"model_id":"Vimar30805","software_build_id":"0.5.8","definition":{"vendor":"$vendor","model":"$model","supports_ota":true,"exposes":[{"property":"enter_recovery","access":2}]}}]"""
+    private fun inventory(ieee:String=this.ieee,vendor:String="Vomar",model:String="30805-custom")="""[{"ieee_address":"$ieee","friendly_name":"Desk","supported":true,"model_id":"Vimar30805","software_build_id":"0.5.8","definition":{"vendor":"$vendor","model":"$model","supports_ota":true,"exposes":[{"property":"enter_recovery","access":2}]}}]"""
     private class FakeConnection:MqttConnection {
         val input=Channel<MqttSignal>(128);override val events=input.receiveAsFlow()
         var online=false;override val connected get()=online
@@ -73,6 +73,23 @@ class ZigbeeBridgeTest {
         assertTrue(blocked);assertEquals(1,conn.writes.size)
         bridge.consume(MqttMessageEnvelope("alpha/bridge/devices","bad JSON".toByteArray()))
         assertTrue(bridge.state.value.devices.isEmpty());bridge.disconnect()
+    }
+    @Test fun onlyVomarImportsAsCustomWithoutRelaxingTheModelGate()=runBlocking {
+        val conn=FakeConnection();val bridge=bridge(this,conn)
+        try {
+            bridge.consume(MqttMessageEnvelope("alpha/bridge/devices",inventory().toByteArray()))
+            assertEquals(1,bridge.state.value.devices.size)
+            val record=bridge.state.value.devices.single()
+            assertEquals(FirmwareKind.CUSTOM,record.firmwareKind)
+            assertEquals("0.5.8",record.installedVersion)
+            assertEquals(ieee,record.ieee)
+            assertEquals(setOf("zigbee_ota","enter_recovery"),record.capabilities)
+            for((vendor,model) in listOf("OpenVimar" to "30805-custom","Other vendor" to "30805-custom","Vomar" to "30805","Vimar" to "30805-custom","Vomar" to "other")) {
+                bridge.consume(MqttMessageEnvelope("alpha/bridge/devices",inventory(vendor=vendor,model=model).toByteArray()))
+                assertTrue("$vendor / $model",bridge.state.value.devices.isEmpty())
+            }
+            assertTrue(conn.writes.isEmpty())
+        } finally {bridge.disconnect()}
     }
     @Test fun responsesRequireExactNetworkTransactionDeviceAndNonRetainedTopic()=runBlocking {
         val conn=FakeConnection();val bridge=bridge(this,conn)

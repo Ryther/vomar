@@ -35,13 +35,14 @@ internal class FleetQueue(private val scope:CoroutineScope,private val persisten
     fun createGroup(devices:List<DeviceRecord>,release:FleetReleaseRef,mode:FleetMode):FleetGroup=synchronized(lock){
         require(devices.isNotEmpty()&&devices.size<=100&&devices.map{it.id}.distinct().size==devices.size)
         require(Regex("[0-9a-f]{64}").matches(release.digest)&&Regex("[0-9a-f]{64}").matches(release.mainHash))
+        val pendingDevices=groups.value.flatMap{it.jobs}.filter{it.state !in terminal}.map{it.device}.toMutableList()
         val group=FleetGroup(UUID.randomUUID().toString(),release.copy(),devices.map{record->
             val d=record.copy(uid=record.uid.toList(),capabilities=record.capabilities.toSet())
             val route=FleetPolicy.route(d,release)
             val status=FleetPolicy.status(d,release)
-            val duplicate=groups.value.flatMap{it.jobs}.any{prior->prior.state !in terminal&&(
-                prior.device.id==d.id||d.uid.size==2&&prior.device.uid==d.uid||
-                !d.networkId.isNullOrBlank()&&d.networkId==prior.device.networkId&&!d.ieee.isNullOrBlank()&&d.ieee==prior.device.ieee)}
+            val duplicate=pendingDevices.any{prior->prior.id==d.id||d.uid.size==2&&prior.uid==d.uid||
+                !d.networkId.isNullOrBlank()&&d.networkId==prior.networkId&&!d.ieee.isNullOrBlank()&&d.ieee==prior.ieee}
+            if(!duplicate&&route!=null&&status.eligibility==Eligibility.UPDATE)pendingDevices.add(d)
             FleetJob(UUID.randomUUID().toString(),d,route ?: FleetRoute.BLE,
                 if(duplicate||route==null||status.eligibility!=Eligibility.UPDATE)FleetJobState.BLOCKED else if(route==FleetRoute.BLE)FleetJobState.WAITING_NEARBY else FleetJobState.QUEUED,
                 message=if(duplicate)"This dimmer already has an open activity; resume or resolve that job first" else if(status.eligibility!=Eligibility.UPDATE)status.reason else if(route==null)"No verified route; legacy units require manual preparation" else if(route==FleetRoute.BLE)"Confirm that this phone is near the selected dimmer" else "Queued")

@@ -281,3 +281,13 @@ verified recovery/original availability and a prepared fallback. Older OTA files
 are not an assumed rollback. No scan, monitor, successful host test or accepted
 beta label starts a device update. The ownership guard remains default-disabled
 outside explicitly guarded beta builds.
+
+Android1.1.5/code35 adds the beta-counter admission change. Install its matching
+signed APK over the existing app without clearing data. Returning from the beta
+uses the same selected-device Bluetooth update flow with the separately signed
+MAIN1.1.6 return package and a fresh inspection/review. Match its exact retained
+recovery: a MAIN-only1.1.6 update does not replace an older REC. The larger guarded
+beta has no admitted Zigbee OTA carrier. If MAIN hangs, its selector may not run;
+recovery entry then depends on the actual bootloader/startup button route, whose
+physical behavior must be established for the selected dimmer. Never describe a
+prepared return package as an automatic or already qualified rollback.

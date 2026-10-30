@@ -34,4 +34,27 @@ class OriginalRestoreUiTest:ActivityInstrumentationTestCase2<OriginalRestoreActi
         assertFalse(views.filterIsInstance<Button>().single{it.text=="Export backup copy"}.isEnabled)
     }
 
+    fun testOwnedRestoreKeepsStatusAndStopVisibleWhileBackupDetailsScroll(){
+        setActivityIntent(android.content.Intent().putExtra("backup","a".repeat(64)).putExtra("deviceName","Workshop · "+"Long synthetic device name ".repeat(12)))
+        val screen=activity;instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync{
+            (OriginalRestoreActivity::class.java.getDeclaredField("observing").apply{isAccessible=true}.get(screen) as? kotlinx.coroutines.Job)?.cancel()
+            val state=org.openvimar.updater.installer.OriginalRestoreState(busy=true,done=50,total=100,message="Restoring original firmware · keep the target connected",backupSha256="a".repeat(64))
+            OriginalRestoreActivity::class.java.getDeclaredMethod("render",org.openvimar.updater.installer.OriginalRestoreState::class.java).apply{isAccessible=true}.invoke(screen,state)
+        }
+        instrumentation.waitForIdleSync()
+        val views=nodes(screen.window.decorView)
+        val scroll=views.filterIsInstance<ScrollView>().single()
+        for(direction in listOf(View.FOCUS_DOWN,View.FOCUS_UP)){
+            instrumentation.runOnMainSync{scroll.fullScroll(direction)};instrumentation.waitForIdleSync()
+            val controls=listOf(views.filterIsInstance<Button>().single{it.text=="Stop restoration"},views.filterIsInstance<android.widget.TextView>().single{it.text.toString().startsWith("Restoring original firmware")},views.filterIsInstance<android.widget.ProgressBar>().single())
+            controls.forEach{view->
+                val visible=android.graphics.Rect()
+                assertTrue("Owned operation control must be visible",view.getGlobalVisibleRect(visible))
+                assertEquals("Owned operation control must not be clipped",view.height,visible.height())
+            }
+        }
+        assertFalse(views.filterIsInstance<Button>().single{it.text=="Restore original firmware"}.isEnabled)
+    }
+
 }

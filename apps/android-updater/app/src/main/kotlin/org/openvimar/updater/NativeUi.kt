@@ -149,7 +149,9 @@ internal object NativeUi {
         view.backgroundTintList=null;view.background.state=view.drawableState;view.setTextColor(color)
         view.setCompoundDrawablesWithIntrinsicBounds(null,Icon(context,name,color,22),null,null)
         view.compoundDrawablePadding=dp(context,4);view.textSize=12f
-        view.setPadding(dp(context,8),dp(context,8),dp(context,8),dp(context,8));view.minimumHeight=dp(context,64)
+        val horizontal=if(context.resources.configuration.fontScale>1.3f)4 else 8
+        view.maxLines=1;view.ellipsize=android.text.TextUtils.TruncateAt.END
+        view.setPadding(dp(context,horizontal),dp(context,8),dp(context,horizontal),dp(context,8));view.minimumHeight=dp(context,64)
         view.typeface=Typeface.create("sans-serif-medium",Typeface.NORMAL)
     }
     fun iconButton(context:Context,name:String,label:String,action:()->Unit)=button(context,"",action=action).apply {
