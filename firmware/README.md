@@ -240,8 +240,10 @@ protect field reads; they do not prove that damaged in-range data is truthful.
 No allocation, logging, SDK service, settings or flash operation runs in this
 callback. Existing bounded interrupt masking protects the RAM journal.
 
-The 128-byte v1 format, ERROR kind `2`, CRC, reserved words, first-cause policy and
-eight opaque export chunks remain unchanged. The numeric `source` token reserves
+New captures use explicit format2 in the same 128-byte record and 256-byte retained
+window. Format1 records are still validated and preserved verbatim. ERROR kind `2`,
+CRC, reserved words, first-cause policy and eight opaque export chunks retain
+their contracts. The numeric `source` token reserves
 these namespaces (all examples are synthetic):
 
 | Source token | Line field | Meaning |
@@ -267,6 +269,24 @@ build identity. `original_location_present` distinguishes a captured verifier
 location from the sentinel. Unknown or inconsistent tags remain uninterpreted
 `checked_error` records; integrity checks still apply. Match the stored build ID
 to its archived ELF, including when a newer firmware exports older evidence.
+
+Format2 ERROR records may contain a scheduler queue snapshot captured in the
+original FATAL callback, under interrupt masking. Valid bit 18 admits raw capacity,
+used count and read/write indices in bytes 56..71. Bits 19/20 admit raw head/tail
+callback IDs in bytes 72..79 only when indices and counts are consistent with the
+compiled 32-entry allocation. Absent callback IDs are unavailable; corrupt counters
+remain raw evidence. These are queued callbacks, not the attempted callback or
+the producer that filled the queue. The failed attempt remains unavailable.
+ABORT records retain their separate register meanings at those offsets. No
+callback pointer is followed, and no SDK tracing transport is implied.
+
+Pass `--elf path/to/archived/zephyr.elf` to resolve queued callback addresses. The
+decoder first requires the ELF's embedded build identity to equal the record's;
+unmatched addresses remain unresolved. Save all eight diagnostic chunks from
+one coherent read before switching to Bluetooth or returning to older firmware.
+Stable 1.1.6 rejects format2 and cannot export/preserve it as a valid journal;
+returning without exporting may lose this evidence. Existing app trial reports
+are not a replacement for these Zigbee diagnostic chunks.
 
 Persistence occurs at healthy next startup: settings save and independent
 readback precede acknowledgement of retained SRAM. Earlier unacknowledged

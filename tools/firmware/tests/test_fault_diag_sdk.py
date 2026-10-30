@@ -63,6 +63,12 @@ static zb_error_handler_t handler;
 static uint32_t primask;
 static unsigned disable_calls;
 static int healthy, save_error;
+uint32_t vimar_fault_diag_queue_snapshot(struct fault_diag_queue *queue)
+{
+    assert(primask == 1 && !healthy);
+    *queue = (struct fault_diag_queue){32, 2, 0, 2, 0x1001, 0x1005};
+    return FAULT_DIAG_VALID_QUEUE | FAULT_DIAG_VALID_QUEUE_HEAD | FAULT_DIAG_VALID_QUEUE_TAIL;
+}
 
 void zb_error_register_app_handler(zb_error_handler_t cb)
 { assert(cb != NULL); handler = cb; }
@@ -259,7 +265,7 @@ def run_capture(executable, scenario, primask):
 
 def assert_record_integrity(slot, *, kind, sequence, boot=18, build=b"\x01\x02\x03" + b"\0" * 13):
     # Independent wire offsets and CRC, rather than the production reader.
-    assert struct.unpack_from("<IHHII", slot) == (0x46444941, 1, 128, sequence, boot)
+    assert struct.unpack_from("<IHHII", slot) == (0x46444941, 2, 128, sequence, boot)
     assert slot[16:32] == build
     assert struct.unpack_from("<I", slot, 36)[0] == kind
     assert slot[112:120] == b"\0" * 8
@@ -285,7 +291,9 @@ def test_original_error_survives_generic_assert_and_abort(sdk_capture, scenario,
     raw = run_capture(sdk_capture, scenario, primask)
     assert_record_integrity(raw[:128], kind=2, sequence=1)
     assert struct.unpack_from("<Iii", raw, 44) == (source, line, error)
-    assert struct.unpack_from("<I", raw, 32)[0] == 0x100E
+    assert struct.unpack_from("<I", raw, 32)[0] == (0x1c100E if scenario.startswith("fatal_") else 0x100E)
+    if scenario.startswith("fatal_"):
+        assert struct.unpack_from("<6I", raw, 56) == (32, 2, 0, 2, 0x1001, 0x1005)
     assert_record_integrity(raw[128:], kind=3, sequence=2)
     assert struct.unpack_from("<IIIIII", raw, 128 + 56) == (0x1235, 0x20001000, 0x20002000, 0, 0, 0)
 
@@ -318,7 +326,7 @@ def test_adapter_has_only_registration_and_ram_capture_dependencies(tmp_path, co
     ], check=True, capture_output=True, text=True)
     undefined = subprocess.run(["nm", "-u", str(obj)], check=True, capture_output=True, text=True)
     dependencies = {line.split()[-1] for line in undefined.stdout.splitlines()}
-    required = {"vimar_fault_diag_error", "zb_error_register_app_handler"}
+    required = {"vimar_fault_diag_error", "vimar_fault_diag_fatal", "zb_error_register_app_handler"}
     # The host coverage lane adds this exact compiler runtime, not SDK services.
     instrumented = required | {"__gcov_init", "__gcov_exit", "__gcov_merge_add"}
     assert dependencies in (required, instrumented)

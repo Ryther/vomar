@@ -291,3 +291,9 @@ beta has no admitted Zigbee OTA carrier. If MAIN hangs, its selector may not run
 recovery entry then depends on the actual bootloader/startup button route, whose
 physical behavior must be established for the selected dimmer. Never describe a
 prepared return package as an automatic or already qualified rollback.
+
+For a diagnostic beta using fault-record format2, collect all eight fault chunks
+while Zigbee is available, before entering Bluetooth or returning to 1.1.6. Its
+older decoder rejects format2; do not rely on a downgrade to preserve this
+evidence. Client update reports do not replace these fault chunks. Callback IDs
+are queued head/tail entries; they do not identify the failed scheduling attempt.

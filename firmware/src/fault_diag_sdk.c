@@ -39,7 +39,10 @@ static zb_bool_t capture_sdk_error(zb_uint8_t severity, zb_ret_t error, void *in
         source = UINT32_C(0xa1000000) | ((uint32_t)severity << 16) | origin->file_id;
         line = (int32_t)origin->line_number;
     }
-    vimar_fault_diag_error(source, line, (int32_t)error);
+    if (severity == ZB_ERROR_SEVERITY_FATAL)
+        vimar_fault_diag_fatal(source, line, (int32_t)error);
+    else
+        vimar_fault_diag_error(source, line, (int32_t)error);
     return ZB_FALSE;
 }
 

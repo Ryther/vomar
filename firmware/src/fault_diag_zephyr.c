@@ -1,5 +1,6 @@
 #include "fault_diag_zephyr.h"
 #include "fault_diag.h"
+#include "fault_diag_sdk.h"
 #include <zephyr/kernel.h>
 #include <zephyr/settings/settings.h>
 #include <hal/nrf_power.h>
@@ -105,6 +106,15 @@ void vimar_fault_diag_report(uint32_t kind,uint32_t length,int32_t status)
 }
 void vimar_fault_diag_error(uint32_t site,int32_t line,int32_t rc)
 {if(!ready)return;uint32_t key=__get_PRIMASK();__disable_irq();(void)fault_diag_capture_error(&diag,site,line,rc);__set_PRIMASK(key);}
+void vimar_fault_diag_fatal(uint32_t site,int32_t line,int32_t rc)
+{
+    if(!ready)return;
+    uint32_t key=__get_PRIMASK();__disable_irq();
+    struct fault_diag_queue queue;
+    uint32_t valid=vimar_fault_diag_queue_snapshot(&queue);
+    (void)fault_diag_capture_queue_error(&diag,site,line,rc,&queue,valid);
+    __set_PRIMASK(key);
+}
 void vimar_fault_diag_assert(uint32_t file_id,int32_t line)
 {if(!ready)return;uint32_t key=__get_PRIMASK();__disable_irq();(void)fault_diag_capture_assert(&diag,file_id,line);__set_PRIMASK(key);}
 void vimar_fault_diag_abort(uint32_t lr,uint32_t msp,uint32_t psp,uint32_t ipsr)

@@ -160,7 +160,7 @@ static void test_validation_rejects_corruption_and_wrong_metadata(void)
     /* CRC-correct unknown schema/length/kind/validity is still rejected. */
     for (unsigned which = 0; which < 6; which++) {
         memcpy((void *)window, original, sizeof(original));
-        if (which == 0) window[1] = (128u << 16) | 2u;
+        if (which == 0) window[1] = (128u << 16) | 3u;
         if (which == 1) window[1] = (124u << 16) | 1u;
         if (which == 2) window[9] = 99;
         if (which == 3) window[8] |= UINT32_C(1) << 31;
@@ -209,7 +209,9 @@ static void test_all_interrupted_stores_and_reentry(bool tagged)
         reenter = tagged;
         stop_after = cut;
         if (setjmp(interrupted) == 0) {
-            if (tagged) (void)fault_diag_capture_error(&context, UINT32_C(0xa1ff007c), 652, -29);
+            struct fault_diag_queue queue = {32, 32, 0, 0, 0x1001, 0x2001};
+            if (tagged) (void)fault_diag_capture_queue_error(&context, UINT32_C(0xa1ff007c), 652, -29, &queue,
+                FAULT_DIAG_VALID_QUEUE | FAULT_DIAG_VALID_QUEUE_HEAD | FAULT_DIAG_VALID_QUEUE_TAIL);
             else (void)fault_diag_capture_assert(&context, 7, 8);
             assert(!"expected injected interruption");
         }
@@ -291,11 +293,37 @@ static void test_cached_snapshot_validity_and_sequence_wrap(void)
     bounds();
 }
 
+static void test_legacy_preservation_and_queue_first_cause(void)
+{
+    fresh(1);
+    assert(fault_diag_capture_error(&context, 1, 2, 3));
+    /* Independently recode a historical v1 record, preserving its exact bytes. */
+    window[1] = (128u << 16) | 1u;
+    window[30] = independent_crc((const uint8_t *)window, 120);
+    uint32_t old[32];
+    memcpy(old, (const void *)window, sizeof(old));
+    fault_diag_init(&context, window, identity, 2);
+    struct fault_diag_record record;
+    assert(fault_diag_read(window, 0, identity, &record) && record.version == 1);
+    assert(!fault_diag_capture_assert(&context, 116, 81));
+    assert(memcmp(old, (const void *)window, sizeof(old)) == 0);
+    fault_diag_acknowledge(&context);
+    struct fault_diag_queue queue = {32, 32, 7, 7, 0x1001, 0x2001};
+    uint32_t flags = FAULT_DIAG_VALID_QUEUE | FAULT_DIAG_VALID_QUEUE_HEAD | FAULT_DIAG_VALID_QUEUE_TAIL;
+    assert(fault_diag_capture_queue_error(&context, 0xa1ff007c, 652, -29, &queue, flags));
+    assert(fault_diag_read(window, 0, identity, &record));
+    assert(record.version == 2 && record.queue.used == 32 && record.queue.head_callback == 0x1001);
+    assert(!fault_diag_capture_error(&context, 116, 81, -1));
+    assert(fault_diag_capture_abort(&context, 1, 2, 3, 4, 5, 6));
+    assert(fault_diag_read(window, 1, identity, &record) && record.lr == 1 && !(record.valid & flags));
+}
+
 int main(void)
 {
     _Static_assert(sizeof(struct fault_diag_record) == 128, "retained slot size");
     _Static_assert(offsetof(struct fault_diag_record, crc) == 120, "CRC position");
     _Static_assert(offsetof(struct fault_diag_record, commit) == 124, "commit last");
+    test_legacy_preservation_and_queue_first_cause();
     test_assert_then_abort_and_first_cause();
     test_checked_error_and_abort_without_cause();
     test_validation_rejects_corruption_and_wrong_metadata();

@@ -166,3 +166,16 @@ a device write. Updating client source does not update an installed application.
 Use a client build containing this admission change and the explicit single-device
 trial route; qualification candidates remain rejected by ordinary/fleet admission.
 A prepared trial/return ZIP does not demonstrate physical Bluetooth recovery.
+
+Android 1.1.5/code35 supports these beta counters. Upgrade it in place with the
+same signer. A dedicated return ZIP authorizes the exact beta MAIN and installed
+recovery; select it through the same device's manual trial flow to return to
+custom firmware 1.1.6. This does not restore the original Vimar firmware.
+
+Before switching a diagnostic beta to Bluetooth or returning to 1.1.6, collect
+its eight Zigbee fault diagnostic chunks and validate the saved export. Firmware
+1.1.6 rejects fault-record format2 and can overwrite that evidence. The current
+Android trial report does not export these Zigbee chunks; use the existing
+read-only converter getters or the coordinated diagnostic reader. There is no
+automatic rollback. A hung MAIN can prevent the ordinary connection selector;
+verify the independent recovery entry for the target before installing a beta.
