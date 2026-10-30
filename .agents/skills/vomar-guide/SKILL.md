@@ -258,3 +258,26 @@ loader, signature, model, role and profile remain checked; each OTA operation
 then preserves the exact authenticated recovery it observed. This changes MAIN
 admission, not recovery firmware, and is not deployed or physically qualified
 merely because host tests pass. Verify the actual installed release first.
+
+## Experimental ownership beta
+
+A firmware name such as1.1.7-beta1 is an experimental native label. Its signed
+MCUboot identity is1.1.7+1; the Zigbee OTA number is0x01010701. Further beta
+builds increment the build byte, and a stable successor needs1.1.8 or later.
+Distribution tags and application versions are separate. A beta label grants
+neither qualification nor update authority.
+
+Schema9 and a matching converter expose read-only application heartbeat, guard
+enabled status, local request/confirmation/correction/error counters and a
+16-byte firmware build identity. Request fresh readings within one boot and
+preserve sample times. Counters wrap/reset; retained values are historical.
+All-zero build identity means unavailable. A responding Zigbee stack does not
+prove the application tick advances. Zero corrections does not prove a repair;
+a positive correction count establishes path coverage only. A storage error,
+stalled heartbeat or new fatal record needs review.
+
+One-device trials require an exact selected target, reviewed signed artifact,
+verified recovery/original availability and a prepared fallback. Older OTA files
+are not an assumed rollback. No scan, monitor, successful host test or accepted
+beta label starts a device update. The ownership guard remains default-disabled
+outside explicitly guarded beta builds.

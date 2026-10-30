@@ -88,7 +88,7 @@ def verify_zigbee_carrier(ota, main, public_key, main_metadata):
     numbers = image(main)['version'].replace('+', '.').split('.')
     numbers = list(map(int, numbers)) + [0] * (4 - len(numbers))
     expected_version = (numbers[0] << 24) | (numbers[1] << 16) | (numbers[2] << 8) | numbers[3]
-    if any(value > 255 for value in numbers) or numbers[3] != 0 or (magic, version, header_size, control, manufacturer, kind, stack,
+    if any(value > 255 for value in numbers) or (magic, version, header_size, control, manufacturer, kind, stack,
             minimum, maximum, tag, total, compressed_size, file_version) != (
             0x0beef11e, 0x100, 60, 4, 0xfff1, 0x3085, 2, 1, 1, 0, len(ota), len(ota)-66, expected_version):
         raise ValueError('Zigbee envelope/model/version mismatch')

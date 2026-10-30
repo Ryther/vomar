@@ -116,6 +116,33 @@ See [Zigbee OTA](../docs/zigbee-ota.md), the
 Physical programming, bootloader writes, erasure and UICR writes require explicit
 operator approval; the commands above only build and inspect local files.
 
+## Experimental native transaction ownership guard
+
+`CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD` is an opt-in correction for ordinary local
+transaction ownership at NWK confirmation. It retains allocation provenance from
+successful NLDE scheduling, invalidates it on release or payload replacement,
+and preserves the matching local confirmation owner. Encrypted packet bytes and
+the existing assertion handling remain intact. Admission currently covers
+non-alias unicast data requests using the SDK's ordinary zero handle.
+
+The option requires the reviewed hard-float router/coordinator trace library,
+`CONFIG_ZIGBEE_ENABLE_TRACES=y` and `CONFIG_LTO=n`. CMake pins the archive and
+relevant headers and verifies the selected native link dependency, rejecting
+source builds or alternate archives; compilation checks the parameter ABI.
+Build the guarded image
+with `cmake --build BUILD --target vimar_ownership_admission`. This target links
+the image and writes `BUILD/ownership-link-audit.json`, rejecting missing selected
+hooks and direct lifecycle/producer bypasses. The default complete build also
+runs this admission target. An ELF-only build is insufficient admission.
+
+The option defaults to disabled. Host policy tests, a native link audit and a
+normal DK run are separate evidence. Actual runtime qualification needs positive
+local-request coverage, zero storage errors, terminal protocol completion and
+observed coverage of the repaired confirmation path. The SDK callback carries a
+buffer identifier; arbitrary delayed callbacks after allocation reuse remain
+outside the proven contract. No physical qualification follows from enabling
+the option or an interval without assertions.
+
 ## Host checks and optional local integration checks
 
 From the repository root, with the Python dependencies listed in the
@@ -277,3 +304,49 @@ signing profile2 and emits MAIN bindings without a recovery-version pin. Host
 regressions exercise different signed recovery versions, unknown/wrong contract
 rejection, changed in-flight identities and exact journal preservation. These
 checks do not establish physical power-cut or electrical qualification.
+
+## Single-device ownership beta
+
+The typed candidate builder accepts an explicit public label such as
+`--release-version 1.1.7-beta1 --ownership-guard`, together with the existing
+watchdog/multi-bond options and reviewed registry/policy inputs. The guard is
+never selected by ordinary release builds. A guarded MAIN requires the complete
+`vimar_ownership_admission` target and a passing report bound to the actual ELF
+before signing. The admission auditor is frozen alongside candidate sources.
+
+The visible application version is `1.1.7-beta1`; MCUboot stores `1.1.7+1`, and
+Zigbee OTA uses `0x01010701`. Beta numbers are canonical integers1..254. A beta2
+uses `+2`; the1.1.7 patch series is reserved for these experimental builds, and
+the stable successor must use1.1.8 or later. Existing stable triples retain
+build0. Reusing1.1.7 build0 for a stable successor would sort before these
+betas and is not a supported update path. These are native firmware identities;
+Release Please still owns distribution versions and tags.
+
+Schema9 adds read-only diagnostics at0x0900..0x0906: `application_ticks`,
+`ownership_guard_enabled`, `ownership_local_requests`, `ownership_confirmations`,
+`ownership_restored_confirmations`, `ownership_storage_errors` and
+`firmware_build_id`. The heartbeat advances from the application tick, rather
+than the Zigbee read handler. Counters are volatile unsigned32-bit values;
+compare fresh reads within one boot and account for wrapping. Disabled guards
+report false/zero. The16-byte build identity matches the archived fault identity;
+all zeros means unavailable. These fields are fetched individually, without
+adding unsolicited reports or persistent writes.
+
+A beta trial must select and review one exact target, preserve its original and
+settings, verify its existing recovery/loader contract and exact OTA stage
+budget, and prepare an admitted fallback before installation. A lower-version
+OTA is not an assumed rollback. Observe an initial attended2hours followed by
+72hours of bounded read-only monitoring; stop for new attributable faults,
+guard storage errors, a stalled application heartbeat or abnormal lamp behavior.
+An unreachable device has an uncertain outcome until independently reconciled.
+Neither a quiet interval nor a positive corrected-confirmation count proves the
+APS defect is eliminated. No household deployment follows from building a beta.
+
+The current guarded Vimar MAIN has a substantially larger reviewed trace-library
+footprint than1.1.6. Its locally prepared compressed bytes fail the exact split
+OTA stage budget. The general typed builder keeps that check and fails closed;
+a successful native link is not a successful complete OTA candidate build.
+The one-device trial must use an explicitly admitted Bluetooth MAIN update and
+a separate reviewed return package, preserving the matching installed recovery.
+Do not upload the diagnostic compressed carrier to Zigbee2MQTT or infer that a
+smaller future destination can stage beside the larger running beta.

@@ -17,7 +17,7 @@ from tools.firmware.build_loader_contract_bindings import generate
 from tools.firmware.loader_runtime_contract import measure_record,COMMON_KIND,LEGACY_KIND,validate_records
 from tools.firmware.package_common_android_update_v3 import verify_image,first_descriptor,canonical,verify_signature,validate_watchdog_handoff,WATCHDOG_HANDOFF
 from tools.firmware.package_common_android_update import verify_zigbee_carrier
-from tools.firmware.package_zigbee_ota import split_stage_budget,image,ENCODER_ADAPTER
+from tools.firmware.package_zigbee_ota import split_stage_budget,image,ENCODER_ADAPTER,version_tuple,ota_version
 from tools.firmware.ota_release import REQUIRED_CHECKS,SPLIT_REQUIRED_CHECKS
 from tools.firmware.validate_recovery import read_config,read_hex,validate_uicr_preservation
 VERSIONS=dict(main='0.6.1',recovery='0.8.1',migration='0.9.1',stockRestore='0.10.0',stockBootstrap='0.11.0')
@@ -27,8 +27,8 @@ ROLES=dict(main=1,recovery=2,migration=3,stockRestore=4,stockBootstrap=3)
 
 def sha(data):return hashlib.sha256(data).hexdigest()
 def write_json(path,value):Path(path).write_text(json.dumps(value,indent=2)+'\n');return Path(path)
-def version(path,value):
- a,b,c=value.split('.');Path(path).write_text(f'VERSION_MAJOR = {a}\nVERSION_MINOR = {b}\nPATCHLEVEL = {c}\nVERSION_TWEAK = 0\nEXTRAVERSION =\n')
+def version(path,value,extra=''):
+ a,b,c,tweak=version_tuple(value);Path(path).write_text(f'VERSION_MAJOR = {a}\nVERSION_MINOR = {b}\nPATCHLEVEL = {c}\nVERSION_TWEAK = {tweak}\nEXTRAVERSION = {extra}\n')
 def c_bytes(name,data):return 'static const uint8_t '+name+'[] __attribute__((aligned(4))) = {\n'+','.join('0x%02x'%v for v in data)+'\n};\n'
 def public_record(path):
  p=Path(path);return dict(path=str(p),sha256=sha(p.read_bytes()),size=p.stat().st_size)
@@ -55,11 +55,13 @@ def require_watchdog_loader(probe_manifest):
 
 def candidate_versions(watchdog_handoff=None,multi_bond=False,release_version=None):
  if release_version is not None:
-  if not isinstance(release_version,str) or not re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)',release_version) or any(int(v)>255 for v in release_version.split('.')):
-   raise ValueError('release version must be ordinary SemVer with each OTA field in0..255')
+  match=re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-beta([1-9][0-9]*))?',release_version) if isinstance(release_version,str) else None
+  if not match or any(int(v)>255 for v in match.groups()[:3]) or (match[4] is not None and int(match[4])>254):
+   raise ValueError('release version must be a numeric triple or triple-beta1..254, with OTA fields in0..255')
   if watchdog_handoff!=WATCHDOG_HANDOFF or not multi_bond:
    raise ValueError('release profile requires watchdog handoff and multi-bond recovery')
-  return {name:release_version for name in ROLES}
+  numeric='.'.join(match.groups()[:3])+('+'+match[4] if match[4] else '')
+  return {name:numeric for name in ROLES}
  if multi_bond:
   if watchdog_handoff!=WATCHDOG_HANDOFF:raise ValueError('multi-bond candidates require the inherited watchdog handoff policy')
   return dict(MULTIBOND_VERSIONS)
@@ -122,9 +124,21 @@ def validate_recovery_contract(config):
   raise ValueError('incompatible profile2 recovery contract configuration')
  return 'vimar30805-split-v2'
 
-def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=False,release_version=None):
+def require_ownership_main(build):
+ """Reject missing, failed or stale native admission before signing MAIN."""
+ build=Path(build);audit=build/'ownership-link-audit.json'
+ try:report=json.loads(audit.read_text())
+ except (OSError,ValueError) as exc:raise ValueError('ownership admission report missing or invalid') from exc
+ elf_hash=sha((build/'zephyr/zephyr.elf').read_bytes())
+ if not isinstance(report,dict) or report.get('passed') is not True or report.get('sha256')!=elf_hash:
+  raise ValueError('ownership admission failed or does not match MAIN ELF')
+ return dict(public_record(audit),elf_sha256=elf_hash)
+
+def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=False,release_version=None,ownership_guard=False):
  if watchdog_handoff is not None:validate_watchdog_handoff(watchdog_handoff)
  versions=candidate_versions(watchdog_handoff,multi_bond,release_version)
+ if ownership_guard and (release_version is None or '-beta' not in release_version):
+  raise ValueError('ownership guard requires an explicitly labelled beta version')
  paths=toolchain_paths();out=prepare_output(output);art=out/'artifacts';art.mkdir();staging=out/'one-zip-staging';staging.mkdir();gen=out/'generated';gen.mkdir();configs=out/'configs';configs.mkdir()
  report=dict(schema_version=1,kind='unqualified-typed-common-candidate',model='VIMAR30805',hardware_qualified=False,deployable=False,qualified_release_zip=False,versions=versions,watchdog_handoff=watchdog_handoff,status='snapshot',commands=[],artifacts={},source_inputs=dict(legacy_registry=public_record(legacy_registry),source_policy=public_record(source_policy)),pending_checks=['independent matched-binary review','owner-controlled first-install and original backup/export/reopen','normal MAIN and recovery BLE identity/history/execution','legacy recovery migration and exact typed loader compatibility','stock bootstrap and full original FLASH/UICR restoration','P031 flash/radio/finalizer timing and physical power-cut recovery','fresh aggregate OTA compatibility and real Zigbee update/return'])
  manifest=out/'candidate-manifest.json'
@@ -135,7 +149,12 @@ def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=
   with (out/logname).open('w') as log:subprocess.run(argv,cwd=cwd or ROOT,env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1200)
   print('pass',logname,flush=True)
  fw=out/'source/firmware';shutil.copytree(ROOT/'firmware',fw,ignore=shutil.ignore_patterns('keys','__pycache__','build'))
- for name,path in [('main',fw/'VERSION'),('recovery',fw/'recovery/VERSION'),('migration',fw/'ota_migration/VERSION'),('stockRestore',fw/'common_restore/VERSION')]:version(path,versions[name])
+ extra=release_version.split('-',1)[1] if release_version and '-beta' in release_version else ''
+ for name,path in [('main',fw/'VERSION'),('recovery',fw/'recovery/VERSION'),('migration',fw/'ota_migration/VERSION'),('stockRestore',fw/'common_restore/VERSION')]:version(path,versions[name],extra)
+ if ownership_guard:
+  auditor=out/'source/tools/firmware/check_ownership_link.py';auditor.parent.mkdir(parents=True);shutil.copy2(ROOT/'tools/firmware/check_ownership_link.py',auditor)
+  report['ownership_auditor']=public_record(auditor)
+ report['release_label']=release_version
  report['workspace_source_sha256']={str(p.relative_to(ROOT)):sha(p.read_bytes()) for p in (ROOT/'firmware').rglob('*') if p.is_file() and 'keys' not in p.relative_to(ROOT/'firmware').parts}
  report['snapshot_source_sha256']={str(p.relative_to(out/'source')):sha(p.read_bytes()) for p in fw.rglob('*') if p.is_file()};report['source_transformations']=['firmware copy excluding all keys/build caches; explicit ordinary candidate VERSION triples only'];save()
  # Existing loader probe reads the PUBLIC verification key only. No self-family hash.
@@ -176,6 +195,10 @@ def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=
   if name=='main' and (cfg.get('CONFIG_BT')=='y' or cfg.get('CONFIG_VIMAR_ZIGBEE_OTA')!='y'):raise ValueError('normal main radio configuration differs')
   if name=='main' and release_version is not None:
    report['fault_diagnostic_proof']=require_release_main(build,out,cfg)
+  if name=='main' and ownership_guard:
+   if cfg.get('CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD')!='y':raise ValueError('ownership guard configuration missing')
+   run(['cmake','--build',build,'--target','vimar_ownership_admission'],'main-ownership-admission.log')
+   report['ownership_admission']=require_ownership_main(build)
   if name=='recovery' and (any(cfg.get(k)!='y' for k in ['CONFIG_VIMAR_RECOVERY_IDENTITY','CONFIG_VIMAR_RECOVERY_BOOT_HISTORY','CONFIG_VIMAR_RECOVERY_MIGRATION_EXEC','CONFIG_MCUMGR_TRANSPORT_BT_PERM_RW_AUTHEN']) or int(cfg['CONFIG_MCUMGR_TRANSPORT_WORKQUEUE_STACK_SIZE'])<8192):raise ValueError('recovery feature/stack guard failed')
   if name=='recovery':report['recovery_contract']=validate_recovery_contract(cfg)
   if name=='recovery' and multi_bond:
@@ -214,7 +237,8 @@ def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=
  main_overlays=[fw/'boards/nrf52840dk_nrf52840_ota.overlay',fw/'research/vimar-candidate.overlay']
  main_options=['-DVIMAR_OTA_PAIR_BINDINGS_HEADER='+str(main_pair),'-DVIMAR_LOADER_CONTRACT_BINDINGS_HEADER='+str(all_header)]
  if release_version is not None:
-  main_conf.write_text(typed+'CONFIG_VIMAR_FAULT_DIAGNOSTICS=y\n')
+  guarded='CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD=y\nCONFIG_ZIGBEE_ENABLE_TRACES=y\nCONFIG_LTO=n\n' if ownership_guard else ''
+  main_conf.write_text(typed+'CONFIG_VIMAR_FAULT_DIAGNOSTICS=y\n'+guarded)
   build_id=fault_build_identity(report['snapshot_source_sha256'],versions,
       {'main.conf':main_conf.read_bytes(),'main-pair.h':main_pair.read_bytes(),
        'loader-contracts.h':all_header.read_bytes(),'builder.py':Path(__file__).read_bytes()})
@@ -237,7 +261,7 @@ def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=
  # Actual signed compressed MAIN, no deployment index or live MQTT operation.
  compressed=art/'main.compressed.bin';commands=[paths['python'],ENCODER_ADAPTER,paths['imgtool'],'sign','--version',versions['main'],'--header-size','512','--slot-size','0xa2000','--overwrite-only','--align','1','-k',paths['private_key'],'--compression','lzma2armthumb','--compression-lzma-dictsize','32768','--compression-lzma-lp','0','--compression-lzma-lc','3','--compression-lzma-pb','2','--custom-tlv-file','0xa0',target,'--custom-tlv-file','0xa1',gen/'role-main.bin',raw['main'],compressed]
  run(commands,'carrier-sign.log');run([paths['python'],paths['imgtool'],'verify','-k',paths['public_key'],compressed],'carrier-verify.log')
- numbers=list(map(int,versions['main'].split('.')));file_version=(numbers[0]<<24)|(numbers[1]<<16)|(numbers[2]<<8);data=compressed.read_bytes();ota=struct.pack('<IHHHHHIH32sIHHHI',0x0beef11e,0x100,60,4,0xfff1,0x3085,file_version,2,b'Vimar30805 signed compressed OTA',66+len(data),1,1,0,len(data))+data
+ file_version=ota_version(versions['main']);data=compressed.read_bytes();ota=struct.pack('<IHHHHHIH32sIHHHI',0x0beef11e,0x100,60,4,0xfff1,0x3085,file_version,2,b'Vimar30805 signed compressed OTA',66+len(data),1,1,0,len(data))+data
  (art/'main.ota').write_bytes(ota);(staging/'main.ota').write_bytes(ota);ota_meta=verify_zigbee_carrier(ota,main.read_bytes(),public,metadata['main']);report['ota']=dict(metadata=ota_meta,budget=split_stage_budget(main.stat().st_size,len(data),main.stat().st_size,recovery.stat().st_size),qualification='future matching runtime REC required; no currently installed source route claimed')
  descriptor=canonical(first_descriptor(loader,metadata,records,watchdog_handoff));first=staging/'first-install.json';first.write_bytes(descriptor)
  run(['openssl','dgst','-sha256','-sign',paths['private_key'],'-out',staging/'first-install.sig',first],'first-install-sign.log');verify_signature(public,(staging/'first-install.sig').read_bytes(),descriptor)
@@ -253,5 +277,5 @@ def build(output,legacy_registry,source_policy,watchdog_handoff=None,multi_bond=
  report['first_install']=first_meta;report['generated_sha256']={str(p.relative_to(out)):sha(p.read_bytes()) for p in gen.rglob('*') if p.is_file()};report['staged_onezip_entries']={p.name:sha(p.read_bytes()) for p in staging.iterdir()};report['qualification']=public_record(q);report['status']='matched locally signed candidate executables and first-install descriptor; physical qualification pending; NO qualified release ZIP';report['builder_sha256']=sha(Path(__file__).read_bytes());save();return manifest
 
 def main():
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);p.add_argument('--legacy-registry',type=Path,required=True);p.add_argument('--source-policy',type=Path,required=True);p.add_argument('--watchdog-handoff',choices=[WATCHDOG_HANDOFF]);p.add_argument('--multi-bond',action='store_true');p.add_argument('--release-version',help='coherent ordinary SemVer; requires watchdog+multi-bond and enables exact MAIN fault diagnostics');a=p.parse_args();print(build(a.output,a.legacy_registry,a.source_policy,a.watchdog_handoff,a.multi_bond,a.release_version))
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);p.add_argument('--legacy-registry',type=Path,required=True);p.add_argument('--source-policy',type=Path,required=True);p.add_argument('--watchdog-handoff',choices=[WATCHDOG_HANDOFF]);p.add_argument('--multi-bond',action='store_true');p.add_argument('--release-version',help='numeric triple or triple-beta1..254; requires watchdog+multi-bond and enables exact MAIN fault diagnostics');p.add_argument('--ownership-guard',action='store_true',help='enable the reviewed experimental guard in an explicitly labelled beta');a=p.parse_args();print(build(a.output,a.legacy_registry,a.source_policy,a.watchdog_handoff,a.multi_bond,a.release_version,a.ownership_guard))
 if __name__=='__main__':main()

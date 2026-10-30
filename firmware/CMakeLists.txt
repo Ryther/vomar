@@ -113,3 +113,4 @@ if(CONFIG_VIMAR_OTA_SPLIT_STAGING)
 endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/loader_contract/runtime.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/ownership_guard.cmake)

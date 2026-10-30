@@ -22,4 +22,13 @@ config VIMAR_FAULT_DIAGNOSTICS
     depends on SOC_NRF52840 && ZBOSS_RESET_ON_ASSERT && SETTINGS && !BT
     default n
 
+config VIMAR_ZIGBEE_OWNERSHIP_GUARD
+    bool "Experimental native Zigbee transaction ownership guard"
+    depends on SOC_NRF52840 && ZIGBEE_ADD_ON && ZIGBEE_ENABLE_TRACES && !LTO
+    default n
+    help
+      Preserve ordinary local transaction ownership at the NWK confirmation
+      boundary. Requires the exact reviewed native SDK archive and a complete
+      link audit. Host tests alone do not qualify this option for devices.
+
 rsource "Kconfig.protection"

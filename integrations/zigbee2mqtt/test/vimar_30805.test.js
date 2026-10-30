@@ -799,3 +799,26 @@ test('Identify runtime effect is diagnostic and never replayed as a manual LED e
     assert.equal(state.led_runtime_effect, 'fast_blink');
     assert.equal(Object.hasOwn(state, 'effect_led'), false);
 });
+
+test('schema nine ownership diagnostics use bounded read-only getters and preserve zero counters', async () => {
+    const {definition,custom,cluster}=build();
+    const dynamic=definition.extend[2].exposes[0];
+    const device=(schema)=>({modelID:'Vimar30805',getEndpoint:()=>({getClusterAttributeValue:()=>schema})});
+    const fields=['application_ticks','ownership_guard_enabled','ownership_local_requests','ownership_confirmations','ownership_restored_confirmations','ownership_storage_errors','firmware_build_id'];
+    for (const [offset,name] of fields.entries()) {
+        assert.equal(dynamic(device(8)).find(x=>x.name===name),undefined);
+        assert.equal(dynamic(device(9)).find(x=>x.name===name).access,'STATE_GET');
+        const get=custom.toZigbee.find(x=>x.key.includes(name));assert.equal(get.convertSet,undefined);
+        const reads=[];await get.convertGet({read:async(...args)=>reads.push(args)},name);
+        assert.deepEqual(reads,[['vimarDimmer',[0x0900+offset],{}]]);
+    }
+    assert.equal(cluster.attributes.ownershipGuardEnabled.write,false);
+    const receiver=custom.fromZigbee.find(x=>x.type.includes('readResponse'));
+    const data={2304:123,2305:false,2306:0,2307:31,2308:0,2309:0,2310:Buffer.alloc(16,0xab)};
+    const result=receiver.convert(null,{data});
+    assert.equal(result.application_ticks,123);assert.equal(result.ownership_guard_enabled,false);
+    assert.equal(result.ownership_restored_confirmations,0);assert.equal(result.ownership_storage_errors,0);
+    assert.equal(result.firmware_build_id,'ab'.repeat(16));
+    for (const invalid of [Buffer.alloc(15),Buffer.alloc(17),'ab'.repeat(16),null])
+        assert.equal(Object.hasOwn(receiver.convert(null,{data:{2310:invalid}}),'firmware_build_id'),false);
+});

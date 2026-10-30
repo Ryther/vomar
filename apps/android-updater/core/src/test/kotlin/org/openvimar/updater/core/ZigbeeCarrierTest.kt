@@ -45,4 +45,17 @@ class ZigbeeCarrierTest {
         assertThrows(Exception::class.java) { CommonPackageValidator.validate(raw.copy(zigbeeOta=null),key,"0.4.0") }
         assertThrows(Exception::class.java) { CommonPackageValidator.validate(raw.copy(zigbeeOta=raw.zigbeeOta!!.copyOf().apply { this[lastIndex]=(last().toInt() xor 1).toByte() }),key,"0.4.0") }
     }
+    @Test fun authenticatedBetaRetainsNumericBuildAndRejectsTamperedCarrier() {
+        val root=java.io.File("../test-fixtures")
+        val key=java.security.KeyFactory.getInstance("EC").generatePublic(java.security.spec.X509EncodedKeySpec(java.io.File(root,"synthetic-beta-public.der").readBytes()))
+        val raw=java.io.File(root,"synthetic-beta-update.zip").inputStream().use(CommonPackageReader::read)
+        val pkg=CommonPackageValidator.validate(raw,key,"0.4.0")
+        assertEquals("1.1.7+1",pkg.manifest.main.version)
+        assertEquals(listOf(1L,1L,7L,1L),pkg.manifest.main.wireVersion)
+        assertEquals(0x01010701L,pkg.manifest.zigbeeOta!!.fileVersion)
+        assertThrows(IllegalArgumentException::class.java) {
+            CommonPackageValidator.validate(raw.copy(zigbeeOta=raw.zigbeeOta!!.copyOf().apply { this[14]=(this[14].toInt() xor 1).toByte() }),key,"0.4.0")
+        }
+    }
+
 }

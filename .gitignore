@@ -1284,3 +1284,18 @@
 !/.github/code-scanning-ruleset.json
 
 !/tools/release/tests/test_obtainium_native.py
+
+# Experimental APS beta source and synthetic diagnostics checks.
+!/firmware/ownership_guard.cmake
+!/firmware/src/zigbee_ownership_guard.h
+!/firmware/src/zigbee_ownership_guard.c
+!/firmware/src/zigbee_ownership_sdk.c
+!/tools/firmware/tests/test_zigbee_ownership_guard.py
+!/tools/firmware/tests/test_zigbee_ownership_sdk.py
+!/tools/firmware/check_ownership_link.py
+!/tools/firmware/tests/test_ownership_link_audit.py
+!/tools/firmware/tests/test_ownership_cmake.py
+!/tools/firmware/tests/test_ownership_diagnostics.py
+
+!/apps/android-updater/test-fixtures/synthetic-beta-update.zip
+!/apps/android-updater/test-fixtures/synthetic-beta-public.der

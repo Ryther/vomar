@@ -162,3 +162,23 @@ downgrade limits and remaining physical qualification.
 
 Zigbee2MQTT displays the custom devices under vendor **Vomar**, including its OTA
 list. Model identifiers and matching remain unchanged for existing devices.
+
+## Ownership beta diagnostics
+
+Schema9 firmware adds `application_ticks`, `ownership_guard_enabled`,
+`ownership_local_requests`, `ownership_confirmations`,
+`ownership_restored_confirmations`, `ownership_storage_errors` and
+`firmware_build_id`. Update the external converter to expose these read-only
+getters; older schemas keep them hidden. Each getter sends one bounded READ,
+without writing settings or starting an OTA. These diagnostics are not included
+in the ordinary snapshot reports: request fresh values explicitly and retain
+sample timestamps, the boot sequence and build identity. Do not interpret
+retained MQTT values as new measurements.
+
+Within the same boot, a growing heartbeat shows that the application tick runs;
+Zigbee replies alone do not. Zero corrected confirmations means no correction
+was observed, even if the trial has no crashes. A positive delta shows path
+coverage, not an APS-fix qualification. Any guard storage error needs review.
+The counters wrap at32bits and reset on reboot. An all-zero firmware build
+identity means unavailable, rather than a verified build. See the
+[firmware beta contract](../../firmware/README.md#single-device-ownership-beta).

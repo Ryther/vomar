@@ -55,7 +55,7 @@ class PlatformSourceTests(unittest.TestCase):
             for path in ("src/zigbee_device.c", "src/zb_dimmable_light.h")
         )
         self.assertIn("VIMAR_ZIGBEE_ENDPOINT 1", source)
-        self.assertIn('"OpenVimar"', source)
+        self.assertIn('"Vomar"', source)
         self.assertIn('"Vimar30805-DK"', source)
         for cluster in (
             "ZB_ZCL_CLUSTER_ID_BASIC",

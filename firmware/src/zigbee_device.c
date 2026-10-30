@@ -10,6 +10,12 @@
 #include "boot_trace.h"
 #include "fault_diag_zephyr.h"
 #include "fault_diag_sdk.h"
+#if defined(CONFIG_VIMAR_FAULT_DIAGNOSTICS)
+#include VIMAR_FAULT_BUILD_ID_HEADER
+#endif
+#if defined(CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD)
+#include "zigbee_ownership_guard.h"
+#endif
 #if defined(CONFIG_VIMAR_ZIGBEE_OTA)
 #include "zigbee_ota.h"
 #endif
@@ -34,7 +40,7 @@
 #endif
 
 #define VIMAR_ZIGBEE_ENDPOINT 1
-#define VIMAR_MANUFACTURER "OpenVimar"
+#define VIMAR_MANUFACTURER "Vomar"
 #if defined(CONFIG_VIMAR_HARDWARE)
 #define VIMAR_MODEL "Vimar30805"
 #else
@@ -168,6 +174,11 @@ struct zigbee_context {
     uint8_t ota_contract[OTA_RUNTIME_CONTRACT_ZCL_SIZE];
     uint32_t fault_diag_status;
     uint8_t fault_diag[8][33];
+    uint32_t application_ticks;
+    zb_bool_t ownership_guard_enabled;
+    uint32_t ownership_local_requests, ownership_confirmations;
+    uint32_t ownership_restored_confirmations, ownership_storage_errors;
+    uint8_t firmware_build_id[17];
 
 };
 
@@ -1036,11 +1047,24 @@ static void refresh_ota_contract(uint64_t now_ms,bool force)
  ota_contract_updated_ms=now_ms;
 }
 
+static void refresh_ownership_diagnostics(void)
+{
+    ++context.application_ticks;
+#if defined(CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD)
+    context.ownership_guard_enabled = true;
+    context.ownership_local_requests = vimar_ownership_local_requests;
+    context.ownership_confirmations = vimar_ownership_confirmations;
+    context.ownership_restored_confirmations = vimar_ownership_restored_confirmations;
+    context.ownership_storage_errors = vimar_ownership_storage_errors;
+#endif
+}
+
 static void application_tick(zb_uint8_t unused)
 {
     vimar_fault_diag_tick((uint32_t)k_uptime_get());
     ARG_UNUSED(unused);
     uint64_t now_ms = k_uptime_get();
+    refresh_ownership_diagnostics();
     connection_pairing_poll(now_ms);
     process_protection(now_ms);
     refresh_protection_diagnostics();
@@ -1233,6 +1257,10 @@ int zigbee_device_start(void)
     context.identify.identify_time = 0;
     context.level.remaining_time = 0;
     context.schema_version = VIMAR_SCHEMA_VERSION;
+    context.firmware_build_id[0] = 16;
+#if defined(CONFIG_VIMAR_FAULT_DIAGNOSTICS)
+    memcpy(&context.firmware_build_id[1], vimar_fault_build_id, 16);
+#endif
     context.phase_cut_mode = (uint8_t)config.phase_cut_mode;
     context.capabilities = VIMAR_CUSTOM_CAPABILITIES &
         (IS_ENABLED(CONFIG_VIMAR_HARDWARE) ? ~VIMAR_CUSTOM_CAP_DK_SIMULATOR : UINT32_MAX);

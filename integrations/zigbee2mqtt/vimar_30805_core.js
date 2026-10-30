@@ -131,6 +131,13 @@ export const ATTRIBUTE_METADATA = Object.freeze([
     diagnostic('fault_diagnostic_status', 'faultDiagStatus', 0x0800, 'numeric', {minSchema: 7, zclType: 'u32', label: 'Stato diagnostica riavvii', description: 'Bit: 1 cattura pronta; 2 rapporto presente; 4 salvato; 8 errore memoria; 16 cattura precedente da conservare; 32 rapporto di una build precedente, non attribuito alla build corrente.'}),
     ...Array.from({length: 8}, (_, i) => diagnostic(`fault_diagnostic_${i}`, `faultDiag${i}`, 0x0801+i, 'text',
         {minSchema: 7, zclType: 'octetStr', internal: true, description: 'Frammento diagnostico di sola lettura, formato binario versionato con CRC e identità build.'})),
+    diagnostic('application_ticks', 'applicationTicks', 0x0900, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Application heartbeat', description: 'Application-loop counter; compare fresh reads within the same boot. Wraps at 32 bits.'}),
+    diagnostic('ownership_guard_enabled', 'ownershipGuardEnabled', 0x0901, 'binary', {minSchema: 9, zclType: 'bool', valueOn: true, valueOff: false, label: 'Experimental ownership guard'}),
+    diagnostic('ownership_local_requests', 'ownershipLocalRequests', 0x0902, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Guard local requests'}),
+    diagnostic('ownership_confirmations', 'ownershipConfirmations', 0x0903, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Guard confirmations'}),
+    diagnostic('ownership_restored_confirmations', 'ownershipRestoredConfirmations', 0x0904, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Guard corrected confirmations', description: 'A positive delta proves this path ran; it does not establish an APS fix.'}),
+    diagnostic('ownership_storage_errors', 'ownershipStorageErrors', 0x0905, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Guard storage errors'}),
+    diagnostic('firmware_build_id', 'firmwareBuildId', 0x0906, 'text', {minSchema: 9, zclType: 'octetStr', label: 'Firmware diagnostic build identity', description: 'Exact diagnostic identity; all zeros means unavailable.'}),
 ]);
 
 export const ATTRIBUTE_IDS = Object.freeze(Object.fromEntries(ATTRIBUTE_METADATA.map((item) => [item.name, item.ID])));
@@ -146,7 +153,7 @@ function schemaVersion(device) {
 const toPercent = (value) => Math.round(value * 1000 / 254) / 10;
 function publicState(metadata, value) {
     const decoded=decodeValue(metadata,value);
-    if((metadata.name==='ota_contract' || metadata.internal) && decoded===undefined)return {};
+    if(decoded===undefined)return {};
     const result = {[metadata.name]: decoded};
     if (PERCENT_SETTINGS.includes(metadata.name)) result[`${metadata.name}_percent`] = toPercent(value);
     if (metadata.name === 'timer_duration_s') result.timer_1_duration_s = value;
@@ -169,6 +176,7 @@ function encodeValue(metadata, value) {
 }
 
 function decodeValue(metadata, value) {
+    if(metadata.name === 'firmware_build_id') return Buffer.isBuffer(value) && value.length===16 ? value.toString('hex') : undefined;
     if(metadata.internal) return Buffer.isBuffer(value) && value.length===32 ? value.toString('hex') : undefined;
     if (metadata.name === 'ota_contract') {
         if (!Buffer.isBuffer(value) || value.length !== 43 || value[0] !== 1 || value[1] !== 2 || ![0, 1].includes(value[2])) return undefined;
