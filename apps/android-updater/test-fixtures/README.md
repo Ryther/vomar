@@ -117,3 +117,11 @@ fixed 66-byte Zigbee OTA envelope, binds its hash and reconstructed MAIN digest
 in the signed common manifest, and uses synthetic qualification fields solely
 for tests. No physical qualification, production key, original dump, UID,
 network credentials or release authority is represented by this fixture.
+
+`synthetic-beta-update.zip` and `synthetic-beta-public.der` are an authenticated
+MCUboot1.1.7+1/OTA0x01010701 beta fixture, using a newly generated disposable
+P-256 test key. No production key, device or household input is used. Regenerate
+with the `test_authenticated_beta_component_and_carrier_preserve_exact_numeric_versions`
+case in `tools/android/tests/test_common_update_package.py`, then export only its
+common.zip and test-public.pem in DER form. Never export its temporary private
+key. Synthetic qualification flags in this fixture are test data only.

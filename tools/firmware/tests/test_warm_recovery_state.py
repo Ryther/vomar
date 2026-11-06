@@ -19,8 +19,8 @@ def function(path, name, signature):
 def run_c(source):
     with tempfile.TemporaryDirectory() as temporary:
         path = Path(temporary)
-        (path/'test.c').write_text(source)
-        result = subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',str(path/'test.c'),'-o',str(path/'test')],capture_output=True,text=True)
+        (path/'test.c').write_text('#include \"loop_trace_zephyr.h\"\n'+source)
+        result = subprocess.run(['cc','-I',str(ROOT/'firmware/src'),'-std=c11','-Wall','-Wextra','-Werror',str(path/'test.c'),'-o',str(path/'test')],capture_output=True,text=True)
         if result.returncode:
             raise AssertionError(result.stderr)
         subprocess.run([str(path/'test')],check=True)

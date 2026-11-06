@@ -6,6 +6,27 @@ import org.junit.Test
 class FleetPolicyTest {
     private val pkg = PackageSummary("Desk", "0.5.8", "AA:BB:CC:DD:EE:FF", listOf("123", "456"), "digest", "target", "0.7.3")
 
+    @Test fun anUnselectedPackageIsAnUncheckedComparisonRatherThanADeviceError() {
+        val record=DeviceRecord.from(pkg).copy(installedVersion="1.1.6",firmwareKind=FirmwareKind.CUSTOM,
+            observedAt=123,observationSource=ZigbeeDeviceMetadata.STATE)
+        val status=FleetPolicy.status(record,SessionPresentation())
+        assertEquals("Update not checked",status.label)
+        assertEquals(DeviceStatusTone.NEUTRAL,status.tone)
+        assertEquals(Eligibility.BLOCKED,status.eligibility)
+        assertEquals(DeviceStatusTone.NEUTRAL,FleetPolicy.status(record,null as FleetReleaseRef?).tone)
+    }
+    @Test fun experimentalCatalogMetadataChangesPresentationWithoutGrantingUpdateAdmission() {
+        val record=DeviceRecord.from(pkg).copy(installedVersion="1.1.6",firmwareKind=FirmwareKind.CUSTOM,
+            observedAt=123,observationSource=ZigbeeDeviceMetadata.STATE)
+        val status=FleetPolicy.status(record,SessionPresentation(),experimentalVersion="1.1.6")
+        assertEquals("Experimental firmware",status.label)
+        assertEquals(DeviceStatusTone.AVAILABLE,status.tone)
+        assertEquals(Eligibility.BLOCKED,status.eligibility)
+        assertEquals("Update not checked",FleetPolicy.status(record,SessionPresentation(),"1.1.5").label)
+        assertEquals("Update not checked",FleetPolicy.status(record.copy(firmwareKind=FirmwareKind.UNKNOWN),SessionPresentation(),"1.1.6").label)
+        assertEquals("Update not checked",FleetPolicy.status(record.copy(observedAt=null),SessionPresentation(),"1.1.6").label)
+        assertEquals(DeviceStatusTone.ERROR,FleetPolicy.status(record.copy(uid=listOf("different")),SessionPresentation(loaded=true,packageSummary=pkg),"1.1.6").tone)
+    }
     @Test fun aSavedNameOrAddressNeverAuthorizesAnUpdate() {
         val record = DeviceRecord("manual", "Desk", "Office")
         assertEquals(Eligibility.BLOCKED, FleetPolicy.status(record, SessionPresentation(loaded=true, packageSummary=pkg)).eligibility)
@@ -23,11 +44,12 @@ class FleetPolicyTest {
         val other = pkg.copy(uid=listOf("789"))
         assertEquals(Eligibility.BLOCKED, FleetPolicy.status(record, SessionPresentation(loaded=true,packageSummary=other,imagesVerified=true)).eligibility)
     }
-    @Test fun zigbeeImportRecognisesTheStockAndActualProjectConverterDefinitions() {
-        assertTrue(FleetPolicy.recognisesZigbee("Vimar", "30805"))
-        assertTrue(FleetPolicy.recognisesZigbee("OpenVimar", "30805-custom"))
-        assertFalse(FleetPolicy.recognisesZigbee("Other vendor", "30805"))
-        assertFalse(FleetPolicy.recognisesZigbee("Vimar", "other"))
+    @Test fun zigbeeImportClassifiesOnlyStockAndVomarProjectDefinitions() {
+        assertEquals(FirmwareKind.STOCK,FleetPolicy.zigbeeFirmwareKind("Vimar", "30805"))
+        for(vendor in listOf("Vomar","vOmAr"))
+            assertEquals(FirmwareKind.CUSTOM,FleetPolicy.zigbeeFirmwareKind(vendor, "30805-custom"))
+        for((vendor,model) in listOf("OpenVimar" to "30805-custom","oPeNvImAr" to "30805-custom","Other vendor" to "30805-custom","Vomar" to "30805","OpenVimar" to "30805","Vimar" to "30805-custom","Vomar" to "30805-CUSTOM"))
+            assertNull("$vendor / $model",FleetPolicy.zigbeeFirmwareKind(vendor,model))
     }
     @Test fun publicSourceAcceptsOnlyAnUnambiguousGitHubRepository() {
         assertEquals("Ryther/vomar", ReleaseSource.parse("https://github.com/Ryther/vomar/"))

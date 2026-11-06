@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Decode exported read-only fault chunks. No radio, upload, reset or flash access."""
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -21,20 +22,30 @@ def decode_record(data,expected_build=None):
  magic,version,length,sequence,boot=struct.unpack_from('<IHHII',data)
  valid,kind=struct.unpack_from('<II',data,32)
  crc,commit=struct.unpack_from('<II',data,120)
- if (magic,version,length,commit)!=(0x46444941,1,128,0x434f4d54) or kind not in (1,2,3) or valid>>18 or data[112:120]!=bytes(8) or sequence==0 or zlib.crc32(data[:120])!=crc:
+ if (magic,length,commit)!=(0x46444941,128,0x434f4d54) or version not in (1,2) or kind not in (1,2,3) or valid>>(18 if version==1 else 21) or data[112:120]!=bytes(8) or sequence==0 or zlib.crc32(data[:120])!=crc:
   raise ValueError('Uncommitted, unknown-format or corrupt diagnostic record')
  required={1:6,2:14,3:1008}[kind]
  if valid&required!=required:raise ValueError('Missing required diagnostic fields')
  if kind in (1,2) and (valid&1008 or (kind==2)!=(bool(valid&8))):raise ValueError('Invalid cause field mask')
  if kind==3 and valid&14:raise ValueError('Abort cannot invent an original checked cause')
  build=data[16:32]
- result={'format':1,'sequence':sequence,'boot_sequence':boot,'build_id':build.hex(),
+ queue_flags=valid&0x1c0000
+ if queue_flags and (version!=2 or kind!=2 or not valid&0x40000):raise ValueError('Invalid queue field mask')
+ result={'format':version,'sequence':sequence,'boot_sequence':boot,'build_id':build.hex(),
          'kind':{1:'assert',2:'checked_error',3:'abort'}[kind],'valid':valid}
  if expected_build is not None:
   if not isinstance(expected_build,bytes) or len(expected_build)!=16:raise ValueError('Expected16-byte build ID')
   result['matches_expected_build']=build==expected_build
  for name,offset,bit,signed in FIELDS:
   if valid&(1<<bit):result[name]=struct.unpack_from('<i' if signed else '<I',data,offset)[0]
+ if version==2 and kind==2:
+  result['attempted_callback']=None
+  if valid&0x40000:
+   capacity,used,read,write,head,tail=struct.unpack_from('<6I',data,56)
+   consistent=capacity==32 and used<=32 and read<32 and write<32 and (read+used)%32==write
+   result['queue']={'capacity':capacity,'used':used,'read_index':read,'write_index':write,
+     'head_callback':head if valid&0x80000 else None,'tail_callback':tail if valid&0x100000 else None,
+     'consistent':consistent}
  if kind==2:
   source=result['source'];tag=source>>24;severity=(source>>16)&0xff
   if tag==0xa0 and severity!=1 and source&0xffff==0 and result['line']==-2147483648:
@@ -66,8 +77,38 @@ def decode_chunks(state,expected_build=None):
  return {'status':state.get('fault_diagnostic_status'),'records':records,
   'interpretation':'Raw captured evidence. Match build ID to its archived ELF before resolving addresses. Cached uptime is a breadcrumb; SRAM may be lost on power failure.'}
 
+def resolve_callbacks(decoded,elf_path):
+ """Resolve only against an ELF carrying the captured immutable build identity."""
+ from elftools.elf.elffile import ELFFile
+ from elftools.elf.sections import SymbolTableSection
+ with Path(elf_path).open('rb') as stream:
+  elf=ELFFile(stream)
+  symbols=[sym for section in elf.iter_sections() if isinstance(section,SymbolTableSection) for sym in section.iter_symbols()]
+  identities=[]
+  for sym in symbols:
+   if sym.name=='vimar_fault_build_id' and sym['st_size']==16 and isinstance(sym['st_shndx'],int):
+    section=elf.get_section(sym['st_shndx']);offset=sym['st_value']-section['sh_addr']
+    identities.append(section.data()[offset:offset+16].hex())
+  if not identities or any(identity!=decoded['build_id'] for identity in identities):
+   raise ValueError('ELF build identity does not match captured record')
+  result={'elf_sha256':hashlib.sha256(Path(elf_path).read_bytes()).hexdigest(),'callbacks':{}}
+  for name in ('head_callback','tail_callback'):
+   address=decoded.get('queue',{}).get(name)
+   resolved=None
+   if address is not None:
+    code=address&~1
+    for sym in symbols:
+     start=sym['st_value']&~1
+     if sym['st_info']['type']=='STT_FUNC' and sym['st_size'] and start<=code<start+sym['st_size']:
+      resolved={'symbol':sym.name,'offset':code-start};break
+   result['callbacks'][name]=resolved
+  return result
+
 def main():
- parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('export',type=Path);parser.add_argument('--build-id');args=parser.parse_args()
+ parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('export',type=Path);parser.add_argument('--build-id');parser.add_argument('--elf',type=Path);args=parser.parse_args()
  expected=bytes.fromhex(args.build_id) if args.build_id else None
- print(json.dumps(decode_chunks(json.loads(args.export.read_text()),expected),indent=2))
+ result=decode_chunks(json.loads(args.export.read_text()),expected)
+ if args.elf:
+  for record in result['records']:record['symbol_resolution']=resolve_callbacks(record,args.elf)
+ print(json.dumps(result,indent=2))
 if __name__=='__main__':main()

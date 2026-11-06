@@ -40,12 +40,10 @@ def json_source(path):
 
 def signed_metadata(blob, filename, *, historical=False):
     parsed = image(blob)
-    # New components use ordinary triples; frozen migration retains its wire label.
+    # Preserve stable triples and the authenticated counter of beta/legacy images.
     major, minor, revision, build = map(int, re.split('[.+]', parsed['version']))
-    if not historical and build != 0:
-        raise ValueError('new main must use SemVer without a historical build counter')
     return dict(file=filename, size=len(blob),
-                version=parsed['version'] if historical else f'{major}.{minor}.{revision}',
+                version=parsed['version'] if historical or build else f'{major}.{minor}.{revision}',
                 wireVersion=[major, minor, revision, build], fileSha256=sha(blob),
                 signedRegionSha256=sha(blob[:parsed['authenticated_end']]))
 

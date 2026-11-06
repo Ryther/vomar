@@ -799,3 +799,79 @@ test('Identify runtime effect is diagnostic and never replayed as a manual LED e
     assert.equal(state.led_runtime_effect, 'fast_blink');
     assert.equal(Object.hasOwn(state, 'effect_led'), false);
 });
+
+test('schema nine ownership diagnostics use bounded read-only getters and preserve zero counters', async () => {
+    const {definition,custom,cluster}=build();
+    const dynamic=definition.extend[2].exposes[0];
+    const device=(schema)=>({modelID:'Vimar30805',getEndpoint:()=>({getClusterAttributeValue:()=>schema})});
+    const fields=['application_ticks','ownership_guard_enabled','ownership_local_requests','ownership_confirmations','ownership_restored_confirmations','ownership_storage_errors','firmware_build_id'];
+    for (const [offset,name] of fields.entries()) {
+        assert.equal(dynamic(device(8)).find(x=>x.name===name),undefined);
+        assert.equal(dynamic(device(9)).find(x=>x.name===name).access,'STATE_GET');
+        const get=custom.toZigbee.find(x=>x.key.includes(name));assert.equal(get.convertSet,undefined);
+        const reads=[];await get.convertGet({read:async(...args)=>reads.push(args)},name);
+        assert.deepEqual(reads,[['vimarDimmer',[0x0900+offset],{}]]);
+    }
+    assert.equal(cluster.attributes.ownershipGuardEnabled.write,false);
+    const receiver=custom.fromZigbee.find(x=>x.type.includes('readResponse'));
+    const data={2304:123,2305:false,2306:0,2307:31,2308:0,2309:0,2310:Buffer.alloc(16,0xab)};
+    const result=receiver.convert(null,{data});
+    assert.equal(result.application_ticks,123);assert.equal(result.ownership_guard_enabled,false);
+    assert.equal(result.ownership_restored_confirmations,0);assert.equal(result.ownership_storage_errors,0);
+    assert.equal(result.firmware_build_id,'ab'.repeat(16));
+    for (const invalid of [Buffer.alloc(15),Buffer.alloc(17),'ab'.repeat(16),null])
+        assert.equal(Object.hasOwn(receiver.convert(null,{data:{2310:invalid}}),'firmware_build_id'),false);
+});
+
+
+test('schema eleven RAM statistics are typed read-only bounded getters', async () => {
+    const {definition,custom,cluster}=build();
+    const dynamic=definition.extend[2].exposes[0];
+    const device=(schema)=>({modelID:'Vimar30805',getEndpoint:()=>({getClusterAttributeValue:()=>schema})});
+    const fields=['diagnostic_ram_status','allocation_failures','diagnostic_checkpoints','sdk_allocation_failures','diagnostic_pending'];
+    for (const [offset,name] of fields.entries()) {
+        assert.equal(dynamic(device(10)).find(x=>x.name===name),undefined);
+        assert.equal(dynamic(device(11)).find(x=>x.name===name)?.access,'STATE_GET');
+        const metadata=ATTRIBUTE_METADATA.find(x=>x.name===name);
+        assert.equal(cluster.attributes[metadata.zclName].write,false);
+        const getter=custom.toZigbee.find(x=>x.key.includes(name));
+        assert.equal(getter.convertSet,undefined);
+        const reads=[];await getter.convertGet({read:async(...args)=>reads.push(args)},name);
+        assert.deepEqual(reads,[['vimarDimmer',[0x090d+offset],{}]]);
+    }
+    const receiver=custom.fromZigbee.find(x=>x.type.includes('readResponse'));
+    for (const value of [-1, 0x100000000, NaN, '3', null]) assert.deepEqual(receiver.convert(null,{data:{2317:value}}),{});
+    assert.deepEqual(receiver.convert(null,{data:{2321:65536}}),{});
+    assert.deepEqual(receiver.convert(null,{data:{2317:3,2318:4294967294,2319:5,2320:65535,2321:0}}),
+        {diagnostic_ram_status:3,allocation_failures:4294967294,diagnostic_checkpoints:5,sdk_allocation_failures:65535,diagnostic_pending:0});
+});
+
+test('schema twelve allocation records are bounded read-only diagnostics', async () => {
+    const {definition,custom,cluster}=build();
+    const dynamic=definition.extend[2].exposes[0];
+    const device=(schema)=>({modelID:'Vimar30805',getEndpoint:()=>({getClusterAttributeValue:()=>schema})});
+    const fields=['allocation_trace_metadata','allocation_trace_first','allocation_trace_latest','allocation_trace_retained_status'];
+    const ids=[0x0912,0x0913,0x0914,0x0918];
+    for (const [i,name] of fields.entries()) {
+        assert.equal(dynamic(device(11)).find(x=>x.name===name),undefined);
+        assert.equal(dynamic(device(12)).find(x=>x.name===name)?.access,'STATE_GET');
+        const item=ATTRIBUTE_METADATA.find(x=>x.name===name);
+        assert.equal(cluster.attributes[item.zclName].write,false);
+        const getter=custom.toZigbee.find(x=>x.key.includes(name));assert.equal(getter.convertSet,undefined);
+        const reads=[];await getter.convertGet({read:async(...args)=>reads.push(args)},name);
+        assert.deepEqual(reads,[['vimarDimmer',[ids[i]],{}]]);
+    }
+    const receiver=custom.fromZigbee.find(x=>x.type.includes('readResponse'));
+    const metadata=Buffer.alloc(20);metadata.set([1,48,32,0]);
+    const record=Buffer.alloc(48,0xab);
+    assert.equal(receiver.convert(null,{data:{2322:metadata}}).allocation_trace_metadata,metadata.toString('hex'));
+    assert.equal(receiver.convert(null,{data:{2323:record}}).allocation_trace_first,record.toString('hex'));
+    for (const value of [Buffer.alloc(47),Buffer.alloc(49),'ab'.repeat(48),null])
+        assert.deepEqual(receiver.convert(null,{data:{2324:value}}),{});
+    for (const value of [Buffer.alloc(19),Buffer.alloc(21),Buffer.alloc(20)])
+        assert.deepEqual(receiver.convert(null,{data:{2322:value}}),{});
+    assert.deepEqual(receiver.convert(null,{data:{2328:-1}}),{});
+    const internal=ATTRIBUTE_METADATA.filter(x=>x.minSchema===12 && x.internal);
+    assert.equal(internal.length,49);
+    assert.equal(dynamic(device(12)).some(x=>x.name==='allocation_trace_history_0'),false);
+});

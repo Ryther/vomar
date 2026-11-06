@@ -8,6 +8,7 @@ void vimar_fault_diag_signal(uint32_t signal, int32_t status, uint32_t role);
 void vimar_fault_diag_tick(uint32_t uptime_ms);
 void vimar_fault_diag_report(uint32_t kind, uint32_t length, int32_t status);
 void vimar_fault_diag_error(uint32_t site, int32_t line, int32_t rc);
+void vimar_fault_diag_fatal(uint32_t site, int32_t line, int32_t rc);
 void vimar_fault_diag_assert(uint32_t file_id, int32_t line);
 void vimar_fault_diag_abort(uint32_t lr, uint32_t msp, uint32_t psp, uint32_t ipsr);
 void vimar_fault_diag_export(uint8_t chunks[8][33], uint32_t *status);

@@ -104,6 +104,6 @@ object PackageValidator {
         val wire=listOf((bytes[20].toInt() and 255).toLong(),(bytes[21].toInt() and 255).toLong(),(b.getShort(22).toInt() and 65535).toLong(), b.getInt(24).toLong() and 0xffffffffL)
         require(meta.wireVersion==wire) {"Wire version mismatch"}
         val display=wire.take(3).joinToString(".")
-        require(if(main) wire[3]==0L && meta.version==display else meta.version==display+"+"+wire[3])
+        require(meta.version==if(main && wire[3]==0L) display else display+"+"+wire[3])
     }
 }

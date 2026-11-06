@@ -1,11 +1,23 @@
 #include "fault_diag_zephyr.h"
 #include "fault_diag.h"
+#include "fault_diag_sdk.h"
+#include "loop_trace_zephyr.h"
 #include <zephyr/kernel.h>
 #include <zephyr/settings/settings.h>
 #include <hal/nrf_power.h>
 #include <string.h>
 #include <errno.h>
 #include VIMAR_FAULT_BUILD_ID_HEADER
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+#include "zigbee_alloc_trace.h"
+#endif
+
+static void flush_allocation_trace(void)
+{
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+    vimar_alloc_trace_flush();
+#endif
+}
 
 #ifndef RETAINED
 /* Legacy loaders initialize libc's heap footer at0x2003fff8. Leave the
@@ -36,12 +48,18 @@ static bool valid_pair(const volatile uint32_t *words)
 
 void vimar_fault_diag_boot(uint32_t boot_sequence)
 {
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+    vimar_alloc_trace_boot(boot_sequence);
+#endif
     uint32_t saved[FAULT_DIAG_WINDOW_WORDS];
+    export_status=0;
+    memset(exported,0,sizeof(exported));
     fault_diag_init(&diag,RETAINED,vimar_fault_build_id,boot_sequence);
     ssize_t n=settings_load_one("vimar/fault_diag",saved,sizeof(saved));
+    bool absent=(n==0 || n==-ENOENT);
     if(n==(ssize_t)sizeof(saved) && valid_pair(saved)) {
         memcpy(exported,saved,sizeof(exported));export_status=2u|4u;
-    } else if(n<0 && n!=-ENOENT) export_status|=8u;
+    } else if(!absent) export_status|=8u;
     if(valid_pair(RETAINED)) {
         /* A reset between the two commit-clearing stores leaves a subset of
          * an already persisted pair. Keep the whole durable pair in that case. */
@@ -58,14 +76,18 @@ void vimar_fault_diag_boot(uint32_t boot_sequence)
             if(read_stored(RETAINED,slot,&record))
                 memcpy((uint8_t *)exported+slot*128,&record,128);
         }
-        export_status=2u;
-        int rc=settings_save_one("vimar/fault_diag",exported,sizeof(exported));
-        if(rc==0) {
-            n=settings_load_one("vimar/fault_diag",saved,sizeof(saved));
-            if(n==(ssize_t)sizeof(saved) && memcmp(saved,exported,sizeof(saved))==0) {
-                export_status|=4u;fault_diag_acknowledge(&diag);
+        export_status=(export_status&8u)|2u;
+        if(durable_subset) {
+            export_status|=4u;fault_diag_acknowledge(&diag);
+        } else if(absent) {
+            int rc=settings_save_one("vimar/fault_diag",exported,sizeof(exported));
+            if(rc==0) {
+                n=settings_load_one("vimar/fault_diag",saved,sizeof(saved));
+                if(n==(ssize_t)sizeof(saved) && memcmp(saved,exported,sizeof(saved))==0) {
+                    export_status|=4u;fault_diag_acknowledge(&diag);
+                } else export_status|=8u;
             } else export_status|=8u;
-        } else export_status|=8u;
+        }
     }
     for(unsigned slot=0;slot<2;slot++) {
         struct fault_diag_record record;
@@ -104,11 +126,23 @@ void vimar_fault_diag_report(uint32_t kind,uint32_t length,int32_t status)
     fault_diag_breadcrumb(&diag,&crumb);irq_unlock(key);
 }
 void vimar_fault_diag_error(uint32_t site,int32_t line,int32_t rc)
-{if(!ready)return;uint32_t key=__get_PRIMASK();__disable_irq();(void)fault_diag_capture_error(&diag,site,line,rc);__set_PRIMASK(key);}
+{flush_allocation_trace();if(!ready)return;uint32_t key=__get_PRIMASK();__disable_irq();(void)fault_diag_capture_error(&diag,site,line,rc);__set_PRIMASK(key);}
+void vimar_fault_diag_fatal(uint32_t site,int32_t line,int32_t rc)
+{
+    flush_allocation_trace();
+    if(!ready)return;
+    vimar_loop_trace_event(LOOP_TRACE_SDK_FATAL,rc);
+    uint32_t key=__get_PRIMASK();__disable_irq();
+    struct fault_diag_queue queue;
+    uint32_t valid=vimar_fault_diag_queue_snapshot(&queue);
+    (void)fault_diag_capture_queue_error(&diag,site,line,rc,&queue,valid);
+    __set_PRIMASK(key);
+}
 void vimar_fault_diag_assert(uint32_t file_id,int32_t line)
-{if(!ready)return;uint32_t key=__get_PRIMASK();__disable_irq();(void)fault_diag_capture_assert(&diag,file_id,line);__set_PRIMASK(key);}
+{flush_allocation_trace();if(!ready)return;uint32_t key=__get_PRIMASK();__disable_irq();(void)fault_diag_capture_assert(&diag,file_id,line);__set_PRIMASK(key);}
 void vimar_fault_diag_abort(uint32_t lr,uint32_t msp,uint32_t psp,uint32_t ipsr)
 {
+    flush_allocation_trace();
     if(!ready)return;
     uint32_t key=__get_PRIMASK();__disable_irq();
     uint32_t gp=nrf_power_gpregret_get(NRF_POWER,0)|(nrf_power_gpregret_get(NRF_POWER,1)<<8);

@@ -13,7 +13,7 @@ object ZigbeeCarrierValidator {
         require(meta.file=="main.ota" && meta.size==bytes.size && bytes.size in 66+512..MAX_CARRIER) { "Invalid Zigbee carrier size/name" }
         require(meta.fileSha256.matches(Regex("[0-9a-f]{64}")) && sha256(bytes)==meta.fileSha256) { "Zigbee carrier hash mismatch" }
         require(meta.manufacturerCode==0xfff1 && meta.imageType==0x3085 && meta.model=="VIMAR30805" && meta.profile==2 && meta.mainSignedRegionSha256==main.signedRegionSha256 && main.role=="MAIN") { "Zigbee carrier model/profile/MAIN binding mismatch" }
-        require(main.wireVersion.size==4 && main.wireVersion.all { it in 0..255 } && main.wireVersion[3]==0L)
+        require(main.wireVersion.size==4 && main.wireVersion.all { it in 0..255 })
         val version=main.wireVersion.fold(0L) { value,part -> (value shl 8) or part }
         require(meta.fileVersion==version && meta.fileVersion in 1..0xffffffffL) { "Zigbee wire version mismatch" }
         val b=ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)

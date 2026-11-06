@@ -37,15 +37,17 @@ class OriginalRestoreActivity:Activity() {
         body.addView(NativeUi.taskHeader(this,"Original firmware"){finish()})
         body.addView(NativeUi.label(this,intent.getStringExtra("deviceName")?:"Saved backup",20,true),LinearLayout.LayoutParams(-1,-2).apply{topMargin=24.dp})
         body.addView(NativeUi.label(this,"The original firmware is saved privately on this phone. Restoring it replaces the custom firmware and its settings.",15,secondary=true),LinearLayout.LayoutParams(-1,-2).apply{topMargin=12.dp})
-        status=NativeUi.status(this);body.addView(status,LinearLayout.LayoutParams(-1,-2).apply{topMargin=24.dp})
-        progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;visibility=View.GONE};body.addView(progress)
+        val controls=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(20.dp,12.dp,20.dp,12.dp)}
+        status=NativeUi.status(this);controls.addView(status,LinearLayout.LayoutParams(-1,-2))
+        progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=1000;visibility=View.GONE};controls.addView(progress)
         exportButton=NativeUi.button(this,"Export backup copy"){export()};body.addView(exportButton,LinearLayout.LayoutParams(-1,-2).apply{topMargin=16.dp})
         restore=NativeUi.button(this,"Restore original firmware",filled=true,danger=true){chooseProbe()};body.addView(restore)
-        stop=NativeUi.button(this,"Stop restoration",danger=true){service?.stop()}.apply{visibility=View.GONE};body.addView(stop)
+        stop=NativeUi.button(this,"Stop restoration",danger=true){service?.stop()}.apply{visibility=View.GONE};controls.addView(stop)
         val scroll=ScrollView(this).apply{isFillViewport=true;defaultFocusHighlightEnabled=false;setBackgroundColor(getColor(R.color.ui_surface));addView(body)}
-        NativeUi.insets(scroll)
-        val center=FrameLayout(this).apply{setBackgroundColor(getColor(R.color.ui_surface));addView(scroll,FrameLayout.LayoutParams(-1,-1,android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL))}
-        center.addOnLayoutChangeListener{_,_,_,_,_,_,_,_,_->val width=minOf(center.width,720.dp);val params=scroll.layoutParams as FrameLayout.LayoutParams;if(width>0&&params.width!=width){params.width=width;scroll.layoutParams=params}}
+        val page=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;addView(scroll,LinearLayout.LayoutParams(-1,0,1f));addView(controls,LinearLayout.LayoutParams(-1,-2))}
+        NativeUi.insets(page)
+        val center=FrameLayout(this).apply{setBackgroundColor(getColor(R.color.ui_surface));addView(page,FrameLayout.LayoutParams(-1,-1,android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL))}
+        center.addOnLayoutChangeListener{_,_,_,_,_,_,_,_,_->val width=minOf(center.width,720.dp);val params=page.layoutParams as FrameLayout.LayoutParams;if(width>0&&params.width!=width){params.width=width;page.layoutParams=params}}
         setContentView(center)
         ContextCompat.registerReceiver(this,permission,IntentFilter("$packageName.RESTORE_USB_PERMISSION"),ContextCompat.RECEIVER_NOT_EXPORTED)
         bound=bindService(Intent(this,OriginalRestoreService::class.java),connection,BIND_AUTO_CREATE)

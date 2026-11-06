@@ -1,0 +1,2 @@
+/* Independent256-byte allocation-event commits below the loop/fatal windows. */
+&sram0 { reg = <0x20000000 0x0003fc00>; };

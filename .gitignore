@@ -786,6 +786,7 @@
 !/tools/firmware/tests/test_fade_walkthrough.py
 !/tools/firmware/tests/test_fault_diag.py
 !/tools/firmware/tests/test_fault_diag_integration.py
+!/tools/firmware/tests/test_fault_diag_queue.py
 !/tools/firmware/tests/test_fault_diag_persistence.py
 !/tools/firmware/tests/test_fault_diag_sdk.py
 !/tools/firmware/tests/test_gesture_classifier.py
@@ -1284,3 +1285,48 @@
 !/.github/code-scanning-ruleset.json
 
 !/tools/release/tests/test_obtainium_native.py
+
+# Experimental APS beta source and synthetic diagnostics checks.
+!/firmware/ownership_guard.cmake
+!/firmware/src/zigbee_ownership_guard.h
+!/firmware/src/zigbee_ownership_guard.c
+!/firmware/src/zigbee_ownership_sdk.c
+!/tools/firmware/tests/test_zigbee_ownership_guard.py
+!/tools/firmware/tests/test_zigbee_ownership_sdk.py
+!/tools/firmware/check_ownership_link.py
+!/tools/firmware/tests/test_ownership_link_audit.py
+!/tools/firmware/tests/test_ownership_cmake.py
+!/tools/firmware/tests/test_ownership_diagnostics.py
+
+!/apps/android-updater/test-fixtures/synthetic-beta-update.zip
+!/apps/android-updater/test-fixtures/synthetic-beta-public.der
+
+# Firmware1.1.7 diagnostics and their synthetic checks.
+!/firmware/boards/allocation-trace.overlay
+!/firmware/boards/loop-trace.overlay
+!/firmware/diag_batch.cmake
+!/firmware/src/loop_trace.c
+!/firmware/src/loop_trace.h
+!/firmware/src/loop_trace_fatal.c
+!/firmware/src/loop_trace_zephyr.c
+!/firmware/src/loop_trace_zephyr.h
+!/firmware/src/zigbee_alloc_trace.c
+!/firmware/src/zigbee_alloc_trace.h
+!/firmware/src/zigbee_diag_batch.c
+!/firmware/src/zigbee_diag_batch.h
+!/tools/firmware/check_diag_batch_link.py
+!/tools/firmware/prepare_diag_batch_sdk.py
+!/tools/firmware/read_allocation_trace.py
+!/tools/firmware/tests/test_diag_batch_link.py
+!/tools/firmware/tests/test_diag_batch_sdk.py
+!/tools/firmware/tests/test_read_allocation_trace.py
+!/tools/firmware/tests/test_zigbee_alloc_provenance.py
+!/tools/firmware/tests/test_zigbee_alloc_trace.py
+!/tools/firmware/tests/test_zigbee_diag_batch.py
+!/tools/firmware/tests/zigbee_alloc_provenance_test.c
+!/tools/firmware/tests/zigbee_alloc_trace_test.c
+!/tools/firmware/tests/zigbee_diag_batch_test.c
+!/tools/firmware/build_guarded_main.py
+!/tools/firmware/tests/test_guarded_main_builder.py
+!/tools/firmware/prepare_compact_sdk.py
+!/tools/firmware/tests/test_compact_sdk.py

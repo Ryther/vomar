@@ -572,11 +572,59 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
     fun testDisconnectedZigbeeDeviceShowsSavedVersionAndConnectionState(){
         val r=record(1,"0.5.5").copy(networkId="fixture-topic",ieee="0x0011223344556677",observationSource=ZigbeeDeviceMetadata.INVENTORY)
         fixture(listOf(r))
-        assertTrue(texts().any{it.contains("0.5.5 (saved)")})
+        assertTrue(texts().any{it.contains("0.5.5 · Last known")})
         val row=nodes().filterIsInstance<TextView>().first{it.text.toString()==r.name}.parent as View
         instrumentation.runOnMainSync{row.performClick()};instrumentation.waitForIdleSync()
-        assertTrue(texts().contains("Firmware 0.5.5 (saved)"))
+        assertTrue(texts().contains("Firmware 0.5.5 · Last known"))
+        assertTrue(texts().any{it.startsWith("Last known version:")&&it.contains("No matching version report has arrived over the current Zigbee connection")})
         click("Device information");assertTrue(nodes().filterIsInstance<TextView>().single{it.text=="Zigbee2MQTT disconnected"}.isShown);assertEquals(0,executions)
+    }
+    fun testExperimentalReleaseIsAWarningWithoutEnablingAnUpdate(){
+        val r=record(1,"1.1.6")
+        val native=fixture(listOf(r))
+        instrumentation.runOnMainSync {
+            NativeFleetUi::class.java.getDeclaredField("release").apply{isAccessible=true}.set(native,null)
+            native.navigate("devices")
+        }
+        instrumentation.waitForIdleSync()
+        assertTrue(texts().contains("Update not checked"))
+        fun openDetails(){instrumentation.runOnMainSync{(nodes().filterIsInstance<TextView>().first{it.text.toString()==r.name}.parent as View).performClick()};instrumentation.waitForIdleSync()}
+        openDetails()
+        assertEquals(activity.getColor(R.color.ui_text_secondary),nodes().filterIsInstance<TextView>().single{it.text=="Update not checked"}.currentTextColor)
+        instrumentation.runOnMainSync {
+            NativeFleetUi::class.java.getDeclaredField("experimentalRelease").apply{isAccessible=true}.set(native,FleetReleaseLookup.Experimental("2.0.0","1.1.6","https://github.com/Ryther/vomar/releases/tag/v2.0.0"))
+            native.navigate("devices")
+        }
+        instrumentation.waitForIdleSync();assertTrue(texts().contains("Experimental firmware"))
+        openDetails()
+        assertEquals(activity.getColor(R.color.ui_available),nodes().filterIsInstance<TextView>().single{it.text=="Experimental firmware"}.currentTextColor)
+        assertTrue(texts().any{it.contains("reported version matches an experimental project release")})
+        assertFalse(texts().contains("Review update"));assertEquals(0,executions)
+        capture("device-experimental-status")
+    }
+    fun testSettingsConnectionSummaryUpdatesWithoutOpeningTheConnection(){
+        val id=java.util.UUID.randomUUID().toString()
+        val p=BrokerProfile(id,"ssl://fixture.invalid",listOf(ZigbeeNetwork("$id-a","Home","fixture")),label="Startup fixture")
+        val network=AndroidNetworkOwner.get(activity)
+        val active=AndroidNetworkOwner::class.java.getDeclaredField("activeProfileId").apply{isAccessible=true}
+        @Suppress("UNCHECKED_CAST")
+        val flow=AndroidNetworkOwner::class.java.getDeclaredField("mutable").apply{isAccessible=true}.get(network) as kotlinx.coroutines.flow.MutableStateFlow<NetworkBackendState>
+        val previous=flow.value;val previousId=active.get(network)
+        kotlinx.coroutines.runBlocking{network.saveProfile(p)}
+        try {
+            active.set(network,id);flow.value=NetworkBackendState()
+            val native=fixture(emptyList());instrumentation.runOnMainSync{native.navigate("settings")};instrumentation.waitForIdleSync()
+            assertTrue(texts().any{it.endsWith(" · Not connected")})
+            flow.value=NetworkBackendState(connected=true,status="Connected");instrumentation.waitForIdleSync()
+            assertTrue(texts().contains("Startup fixture · Connected"))
+            flow.value=NetworkBackendState(reconnecting=true,status="Reconnecting in 1s");instrumentation.waitForIdleSync()
+            assertTrue(texts().contains("Startup fixture · Reconnecting"))
+            flow.value=NetworkBackendState(connectionError=true,status="Synthetic authentication error");instrumentation.waitForIdleSync()
+            assertTrue(texts().contains("Startup fixture · Connection error"))
+            flow.value=NetworkBackendState(status="Connecting",reconnecting=true);instrumentation.waitForIdleSync()
+            assertTrue(texts().contains("Startup fixture · Connecting"))
+            assertEquals(0,executions)
+        } finally {flow.value=previous;active.set(network,previousId);kotlinx.coroutines.runBlocking{network.removeProfile(id)}}
     }
     fun testEmptyDevicesStartsWithAddingADeviceRatherThanPackageMarketing(){
         fixture(emptyList())
@@ -694,7 +742,7 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
             var parent=connect.parent
             while(parent is View){assertFalse(parent is ScrollView);parent=parent.parent}
             val title=nodes().filterIsInstance<TextView>().single{it.text=="Keep connection"}
-            assertNotNull(title.compoundDrawables[0]);assertTrue(title.contentDescription.toString().contains("Not connected"))
+            assertNotNull(title.compoundDrawables[0]);assertTrue(title.contentDescription.toString().contains("Not connected"));assertTrue(texts().contains("Not connected"))
             capture("owner-connection-docked")
         }finally{kotlinx.coroutines.runBlocking{for(key in listOf(id,otherId))if(network.loadProfiles().any{it.id==key})network.removeProfile(key)}}
     }
@@ -710,6 +758,8 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         val fab=nodes().single{it.tag=="fleet.floating.update"};val position=IntArray(2)
         instrumentation.runOnMainSync{nodes().filterIsInstance<ScrollView>().first().scrollTo(0,10000);fab.getLocationOnScreen(position)}
         assertTrue(fab.isShown);assertTrue(position[1]+fab.height<=activity.resources.displayMetrics.heightPixels)
+        val viewport=android.graphics.Rect();nodes().filterIsInstance<ScrollView>().first().getGlobalVisibleRect(viewport)
+        assertTrue("Floating review must not overlap the content viewport",viewport.bottom<=position[1])
         capture("owner-selection-fixed")
         instrumentation.runOnMainSync{nodes().single{it.tag=="devices.clear-selection"}.performClick()};instrumentation.waitForIdleSync()
         assertFalse(texts().contains("1 selected"));assertFalse(nodes().any{it.tag=="fleet.floating.update"});assertEquals(0,executions)
@@ -727,6 +777,64 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         assertFalse(native.store.archivedActivities().contains(group.id));assertEquals(0,executions)
         val runtime=NativeFleetUi::class.java.getDeclaredField("runtime").apply{isAccessible=true}.get(native) as FleetRuntime
         assertEquals(group,runtime.queue.groups.value.single())
+    }
+    fun testSavedVersionDoesNotSplitTheFirstWordOfDeviceIdentity(){
+        fixture(listOf(record(1,"1.0.0").copy(networkId="fixture-network",ieee="0x0000000000000001")))
+        val name=nodes().filterIsInstance<TextView>().single{it.text=="Bathroom · Ceiling light"}
+        assertTrue("Device identity must have room for its first word",name.layout.getLineEnd(0)>=8)
+        assertEquals(0,executions)
+    }
+    fun testBusySessionKeepsStatusStopAndReturnAvailableAcrossDestinations(){
+        val native=fixture(listOf(record(1)))
+        instrumentation.runOnMainSync{native.serviceStatus("Verifying synthetic firmware");native.present(SessionPresentation(busy=true,operation=SessionOperation.UPDATE,progressPercent=50))}
+        for(destination in listOf("devices","settings","activity")){
+            instrumentation.runOnMainSync{native.navigate(destination)};instrumentation.waitForIdleSync()
+            val stop=nodes().singleOrNull{it.tag=="fleet.operation.stop"}
+            assertNotNull("Owned session Stop must remain available on $destination",stop)
+            val rect=android.graphics.Rect();assertTrue(stop!!.getGlobalVisibleRect(rect));assertEquals(stop.height,rect.height())
+            assertTrue(texts().any{it.contains("Verifying synthetic firmware")})
+            assertTrue(nodes().any{it.tag=="fleet.operation.open"&&it.isShown})
+        }
+        capture("busy-operation-settings")
+        instrumentation.runOnMainSync{native.present(SessionPresentation())};instrumentation.waitForIdleSync()
+        assertFalse(nodes().any{it.tag=="fleet.operation.stop"&&it.isShown});assertEquals(0,executions)
+    }
+    fun testLargeTextDoesNotClipTheToolbarUpdateAction(){
+        fixture(listOf(record(1)))
+        val action=nodes().filterIsInstance<TextView>().single{it.tag=="fleet.release.action"}
+        assertTrue(action.isShown)
+        assertTrue("The update action text must fit its visible height",action.layout.getLineBottom(action.layout.lineCount-1)<=action.height-action.compoundPaddingTop-action.compoundPaddingBottom)
+        for(label in listOf("Devices","Activity","Settings")){
+            val navigation=nodes().filterIsInstance<android.widget.Button>().single{it.text==label&&it.contentDescription==label}
+            assertEquals("Navigation labels must stay on one line",1,navigation.layout.lineCount)
+            assertEquals("Navigation labels must remain fully readable",0,navigation.layout.getEllipsisCount(0))
+        }
+        capture("production-large-text-toolbar")
+        assertEquals(0,executions)
+    }
+    fun testConnectionDraftRemainsAccessibleWithTheSoftwareKeyboard(){
+        val previous=android.provider.Settings.Secure.getString(activity.contentResolver,"show_ime_with_hard_keyboard")
+        fun preference(value:String?){require(value==null||value=="0"||value=="1");instrumentation.uiAutomation.executeShellCommand(if(value==null)"settings delete secure show_ime_with_hard_keyboard" else "settings put secure show_ime_with_hard_keyboard $value").use{android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()}}
+        preference("1")
+        try{
+            val native=fixture(emptyList());openConnectionDraft(native)
+            val field=editField("Broker address (required)")
+            instrumentation.runOnMainSync{field.setText("ssl://broker.example:8883");field.requestFocus()}
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync{(activity.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).showSoftInput(field,0)}
+            val deadline=System.currentTimeMillis()+5000
+            var keyboard=false
+            while(!keyboard&&System.currentTimeMillis()<deadline){instrumentation.runOnMainSync{keyboard=androidx.core.view.ViewCompat.getRootWindowInsets(native.root)?.isVisible(androidx.core.view.WindowInsetsCompat.Type.ime())==true||(activity.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).let{it.isActive(field)&&it.isFullscreenMode}};if(!keyboard)Thread.sleep(50)}
+            assertTrue("The synthetic emulator must display its software keyboard",keyboard)
+            instrumentation.waitForIdleSync()
+            val keyboardManager=activity.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
+            if(keyboardManager.isFullscreenMode)assertTrue(field.hasFocus())
+            else{val visible=android.graphics.Rect();assertTrue(field.getGlobalVisibleRect(visible));assertEquals(field.height,visible.height())}
+            assertEquals("ssl://broker.example:8883",field.text.toString())
+            capture("production-keyboard-draft")
+            instrumentation.runOnMainSync{(activity.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager).hideSoftInputFromWindow(field.windowToken,0)}
+            assertFalse(AndroidNetworkOwner.get(activity).state.value.connected);assertEquals(0,executions)
+        }finally{preference(previous)}
     }
     fun testCaptureProductionDark(){
         assertEquals(android.content.res.Configuration.UI_MODE_NIGHT_YES,activity.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK)
@@ -897,10 +1005,24 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         }
     }
     fun testExportedInventoryCancelThenImportPreservesOriginalAndFiltersUnsupportedRows() {
+        fun selectRow(label:String) {
+            instrumentation.uiAutomation.waitForIdle(100,5000)
+            val item=windowNodes {it.any {n->n.text?.toString()==label&&n.isVisibleToUser}}.first {it.text?.toString()==label&&it.isVisibleToUser}
+            val bounds=android.graphics.Rect();item.getBoundsInScreen(bounds);assertFalse(bounds.isEmpty)
+            val now=android.os.SystemClock.uptimeMillis()
+            val down=android.view.MotionEvent.obtain(now,now,android.view.MotionEvent.ACTION_DOWN,bounds.exactCenterX(),bounds.exactCenterY(),0)
+            val up=android.view.MotionEvent.obtain(now,now+60,android.view.MotionEvent.ACTION_UP,bounds.exactCenterX(),bounds.exactCenterY(),0)
+            try{instrumentation.sendPointerSync(down);instrumentation.sendPointerSync(up)}finally{down.recycle();up.recycle()}
+            instrumentation.waitForIdleSync()
+            instrumentation.uiAutomation.waitForIdle(100,5000)
+            val selected=windowNodes {it.any {n->n.text?.toString()==label}}
+                .first {it.text?.toString()==label}
+            assertTrue("The native inventory row $label must be checked before importing",selected.isChecked)
+        }
         val original=record(1,null).copy(id="original:12345678:00000001",name="Dimmer · 0001")
         val native=fixture(listOf(original))
         val json="""[
-            {"ieee_address":"0xF4CE367800000001","friendly_name":"Imported hall","software_build_id":"1.1.1","definition":{"vendor":"OpenVimar","model":"30805-custom"}},
+            {"ieee_address":"0xF4CE367800000001","friendly_name":"Imported hall","software_build_id":"1.1.1","definition":{"vendor":"Vomar","model":"30805-custom"}},
             {"ieee_address":"0x0011223344556688","friendly_name":"","definition":{"vendor":"Vimar","model":"30805"}},
             {"ieee_address":"0x0011223344556699","friendly_name":"Unsupported lamp","definition":{"vendor":"Other","model":"unrelated"}},
             {"ieee_address":"invalid","definition":{"vendor":"Vimar","model":"30805"}},42
@@ -908,15 +1030,16 @@ class NativeFleetUiTest:ActivityInstrumentationTestCase2<MainActivity>(MainActiv
         instrumentation.runOnMainSync {native.acceptZigbeeList(json)}
         val first=windowNodes {it.any {n->n.text?.toString()=="Imported hall"}}
         assertFalse(first.any {it.text?.toString()=="Unsupported lamp"})
-        assertTrue(first.first {it.text?.toString()=="Imported hall"}.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+        selectRow("Imported hall")
         dialogAction("Cancel");assertEquals(listOf(original),native.store.devices)
         instrumentation.runOnMainSync {native.acceptZigbeeList(json)}
         for(label in listOf("Imported hall","0x0011223344556688")) {
-            val item=windowNodes {it.any {n->n.text?.toString()==label}}.first {it.text?.toString()==label}
-            assertTrue(item.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+            selectRow(label)
         }
-        dialogAction("Import selected");awaitFleet("Only the two supported selections should be imported") {native.store.devices.size==2}
+        dialogAction("Import selected")
+        assertEquals("Only the two supported selections should be imported: ${native.store.devices.map{it.id}}",2,native.store.devices.size)
         val linked=native.store.devices.single {it.id==original.id}
+        assertEquals(FirmwareKind.CUSTOM,linked.firmwareKind)
         assertEquals(original.uid,linked.uid);assertEquals(original.address,linked.address);assertEquals(original.room,linked.room)
         assertEquals("Imported hall",linked.name);assertEquals("1.1.1",linked.installedVersion);assertTrue(linked.followZigbeeName)
         val stock=native.store.devices.single {it.ieee=="0x0011223344556688"}

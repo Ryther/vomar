@@ -20,12 +20,14 @@
 #define WORDS_PER_SLOT 32u
 #define CRC_WORD 30u
 #define COMMIT_WORD 31u
-#define ALL_VALID ((UINT32_C(1) << 18) - 1u)
+#define LEGACY_VALID ((UINT32_C(1) << 18) - 1u)
+#define ALL_VALID ((UINT32_C(1) << 21) - 1u)
+#define QUEUE_VALID (FAULT_DIAG_VALID_QUEUE | FAULT_DIAG_VALID_QUEUE_HEAD | FAULT_DIAG_VALID_QUEUE_TAIL)
 #define CAUSE_VALID (FAULT_DIAG_VALID_SOURCE | FAULT_DIAG_VALID_LINE)
 #define REGISTER_VALID (FAULT_DIAG_VALID_LR | FAULT_DIAG_VALID_MSP | \
                         FAULT_DIAG_VALID_PSP | FAULT_DIAG_VALID_IPSR | \
                         FAULT_DIAG_VALID_CONTROL | FAULT_DIAG_VALID_GPREGRET)
-#define BREADCRUMB_VALID (ALL_VALID & ~(CAUSE_VALID | FAULT_DIAG_VALID_ERROR | REGISTER_VALID))
+#define BREADCRUMB_VALID (LEGACY_VALID & ~(CAUSE_VALID | FAULT_DIAG_VALID_ERROR | REGISTER_VALID))
 
 union record_words {
     struct fault_diag_record record;
@@ -72,10 +74,13 @@ static bool read_slot(const volatile uint32_t *window, unsigned index,
     FAULT_DIAG_BARRIER();
     const struct fault_diag_record *r = &slot.record;
     if (source[COMMIT_WORD] != FAULT_DIAG_COMMIT || r->commit != FAULT_DIAG_COMMIT ||
-        r->magic != FAULT_DIAG_MAGIC || r->version != FAULT_DIAG_VERSION ||
+        r->magic != FAULT_DIAG_MAGIC || (r->version != 1u && r->version != FAULT_DIAG_VERSION) ||
         r->length != FAULT_DIAG_RECORD_SIZE || r->sequence == 0 ||
         (r->valid & ~ALL_VALID) != 0 || r->reserved[0] != 0 || r->reserved[1] != 0 ||
         r->crc != crc32(&slot)) return false;
+    if ((r->version == 1u && (r->valid & ~LEGACY_VALID)) ||
+        ((r->valid & QUEUE_VALID) &&
+         (r->kind != FAULT_DIAG_ERROR || !(r->valid & FAULT_DIAG_VALID_QUEUE)))) return false;
     if (expected != NULL && !identity_matches(r->build_id, expected)) return false;
     if (index == FAULT_DIAG_SLOT_CAUSE) {
         if ((r->kind != FAULT_DIAG_ASSERT && r->kind != FAULT_DIAG_ERROR) ||
@@ -205,6 +210,13 @@ bool fault_diag_capture_assert(struct fault_diag_context *context, uint32_t file
 bool fault_diag_capture_error(struct fault_diag_context *context, uint32_t site,
                               int32_t line, int32_t rc)
 {
+    return fault_diag_capture_queue_error(context, site, line, rc, NULL, 0);
+}
+
+bool fault_diag_capture_queue_error(struct fault_diag_context *context, uint32_t site,
+                                    int32_t line, int32_t rc,
+                                    const struct fault_diag_queue *queue, uint32_t valid)
+{
     union record_words slot;
     if (!begin_capture(context, false)) return false;
     prepare_record(context, &slot, FAULT_DIAG_ERROR);
@@ -212,6 +224,12 @@ bool fault_diag_capture_error(struct fault_diag_context *context, uint32_t site,
     slot.record.source = site;
     slot.record.line = line;
     slot.record.error = rc;
+    if (queue != NULL && (valid & FAULT_DIAG_VALID_QUEUE)) {
+        slot.record.valid |= valid & QUEUE_VALID;
+        slot.record.queue = *queue;
+        if (!(valid & FAULT_DIAG_VALID_QUEUE_HEAD)) slot.record.queue.head_callback = 0;
+        if (!(valid & FAULT_DIAG_VALID_QUEUE_TAIL)) slot.record.queue.tail_callback = 0;
+    }
     publish_record(context, &slot, FAULT_DIAG_SLOT_CAUSE);
     return true;
 }

@@ -55,7 +55,7 @@ static void persistence(void){
  assert(settings_record_decode(old,sizeof(old),&decoded,&on,&level)==SETTINGS_RECORD_OK);
  assert(decoded.phase_cut_mode==TEST_DEFAULT_PHASE&&on&&level==88);
  assert(decoded.initial_on_delay_ms==12345&&decoded.led_off.b==77&&decoded.min_level==10&&decoded.max_level==240);
- assert(VIMAR_SCHEMA_VERSION==8&&VIMAR_ATTR_PHASE_CUT_MODE==0x0305&&VIMAR_COMMAND_SET_PHASE_CUT==6);
+ assert(VIMAR_SCHEMA_VERSION==9&&VIMAR_ATTR_PHASE_CUT_MODE==0x0305&&VIMAR_COMMAND_SET_PHASE_CUT==6);
 }
 int main(void){admission();persistence();return 0;}
 '''

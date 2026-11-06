@@ -12,10 +12,12 @@ internal data class DeviceRecord(val id: String, val name: String, val room: Str
     }
 }
 internal enum class Eligibility { CURRENT, UPDATE, BLOCKED }
-internal data class DeviceStatus(val eligibility: Eligibility, val label: String, val reason: String)
+internal enum class DeviceStatusTone { CURRENT, AVAILABLE, NEUTRAL, ERROR }
+internal data class DeviceStatus(val eligibility: Eligibility, val label: String, val reason: String,
+    val tone:DeviceStatusTone=when(eligibility){Eligibility.CURRENT->DeviceStatusTone.CURRENT;Eligibility.UPDATE->DeviceStatusTone.AVAILABLE;Eligibility.BLOCKED->DeviceStatusTone.ERROR})
 internal object FleetPolicy {
     fun status(record:DeviceRecord,release:FleetReleaseRef?):DeviceStatus {
-        if(release==null)return DeviceStatus(Eligibility.BLOCKED,"No release selected","Select a verified release to compare installed firmware.")
+        if(release==null)return DeviceStatus(Eligibility.BLOCKED,"Update not checked","Select a verified release to compare installed firmware.",DeviceStatusTone.NEUTRAL)
         if(record.firmwareKind==FirmwareKind.STOCK)return DeviceStatus(Eligibility.BLOCKED,"Stock firmware","A first installation is required before this update.")
         if(record.firmwareKind!=FirmwareKind.CUSTOM||record.installedVersion==null||record.observedAt==null||record.observationSource.isNullOrBlank())
             return DeviceStatus(Eligibility.BLOCKED,"Check version","Installed custom firmware has not been observed. Refresh the device before updating.")
@@ -38,13 +40,23 @@ internal object FleetPolicy {
         if(!Regex("(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:[+.](0|[1-9][0-9]*))?").matches(value))return null
         return value.split('.','+').map{it.toLongOrNull() ?: return null}.let{if(it.size==3)it+0L else it}
     }
-    fun recognisesZigbee(vendor: String, model: String): Boolean =
-        (vendor.equals("Vimar", true) && model == "30805") ||
-        (vendor.equals("OpenVimar", true) && model == "30805-custom")
+    fun zigbeeFirmwareKind(vendor: String, model: String): FirmwareKind? = when {
+        vendor.equals("Vimar", true) && model == "30805" -> FirmwareKind.STOCK
+        vendor.equals("Vomar", true) && model == "30805-custom" -> FirmwareKind.CUSTOM
+        else -> null
+    }
     fun matches(record: DeviceRecord, pkg: PackageSummary?) = pkg != null && record.uid.isNotEmpty() && record.uid == pkg.uid && record.address == pkg.address
-    fun status(record: DeviceRecord, state: SessionPresentation): DeviceStatus {
+    fun status(record: DeviceRecord, state: SessionPresentation, experimentalVersion:String?=null): DeviceStatus {
         val pkg = state.packageSummary
-        if (!state.loaded || !matches(record, pkg)) return DeviceStatus(Eligibility.BLOCKED, "Not updatable", "No matching verified package loaded. A saved record does not prove device identity.")
+        if (!state.loaded) {
+            val installed=record.installedVersion?.let(::version)
+            if(record.firmwareKind==FirmwareKind.CUSTOM && record.observedAt!=null && !record.observationSource.isNullOrBlank() &&
+                installed!=null && experimentalVersion?.let(::version)==installed)
+                return DeviceStatus(Eligibility.BLOCKED,"Experimental firmware",
+                    "The reported version matches an experimental project release. It is not qualified for automatic updates. Live identity and image compatibility must still be checked before a manual trial.",DeviceStatusTone.AVAILABLE)
+            return DeviceStatus(Eligibility.BLOCKED,"Update not checked","Choose a verified firmware package to check update compatibility.",DeviceStatusTone.NEUTRAL)
+        }
+        if (!matches(record, pkg)) return DeviceStatus(Eligibility.BLOCKED, "Not updatable", "No matching verified package loaded. A saved record does not prove device identity.")
         if (state.imagesVerified || (state.bluetoothVerified && state.observedMainHash == pkg!!.mainHash))
             return DeviceStatus(Eligibility.CURRENT, "Up to date", "Target firmware verified on this device. Return online is confirmed separately.")
         if (state.bluetoothVerified && state.observedMainHash != null)

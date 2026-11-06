@@ -4,6 +4,10 @@ The converter implements schema-gated configuration, phase-cut selection and
 standard Identify. Its native version is owned by `package.json`, independently
 of distribution and firmware versions.
 
+The1.2.0 source adds percentage-brightness conversion and schema9..12 read-only
+diagnostics. Use its matching generated converter with the1.1.7 firmware
+preparation; native component versioning does not imply a published distribution.
+
 `dist/vimar_30805.js` is the standalone ESM external converter for the custom DK firmware identity
 `Vimar30805-DK` and Vimar hardware identity `Vimar30805`. It registers cluster `0xFC00`, retains the standard dimmable-light
 exposure, publishes gesture/system events as `action`, and provides individually
@@ -162,3 +166,67 @@ downgrade limits and remaining physical qualification.
 
 Zigbee2MQTT displays the custom devices under vendor **Vomar**, including its OTA
 list. Model identifiers and matching remain unchanged for existing devices.
+
+## Ownership beta diagnostics
+
+Schema9 firmware adds `application_ticks`, `ownership_guard_enabled`,
+`ownership_local_requests`, `ownership_confirmations`,
+`ownership_restored_confirmations`, `ownership_storage_errors` and
+`firmware_build_id`. Update the external converter to expose these read-only
+getters; older schemas keep them hidden. Each getter sends one bounded READ,
+without writing settings or starting an OTA. These diagnostics are not included
+in the ordinary snapshot reports: request fresh values explicitly and retain
+sample timestamps, the boot sequence and build identity. Do not interpret
+retained MQTT values as new measurements.
+
+Within the same boot, a growing heartbeat shows that the application tick runs;
+Zigbee replies alone do not. Zero corrected confirmations means no correction
+was observed, even if the trial has no crashes. A positive delta shows path
+coverage, not an APS-fix qualification. Any guard storage error needs review.
+The counters wrap at32bits and reset on reboot. An all-zero firmware build
+identity means unavailable, rather than a verified build. See the
+[firmware beta contract](../../firmware/README.md#single-device-ownership-beta).
+
+
+## RAM statistics (schema11)
+
+A matching experimental firmware exposes `diagnostic_ram_status`,
+`allocation_failures`, `diagnostic_checkpoints`, `sdk_allocation_failures` and
+`diagnostic_pending` as read-only getters. Older schemas hide these fields.
+Each getter uses one numeric attribute READ. Nothing is sent for each error.
+For example, send `{"allocation_failures":""}` to the device `/get` topic;
+collect the other fields, heartbeat, boot sequence and build identity similarly.
+Use an explicitly started collector at roughly one-minute intervals and archive
+fresh responses and timeouts on the host. A retained MQTT value is not a new read.
+
+RAM status bits:1=policy enabled,2=batch admitted. Pending zero only means a
+drain when bit2 is clear. Arrivals/checkpoints wrap at32bits, native/pending
+counters at16bits. The native counter can include an old persisted baseline;
+arrivals are since this boot. The application tick refreshes the attribute view.
+A frozen heartbeat means this view may be stale even if Zigbee still replies.
+Read failures during buffer exhaustion are expected missing evidence, not zeros.
+
+The first valid persistent crash journal is preserved. A newer pending retained
+crash can be exported with the present/pending flags and without saved; preserve
+all eight chunks privately before a power loss. This instrumentation is not a
+qualified correction for household freezes.
+
+
+## Allocation trace (experimental schema12)
+
+Schema12 adds read-only `allocation_trace_metadata`, `allocation_trace_first`,
+`allocation_trace_latest`, `allocation_trace_retained_status`,
+`allocation_trace_dropped` and `allocation_trace_lifetime_gaps`. Older devices
+hide these fields. Record/metadata values are bounded hexadecimal text; the
+32 history slots,14 holder chunks and three previous-commit chunks are internal
+read-only attributes for an explicit diagnostic collector. Nothing is sent on
+an error or automatically polled by adding the converter.
+
+Use the matching firmware guide and offline `read_allocation_trace` decoder for
+field layout, coherent exports and ELF identity checks. Pending0 in schema11
+refers only to diagnostic admission, not free packet buffers. Schema12 records
+capture request origin, pool state and observed lifetimes. Cached interrupt
+timestamps, missing contexts, skipped observations and overwritten history have
+explicit flags/counters. Previous SRAM commits keep their captured boot/build;
+they must not be attributed to a newer installed image. No flash write, reset,
+mode change or update follows from reading these attributes.

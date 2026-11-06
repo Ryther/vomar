@@ -14,7 +14,7 @@ android {
     namespace="org.openvimar.updater"
     compileSdk { version = release(37) { minorApiLevel = 0 } }
     buildToolsVersion="36.0.0"
-    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=34; versionName="1.1.4"; testInstrumentationRunner="org.openvimar.updater.CoverageInstrumentationTestRunner" }
+    defaultConfig { applicationId="org.openvimar.updater"; minSdk=26; targetSdk=35; versionCode=35; versionName="1.1.5"; testInstrumentationRunner="org.openvimar.updater.CoverageInstrumentationTestRunner" }
 
     buildTypes {
         getByName("release") {
