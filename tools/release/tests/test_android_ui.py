@@ -37,6 +37,24 @@ def test_first_class_only_cannot_pass_as_a_complete_ui_run(tmp_path):
         android_ui.verify_results(tmp_path, ('synthetic.First', 'synthetic.Second'))
 
 
+@pytest.mark.parametrize('include_restore', [False, True])
+def test_default_journeys_require_original_restore_results(tmp_path, include_restore):
+    classes = tuple('org.openvimar.updater.' + name for name in (
+        'InitialInstallUiTest', 'InitialInstallAndroidAdapterTest', 'BleTrialUiTest',
+        'AutomaticConnectionUiTest', 'AutomaticNetworkConnectionTest',
+        'NativeFleetUiTest', 'SavedConnectionPersistenceTest', 'MqttCleartextPolicyTest',
+    ))
+    restore = 'org.openvimar.updater.OriginalRestoreUiTest'
+    report(tmp_path, classes + ((restore,) if include_restore else ()))
+    if include_restore:
+        result = android_ui.verify_results(tmp_path)
+        assert result['executed'] == 9
+        assert result['classes'][restore] == {'executed': 1, 'skipped': 0}
+    else:
+        with pytest.raises(ValueError, match='did not execute.*OriginalRestoreUiTest'):
+            android_ui.verify_results(tmp_path)
+
+
 @pytest.mark.parametrize('options', [{'failure': True}, {'skipped': True}])
 def test_failed_or_entirely_skipped_class_never_counts_as_executed(tmp_path, options):
     report(tmp_path, ('synthetic.First',), **options)
