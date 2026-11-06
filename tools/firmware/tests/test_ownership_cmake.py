@@ -59,3 +59,24 @@ def test_selected_library_admission(tmp_path, case, accepted):
         assert result.returncode == 0, diagnostic
     else:
         assert result.returncode != 0, diagnostic
+
+
+@pytest.mark.parametrize('trace,lto,batch,accepted', [
+    (True, False, False, True), (True, True, True, False),
+    (False, True, True, True), (False, True, False, False),
+    (False, False, True, False),
+])
+def test_guard_profile_requires_opaque_reviewed_boundaries(tmp_path, trace, lto, batch, accepted):
+    (tmp_path / 'CMakeLists.txt').write_text('\n'.join([
+        'cmake_minimum_required(VERSION 3.20)', 'project(guard_profile NONE)',
+        'set(CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD OFF)', f'include("{GUARD.as_posix()}")',
+        f'set(CONFIG_ZIGBEE_ENABLE_TRACES {"ON" if trace else "OFF"})',
+        f'set(CONFIG_LTO {"ON" if lto else "OFF"})',
+        f'set(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH {"ON" if batch else "OFF"})',
+        'vimar_ownership_require_native_profile()',
+    ]) + '\n')
+    result = subprocess.run(['cmake', '-S', str(tmp_path), '-B', str(tmp_path / 'build')],
+                            capture_output=True, text=True)
+    diagnostic = result.stdout + result.stderr
+    assert 'Unknown CMake command' not in diagnostic, diagnostic
+    assert (result.returncode == 0) is accepted, diagnostic

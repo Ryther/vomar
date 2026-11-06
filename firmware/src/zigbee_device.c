@@ -10,6 +10,10 @@
 #include "boot_trace.h"
 #include "fault_diag_zephyr.h"
 #include "fault_diag_sdk.h"
+#include "loop_trace_zephyr.h"
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+#include "zigbee_diag_batch.h"
+#endif
 #if defined(CONFIG_VIMAR_FAULT_DIAGNOSTICS)
 #include VIMAR_FAULT_BUILD_ID_HEADER
 #endif
@@ -179,12 +183,17 @@ struct zigbee_context {
     uint32_t ownership_local_requests, ownership_confirmations;
     uint32_t ownership_restored_confirmations, ownership_storage_errors;
     uint8_t firmware_build_id[17];
+    uint32_t diagnostic_ram_status, allocation_failures, diagnostic_checkpoints;
+    uint16_t sdk_allocation_failures, diagnostic_pending;
 
 };
 
 /* One standalone READ response: 3-byte ZCL header + 4-byte record + string.
  * Fits the SDK's conservative66-byte budget; no fragmentation/ABI flags. */
 BUILD_ASSERT(3u+4u+OTA_RUNTIME_CONTRACT_ZCL_SIZE<=ZB_ZCL_HI_MAX_PAYLOAD_SIZE);
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+BUILD_ASSERT(3u+4u+sizeof(vimar_alloc_trace_latest)<=ZB_ZCL_HI_MAX_PAYLOAD_SIZE);
+#endif
 static struct zigbee_context context;
 static uint32_t ota_contract_sample;
 static uint64_t ota_contract_updated_ms;
@@ -1050,6 +1059,16 @@ static void refresh_ota_contract(uint64_t now_ms,bool force)
 static void refresh_ownership_diagnostics(void)
 {
     ++context.application_ticks;
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+    struct vimar_diag_statistics statistics;
+    vimar_diag_statistics_snapshot(&statistics);
+    context.diagnostic_ram_status = statistics.status;
+    context.allocation_failures = statistics.allocation_arrivals;
+    context.diagnostic_checkpoints = statistics.checkpoints;
+    context.sdk_allocation_failures = statistics.sdk_allocation_failures;
+    context.diagnostic_pending = statistics.pending;
+    vimar_alloc_trace_refresh();
+#endif
 #if defined(CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD)
     context.ownership_guard_enabled = true;
     context.ownership_local_requests = vimar_ownership_local_requests;
@@ -1059,8 +1078,19 @@ static void refresh_ownership_diagnostics(void)
 #endif
 }
 
+static void application_tick(zb_uint8_t unused);
+
+static void schedule_application_tick(void)
+{
+    vimar_loop_trace_event(LOOP_TRACE_REARM_START, 0);
+    zb_ret_t result = ZB_SCHEDULE_APP_ALARM(application_tick, 0,
+        ZB_MILLISECONDS_TO_BEACON_INTERVAL(APPLICATION_TICK_INTERVAL_MS));
+    vimar_loop_trace_event(LOOP_TRACE_REARM_RETURN, result);
+}
+
 static void application_tick(zb_uint8_t unused)
 {
+    vimar_loop_trace_event(LOOP_TRACE_ENTER, 0);
     vimar_fault_diag_tick((uint32_t)k_uptime_get());
     ARG_UNUSED(unused);
     uint64_t now_ms = k_uptime_get();
@@ -1070,6 +1100,7 @@ static void application_tick(zb_uint8_t unused)
     refresh_protection_diagnostics();
     refresh_ota_contract(now_ms,false);
     platform_io_tick(now_ms);
+    vimar_loop_trace_event(LOOP_TRACE_IO_DONE, 0);
     application_controller_tick_input(&controller, now_ms,platform_io_input_settled());
     refresh_output_diagnostics();
     refresh_led_runtime(now_ms);
@@ -1079,8 +1110,8 @@ static void application_tick(zb_uint8_t unused)
         (void)app_settings_factory_reset();
         app_factory_reset_done = true;
     }
-    (void)ZB_SCHEDULE_APP_ALARM(application_tick, 0,
-        ZB_MILLISECONDS_TO_BEACON_INTERVAL(APPLICATION_TICK_INTERVAL_MS));
+    vimar_loop_trace_event(LOOP_TRACE_WORK_DONE, 0);
+    schedule_application_tick();
 }
 
 static void zcl_callback(zb_bufid_t buffer)
@@ -1308,8 +1339,7 @@ int zigbee_device_start(void)
     refresh_protection_diagnostics();
     refresh_ota_contract(k_uptime_get(),true);
     publish_model();
-    (void)ZB_SCHEDULE_APP_ALARM(application_tick, 0,
-        ZB_MILLISECONDS_TO_BEACON_INTERVAL(APPLICATION_TICK_INTERVAL_MS));
+    schedule_application_tick();
 #if defined(CONFIG_VIMAR_HARDWARE)
     zb_ieee_addr_t stock_ieee;
     vimar_identity(nrf_ficr_deviceid_get(NRF_FICR,0),

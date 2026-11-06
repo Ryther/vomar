@@ -14,6 +14,7 @@
 #include "vimar_power_protection.h"
 #include "boot_trace.h"
 #include "fault_diag_zephyr.h"
+#include "loop_trace_zephyr.h"
 #if defined(CONFIG_VIMAR_ZIGBEE_OTA)
 #include "ota_storage.h"
 #endif
@@ -103,8 +104,10 @@ int main(void)
 #if defined(CONFIG_VIMAR_P031_PROTECTION)
     struct boot_trace_entry diag_boot;vimar_boot_trace_snapshot(&diag_boot);
     vimar_fault_diag_boot(diag_boot.sequence);
+    vimar_loop_trace_boot(diag_boot.sequence);
 #else
     vimar_fault_diag_boot(0);
+    vimar_loop_trace_boot(0);
 #endif
 	if (error != 0) {
 #if defined(CONFIG_VIMAR_P031_PROTECTION)

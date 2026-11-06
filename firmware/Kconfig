@@ -24,11 +24,34 @@ config VIMAR_FAULT_DIAGNOSTICS
 
 config VIMAR_ZIGBEE_OWNERSHIP_GUARD
     bool "Experimental native Zigbee transaction ownership guard"
-    depends on SOC_NRF52840 && ZIGBEE_ADD_ON && ZIGBEE_ENABLE_TRACES && !LTO
+    depends on SOC_NRF52840 && ZIGBEE_ADD_ON
     default n
     help
       Preserve ordinary local transaction ownership at the NWK confirmation
-      boundary. Requires the exact reviewed native SDK archive and a complete
-      link audit. Host tests alone do not qualify this option for devices.
+      boundary. Requires the reviewed trace archive or compact native-boundary
+      derivation and complete link admission. Host tests do not qualify devices.
+
+config VIMAR_ZIGBEE_DIAGNOSTIC_BATCH
+    bool "Experimental counted allocation diagnostic batches"
+    depends on VIMAR_ZIGBEE_OWNERSHIP_GUARD && VIMAR_FAULT_DIAGNOSTICS
+    default n
+    help
+      Batch native statistics in RAM and acquire bounded allocation refusals.
+      Requires boards/allocation-trace.overlay for the independent retained
+      SRAM commits. No error-triggered flash write or unsolicited radio send.
+      Aggregate pending allocation failure diagnostics modulo65536 while
+      retaining ordinary callbacks and original SDK error handling. Requires
+      the reviewed derived SDK archive and complete link admission. Diagnostic
+      checkpoints are volatile; other NVRAM callers retain normal persistence.
+      Target timing and hardware behavior remain unqualified.
+
+config VIMAR_LOOP_TRACE
+    bool "Experimental retained application-loop observations"
+    depends on VIMAR_FAULT_DIAGNOSTICS
+    default n
+    help
+      Observe callback progression and exact alarm return in reserved SRAM.
+      Requires the loop-trace RAM overlay and reviewed kernel halt policy.
+      This instrumentation is not a scheduling or physical freeze correction.
 
 rsource "Kconfig.protection"

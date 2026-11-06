@@ -8,6 +8,10 @@
 #include <zb_bufpool.h>
 
 #include "zigbee_ownership_guard.h"
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+#include "zigbee_diag_batch.h"
+#include "zigbee_alloc_trace.h"
+#endif
 
 #ifdef ZB_DEBUG_BUFFERS
 #error "Ownership adapter requires the reviewed native buffer ABI"
@@ -72,12 +76,19 @@ void __wrap_zb_bufpool_storage_init(void)
 {
     producer.active = false;
     zigbee_ownership_reset(&ownership);
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+    vimar_alloc_trace_pool_reset();
+#endif
     __real_zb_bufpool_storage_init();
 }
 
 zb_buf_ent_t *__wrap_zb_bufpool_storage_allocate(zb_uint8_t count)
 {
     zb_buf_ent_t *buffer = __real_zb_bufpool_storage_allocate(count);
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+    vimar_alloc_trace_storage_result(count, buffer == NULL ? 0 :
+        (zb_bufid_t)(zb_bufpool_storage_buf_to_bufid(buffer) + 1u));
+#endif
     if (buffer != NULL) {
         /* The SDK storage conversion is zero-based; public buffer IDs are not. */
         unsigned first = (unsigned)zb_bufpool_storage_buf_to_bufid(buffer) + 1u;
@@ -93,6 +104,9 @@ zb_buf_ent_t *__wrap_zb_bufpool_storage_allocate(zb_uint8_t count)
 void __wrap_zb_bufpool_storage_free(zb_buf_ent_t *buffer)
 {
     unsigned first = (unsigned)zb_bufpool_storage_buf_to_bufid(buffer) + 1u;
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+    vimar_alloc_trace_release(first);
+#endif
     zigbee_ownership_release(&ownership, first);
     ++vimar_ownership_releases;
     __real_zb_bufpool_storage_free(buffer);
@@ -134,6 +148,12 @@ void __wrap_zb_nlde_data_request(zb_uint8_t buffer)
 
 zb_ret_t __wrap_zb_schedule_callback(zb_callback_t callback, zb_uint8_t buffer)
 {
+#if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+    if (callback == vimar_sdk_buf_diag_handle_alloc_failure) {
+        if (buffer == 0) vimar_alloc_trace_failure();
+        return vimar_diag_batch_schedule(buffer);
+    }
+#endif
     zb_callback_t scheduled = callback;
     if (callback == __real_zb_nwk_handle_mcps_data_confirm) {
         scheduled = __wrap_zb_nwk_handle_mcps_data_confirm;

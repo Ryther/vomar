@@ -13,10 +13,18 @@ function(vimar_ownership_require_selected_library target expected)
   endif()
 endfunction()
 
-if(CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD)
-  if(CONFIG_LTO OR NOT CONFIG_ZIGBEE_ENABLE_TRACES)
-    message(FATAL_ERROR "Ownership guard requires the reviewed native library")
+function(vimar_ownership_require_native_profile)
+  if(CONFIG_ZIGBEE_ENABLE_TRACES)
+    if(CONFIG_LTO)
+      message(FATAL_ERROR "Trace ownership profile requires the reviewed non-LTO configuration")
+    endif()
+  elseif(NOT CONFIG_LTO OR NOT CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
+    message(FATAL_ERROR "Compact ownership profile requires LTO and the complete native-boundary derivation")
   endif()
+endfunction()
+
+if(CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD)
+  vimar_ownership_require_native_profile()
   if(NOT CONFIG_FPU OR NOT CONFIG_FP_HARDABI OR CONFIG_ZIGBEE_ROLE_END_DEVICE)
     message(FATAL_ERROR "Ownership guard requires the pinned router/coordinator hard-float ABI")
   endif()
@@ -31,8 +39,25 @@ if(CONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD)
       message(FATAL_ERROR "Ownership guard requires SDK review: ${relative}")
     endif()
   endfunction()
-  vimar_ownership_require_selected_library(zboss
-    "${vimar_ownership_sdk}/trace/lib/cortex-m4/hard-float/libzboss.a")
+  if(CONFIG_ZIGBEE_ENABLE_TRACES)
+    vimar_ownership_require_selected_library(zboss
+      "${vimar_ownership_sdk}/trace/lib/cortex-m4/hard-float/libzboss.a")
+  else()
+    vimar_ownership_require_selected_library(zboss
+      "${vimar_ownership_sdk}/lib/cortex-m4/hard-float/libzboss.a")
+    vimar_ownership_require_hash(lib/cortex-m4/hard-float/libzboss.a
+      335b864955b53d42d364ba018391db03afba4fd061e96190d7c36daab101a5fa)
+    vimar_ownership_require_hash(lib/cortex-m4/hard-float/libgppb.a
+      e8a0e0c020af3711028d6c14df12b7ea9df05db7391febf854201295dd93df45)
+    vimar_ownership_require_hash(include/osif/libzboss_config.h
+      f097015ef39df887007bf0b063ab0aca48705cdb76f8673591aaf91d3e2fe4ca)
+    get_target_property(vimar_compact_libraries zboss INTERFACE_LINK_LIBRARIES)
+    list(FIND vimar_compact_libraries
+      "${vimar_ownership_sdk}/lib/cortex-m4/hard-float/libgppb.a" vimar_compact_gp)
+    if(vimar_compact_gp LESS 0)
+      message(FATAL_ERROR "Compact ownership profile requires the reviewed Green Power companion")
+    endif()
+  endif()
   vimar_ownership_require_hash(trace/lib/cortex-m4/hard-float/libzboss.a
     879bc7c8f39a8c66a02ad119db50a4c637835c572f1277bba88aff51a826ebf0)
   vimar_ownership_require_hash(src/include/zb_bufpool.h

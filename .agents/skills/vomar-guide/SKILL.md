@@ -263,8 +263,11 @@ merely because host tests pass. Verify the actual installed release first.
 
 A firmware name such as1.1.7-beta1 is an experimental native label. Its signed
 MCUboot identity is1.1.7+1; the Zigbee OTA number is0x01010701. Further beta
-builds increment the build byte, and a stable successor needs1.1.8 or later.
-Distribution tags and application versions are separate. A beta label grants
+builds increment the build byte. Stable1.1.7 build0 sorts below beta9, so the
+beta-to1.1.7 transition needs an explicitly reviewed Bluetooth MAIN-only package
+that admits the exact running source. It is not a newer Zigbee OTA update;
+ordinary version checks remain in force. Stable1.1.8 sorts above the beta series.
+Distribution tags and application versions are separate. A version label grants
 neither qualification nor update authority.
 
 Schema9 and a matching converter expose read-only application heartbeat, guard
@@ -280,7 +283,9 @@ One-device trials require an exact selected target, reviewed signed artifact,
 verified recovery/original availability and a prepared fallback. Older OTA files
 are not an assumed rollback. No scan, monitor, successful host test or accepted
 beta label starts a device update. The ownership guard remains default-disabled
-outside explicitly guarded beta builds.
+unless the build configuration explicitly enables it. The prepared1.1.7 MAIN
+retains the guard/RAM-diagnostic policy with a compact SDK profile; an ordinary unguarded
+stable build is not equivalent.
 
 Android1.1.5/code35 adds the beta-counter admission change. Install its matching
 signed APK over the existing app without clearing data. Returning from the beta
@@ -292,8 +297,59 @@ recovery entry then depends on the actual bootloader/startup button route, whose
 physical behavior must be established for the selected dimmer. Never describe a
 prepared return package as an automatic or already qualified rollback.
 
+The owner closed beta9 on2026-11-06 after satisfactory use and requested1.1.7
+with Zigbee OTA restored before release. The compact preparation preserves buffer
+protections and RAM allocation diagnostics, while excluding continuous beta loop
+timing and unwired kernel text output. It fits split staging from1.1.6 with the
+existing recovery1.0.0. Beta9 still needs the exact reviewed Bluetooth return or
+update path because of its larger running image and higher internal build number.
+
+This preparation has software validation, not a proven historical freeze cause
+or completion of unperformed physical checks. Candidate-purpose packages remain
+rejected by ordinary qualified update admission. Verify actual publication,
+reviewed artifact and installation authorization before giving release or update
+instructions; this source guide starts no operation.
+
 For a diagnostic beta using fault-record format2, collect all eight fault chunks
 while Zigbee is available, before entering Bluetooth or returning to 1.1.6. Its
 older decoder rejects format2; do not rely on a downgrade to preserve this
 evidence. Client update reports do not replace these fault chunks. Callback IDs
 are queued head/tail entries; they do not identify the failed scheduling attempt.
+
+
+For experimental schema11 RAM diagnostics, use the matching converter and read
+`diagnostic_ram_status`, `allocation_failures`, `diagnostic_checkpoints`,
+`sdk_allocation_failures` and `diagnostic_pending` individually, with heartbeat,
+boot sequence and build identity. An explicitly started collector may sample
+roughly once per minute and archive fresh responses/timeouts on the host. Never
+start collection or household operations implicitly. No per-error report is
+sent. Pending zero requires the admitted status bit2 clear to establish a drain;
+counters wrap and reset on boot, and the native counter may have an older baseline.
+The first valid durable crash journal is preserved; a distinct newer pending
+RAM crash is exported without the saved flag and may be lost on power failure.
+This policy reduces diagnostic flash writes, not proof of a physical freeze fix.
+
+
+### Experimental allocation diagnostics
+
+Some later schema12 candidates additionally track native high-priority and
+delayed request origins. Queue-slot provenance is bounded and missing coverage
+remains explicit. A native OSIF worker origin is not the original off-thread
+application caller. This instrumentation does not change allocation quotas or
+prove a fix for the household freeze.
+
+An explicitly selected schema12 diagnostic firmware can expose bounded
+allocation-refusal records through read-only Zigbee attributes. Keep the exact
+build identity and boot sequence with any export. The supplied diagnostic
+collector is an explicit research action; adding a converter or opening Vomar
+does not start it. The offline workspace command
+`python -m tools.firmware.read_allocation_trace capture.json --elf archived/zephyr.elf`
+checks framing, capture coherence and matched ELF identity without contacting a
+device. Missing data and skipped captures remain unresolved evidence.
+
+The recent SRAM commit is best effort across reset and can be lost on power
+loss or overwritten by a legacy loader/recovery heap. Its stored build/boot
+identify its origin; a record from another build is not a new installed-build
+fault. The full RAM history is volatile. These diagnostics do not establish a
+freeze fix or authorize a firmware installation. Household installations retain
+the owner's explicit target/package consent requirement.

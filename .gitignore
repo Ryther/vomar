@@ -1300,3 +1300,33 @@
 
 !/apps/android-updater/test-fixtures/synthetic-beta-update.zip
 !/apps/android-updater/test-fixtures/synthetic-beta-public.der
+
+# Firmware1.1.7 diagnostics and their synthetic checks.
+!/firmware/boards/allocation-trace.overlay
+!/firmware/boards/loop-trace.overlay
+!/firmware/diag_batch.cmake
+!/firmware/src/loop_trace.c
+!/firmware/src/loop_trace.h
+!/firmware/src/loop_trace_fatal.c
+!/firmware/src/loop_trace_zephyr.c
+!/firmware/src/loop_trace_zephyr.h
+!/firmware/src/zigbee_alloc_trace.c
+!/firmware/src/zigbee_alloc_trace.h
+!/firmware/src/zigbee_diag_batch.c
+!/firmware/src/zigbee_diag_batch.h
+!/tools/firmware/check_diag_batch_link.py
+!/tools/firmware/prepare_diag_batch_sdk.py
+!/tools/firmware/read_allocation_trace.py
+!/tools/firmware/tests/test_diag_batch_link.py
+!/tools/firmware/tests/test_diag_batch_sdk.py
+!/tools/firmware/tests/test_read_allocation_trace.py
+!/tools/firmware/tests/test_zigbee_alloc_provenance.py
+!/tools/firmware/tests/test_zigbee_alloc_trace.py
+!/tools/firmware/tests/test_zigbee_diag_batch.py
+!/tools/firmware/tests/zigbee_alloc_provenance_test.c
+!/tools/firmware/tests/zigbee_alloc_trace_test.c
+!/tools/firmware/tests/zigbee_diag_batch_test.c
+!/tools/firmware/build_guarded_main.py
+!/tools/firmware/tests/test_guarded_main_builder.py
+!/tools/firmware/prepare_compact_sdk.py
+!/tools/firmware/tests/test_compact_sdk.py

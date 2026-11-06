@@ -49,6 +49,16 @@ a MAIN upgrade, and a changed in-flight recovery or loader must be rejected.
 Existing artifact hashes, journals and exact installer checks retain their
 meaning. No software result supplies the physical qualification below.
 
+For the1.1.7 compact MAIN preparation, use the dedicated
+`tools.firmware.build_guarded_main` recipe and reviewed existing loader/pair
+bindings. It preserves recovery/loader components and requires the compact SDK
+member proof plus both ELF-bound link admissions. The ordinary typed builder
+compiles a different baseline and rebuilds every role. Preserve the admitted
+OTA carrier and its reconstructed signed MAIN together; ECDSA signatures can
+differ from an independently signed file with the same authenticated region.
+Native/decoder checks and owner acceptance of beta9 do not fill the thirteen
+physical fields for the new compact artifact.
+
 
 ## Complete immutable draft
 

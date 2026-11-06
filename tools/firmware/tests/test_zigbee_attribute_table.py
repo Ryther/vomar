@@ -26,10 +26,26 @@ typedef struct {uint16_t id;uint8_t type,access;uint16_t manufacturer;void *ptr;
 #include <stdio.h>
 #include "zb_vimar_custom.h"
 '''+context+'''
+uint8_t vimar_loop_trace_current[45], vimar_loop_trace_previous[4][33];
+uint32_t vimar_loop_trace_status;
+uint8_t vimar_alloc_trace_metadata[21], vimar_alloc_trace_first[49], vimar_alloc_trace_latest[49];
+uint8_t vimar_alloc_trace_history[32][49], vimar_alloc_trace_holders[14][41];
+uint8_t vimar_alloc_trace_previous[3][33];uint32_t vimar_alloc_trace_retained_status;
+uint32_t vimar_alloc_trace_dropped,vimar_alloc_trace_lifetime_gaps;
 static struct zigbee_context context;
 ZB_DECLARE_VIMAR_CUSTOM_ATTR_LIST(attrs,&context);
 static const uint16_t public_ids[]={'''+','.join(ids)+'''};
 int main(void){
+ assert(VIMAR_SCHEMA_VERSION==12);
+ assert(VIMAR_ATTR_DIAGNOSTIC_RAM_STATUS==0x090d);
+ assert(VIMAR_ATTR_DIAGNOSTIC_PENDING==0x0911);
+ for(uint16_t id=0x0920;id<=0x094d;++id){
+  unsigned found=0;
+  for(unsigned j=0;j<sizeof(attrs)/sizeof(attrs[0]);++j)if(attrs[j].id==id){
+   ++found;assert(attrs[j].access==1 && attrs[j].type==0x41 && attrs[j].ptr);
+  }
+  assert(found==1);
+ }
  for(unsigned i=0;i<sizeof(public_ids)/sizeof(public_ids[0]);i++){
   unsigned count=0;
   for(unsigned j=0;j<sizeof(attrs)/sizeof(attrs[0]);j++)if(attrs[j].id==public_ids[i]){
@@ -43,6 +59,6 @@ int main(void){
 }
 '''
    path=tmp/'table.c';path.write_text(harness);exe=tmp/'table'
-   p=subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-I',str(tmp),'-I',str(ROOT/'firmware/src'),str(path),'-o',str(exe)],capture_output=True,text=True);self.assertEqual(p.returncode,0,p.stderr)
+   p=subprocess.run(['cc','-DCONFIG_VIMAR_LOOP_TRACE=1','-DCONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH=1','-std=c11','-Wall','-Wextra','-Werror','-I',str(tmp),'-I',str(ROOT/'firmware/src'),str(path),'-o',str(exe)],capture_output=True,text=True);self.assertEqual(p.returncode,0,p.stderr)
    p=subprocess.run([str(exe)],capture_output=True,text=True);self.assertEqual(p.returncode,0,p.stderr)
 if __name__=='__main__':unittest.main()

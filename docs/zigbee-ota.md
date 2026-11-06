@@ -83,9 +83,16 @@ physical evidence scope; do not treat a carried helper as a qualified route.
 
 A public firmware label such as1.1.7-beta1 has a numeric MCUboot identity
 1.1.7+1 and Zigbee OTA version0x01010701. A later beta increments the build
-byte; a stable successor must use1.1.8 or later. Ordinary stable encodings
-remain unchanged. This beta identity does not change the distribution tag or
-qualify its image. Read the exact signed metadata and experimental acceptance.
+byte. Stable1.1.7 build0 sorts below beta9 and cannot be offered to it as a newer
+OTA image. Its preparation uses an explicitly reviewed Bluetooth MAIN-only
+transition; stable1.1.8 would sort above the beta series. Ordinary stable
+encodings remain unchanged. This beta identity does not change the distribution
+tag or qualify its image. Read the exact signed metadata and acceptance.
+
+The compact1.1.7 preparation restores staging from1.1.6 with recovery1.0.0,
+retaining the existing overlap/version checks. Decoder and native software
+controls do not establish physical OTA qualification or publication; consult
+the [current firmware preparation](../firmware/README.md#firmware117-preparation).
 
 Before a one-device beta, verify fresh source/recovery compatibility and the
 exact compressed staging budget against the installed bytes. Prepare an admitted

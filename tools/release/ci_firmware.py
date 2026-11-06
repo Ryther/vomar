@@ -25,5 +25,10 @@ def main():
         policy=Path(d)/'synthetic-source.json';policy.write_text(json.dumps({'allowedSourceSignedHashes':['3'*64],'legacyRecoverySignedHashes':['4'*64]}))
         env={**os.environ,'VIMAR_SIGNING_PRIVATE_KEY':str(key),'VIMAR_SIGNING_PUBLIC_KEY':str(public),'CMAKE_EXPORT_COMPILE_COMMANDS':'ON'}
         subprocess.run([os.environ['VIMAR_BUILD_PYTHON'],'-m','tools.firmware.build_typed_common_candidate','--output',str(out/'typed'),'--legacy-registry',str(registry),'--source-policy',str(policy),'--watchdog-handoff','paused-reset-before-main-v1','--multi-bond','--release-version',firmware_version()],cwd=ROOT,env=env,check=True)
+        subprocess.run([os.environ['VIMAR_BUILD_PYTHON'],'-m','tools.firmware.build_guarded_main',
+                        '--output',str(out/'guarded-main'),
+                        '--pair-bindings',str(out/'typed/generated/main-pair.h'),
+                        '--loader-bindings',str(out/'typed/generated/loader-contracts.h')],
+                       cwd=ROOT,env=env,check=True)
     print('DK compile only. Ephemeral signer; no official release or physical qualification.')
 if __name__=='__main__':main()

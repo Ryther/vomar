@@ -28,5 +28,5 @@ return 0;}
     c=tmp_path/'snapshot.c';c.write_text(harness);exe=tmp_path/'snapshot'
     subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror',*(['-DCONFIG_VIMAR_ZIGBEE_OWNERSHIP_GUARD=1'] if enabled else []),str(c),'-o',str(exe)],check=True)
     subprocess.run([str(exe)],check=True)
-    tick=re.search(r'static void application_tick\(.*?\n\}',source,re.S)[0]
+    tick=re.search(r'static void application_tick\([^;]*?\)\n\{.*?\n\}',source,re.S)[0]
     assert 'refresh_ownership_diagnostics();' in tick

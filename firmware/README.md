@@ -145,6 +145,32 @@ the option or an interval without assertions.
 
 ## Host checks and optional local integration checks
 
+`CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH` is a separate, default-disabled research
+option requiring the ownership guard and fault diagnostics. It batches pending
+allocation failure diagnostics modulo65536, retaining a separate queued flag
+when the pending count wraps to zero. The existing scheduler wrapper routes
+only the reviewed diagnostic callback; ordinary callbacks and original SDK
+assert/error handling remain intact.
+
+Configuration derives a build-local SDK archive by exporting one local callback
+symbol and rebinding the diagnostic dataset checkpoint to the RAM policy. The original pinned archive remains unchanged; all allocated member
+bytes and normalized relocations are checked before linking. The complete
+build runs `vimar_diag_batch_admission`, including the ownership audit, typed
+callback route, native delivery and volatile checkpoint path and unchanged32-entry queue.
+An ELF-only target does not run that complete admission.
+
+The first batch updates immediately, then at most once per SDK second measured
+from the preceding completed RAM checkpoint. A native alarm retains the pending
+batch during that interval so other scheduler work can run. Alarm admission
+failure remains an assertion; no callback or counter is silently dropped.
+Modulo totals are preserved. Statistics remain volatile and can be lost on reset
+or power loss. The schema11 section below describes the read-only export and
+limited crash persistence policy.
+A queue already full of unrelated work still follows
+the original fatal path. Host, native link and synthetic ARM checks do not
+establish the physical allocation-refusal cause or qualify a device update.
+No programming or device operation is attached to this option or its tests.
+
 From the repository root, with the Python dependencies listed in the
 [main README](../README.md), run:
 
@@ -336,11 +362,13 @@ before signing. The admission auditor is frozen alongside candidate sources.
 
 The visible application version is `1.1.7-beta1`; MCUboot stores `1.1.7+1`, and
 Zigbee OTA uses `0x01010701`. Beta numbers are canonical integers1..254. A beta2
-uses `+2`; the1.1.7 patch series is reserved for these experimental builds, and
-the stable successor must use1.1.8 or later. Existing stable triples retain
-build0. Reusing1.1.7 build0 for a stable successor would sort before these
-betas and is not a supported update path. These are native firmware identities;
-Release Please still owns distribution versions and tags.
+uses `+2`. Existing stable triples retain build0. A stable1.1.7 therefore sorts
+before1.1.7-beta9, even though it sorts after1.1.6. Beta9 cannot discover or
+install1.1.7 as a newer Zigbee OTA image. An explicitly reviewed Bluetooth
+MAIN-only package may admit that exact beta source; ordinary OTA version checks
+remain unchanged. A later stable1.1.8 sorts above the beta series. These are
+native firmware identities; Release Please still owns distribution versions
+and tags.
 
 Schema9 adds read-only diagnostics at0x0900..0x0906: `application_ticks`,
 `ownership_guard_enabled`, `ownership_local_requests`, `ownership_confirmations`,
@@ -362,11 +390,172 @@ An unreachable device has an uncertain outcome until independently reconciled.
 Neither a quiet interval nor a positive corrected-confirmation count proves the
 APS defect is eliminated. No household deployment follows from building a beta.
 
-The current guarded Vimar MAIN has a substantially larger reviewed trace-library
-footprint than1.1.6. Its locally prepared compressed bytes fail the exact split
+The guarded beta MAIN using the full trace SDK has a substantially larger
+footprint than1.1.6. That profile's compressed bytes fail the exact split
 OTA stage budget. The general typed builder keeps that check and fails closed;
 a successful native link is not a successful complete OTA candidate build.
 The one-device trial must use an explicitly admitted Bluetooth MAIN update and
 a separate reviewed return package, preserving the matching installed recovery.
 Do not upload the diagnostic compressed carrier to Zigbee2MQTT or infer that a
 smaller future destination can stage beside the larger running beta.
+
+## Firmware1.1.7 preparation
+
+The owner closed beta9 on2026-11-06 after satisfactory household use and requested
+native firmware1.1.7 with Zigbee OTA restored before publication. This records
+acceptance of observed behavior, not a proven historical freeze cause or completion
+of unperformed physical qualification. Allocation refusals do not count freezes;
+no complete physical-button freeze was documented for beta9.
+
+The compact preparation preserves the ownership adapters, volatile dataset31
+checkpointing and schema12 allocation provenance. It uses the same vendor SDK
+release with a smaller library profile: the pinned production LTO archive plus
+five opaque native boundaries. Three buffer/statistics members come from the
+reviewed trace derivation; NWK and scheduler members are compiled from production
+IR with the pinned GCC14.3.0, size optimization and no inlining. Their complete
+object hashes are fixed. Every other member remains byte-identical to production.
+Selected configuration and Green Power companion hashes are also checked.
+No SDK assertion or instruction is manually removed or patched.
+
+The continuous beta loop-timing recorder and unwired kernel console/banner are
+disabled. Application heartbeat, retained fatal capture, allocation diagnostics,
+SDK error handling and buffer protections remain. Recovery1.0.0 and loader bytes
+are preserved; this is a new runtime profile requiring its own validation.
+
+Build an unsigned MAIN from reviewed pair/loader headers with the pinned SDK:
+
+```sh
+python -m tools.firmware.build_guarded_main \
+  --output experiments/guarded-main-new \
+  --pair-bindings /path/to/reviewed/main-pair.h \
+  --loader-bindings /path/to/reviewed/loader-contracts.h
+```
+
+The recipe freezes source and binding inputs, creates a fresh source-bound build
+identity and runs `vimar_diag_batch_admission`. Both native link reports must
+pass for the exact ELF. Compact admission independently verifies all archive
+members against the two pinned vendor inputs and compiled-boundary hashes;
+ordinary production LTO without this derivation is rejected. Trace admission
+retains its existing checks. The general typed builder rebuilds all roles and
+its ordinary stable configuration does not reproduce this preserved-component
+MAIN recipe. The public compile lane exercises both profiles with synthetic
+bindings and an ephemeral signer.
+
+The measured compact preparation is about433KB signed and269KB compressed,
+with more than one4KiB page free in split staging from1.1.6 using REC1.0.0.
+The recovery1.0.0 verifier/decoder C reconstructs its authenticated image across
+the two logical staging spans on the host. Corrupt/truncated inputs and an
+insufficient destination fail before writes; an injected write error propagates.
+These are software controls, not a physical OTA or power-cut qualification.
+
+Beta9 still cannot stage this carrier beside its larger running image, and
+1.1.7 build0 is lower than beta9 build9. Its transition requires the explicitly
+reviewed Bluetooth return/update path; do not weaken normal OTA version or
+overlap checks. Prepared packages retain candidate purpose and false unperformed
+physical flags until the [release requirements](../docs/releasing.md) are met.
+Source preparation does not announce a published release or authorize installation.
+
+
+## Experimental RAM diagnostics (schema11)
+
+The explicitly enabled diagnostic-batch policy preserves the native SDK counter
+algorithm and moves its standalone dataset31 checkpoint into RAM. The pinned
+archive derivation changes one relocation binding in `zdo_diagnostics.o`;
+allocated instructions, assertions and unrelated persistence callers remain
+unchanged. The hook rejects any dataset other than31 and performs no allocation,
+radio send or flash operation. Network-wide saves may still serialize statistics
+incidentally. Settings and Zigbee security persistence retain their normal paths.
+
+Read0x090d..0x0911 individually for RAM status, allocation arrivals since boot,
+RAM checkpoints, native16-bit allocation counter and pending16-bit count.
+Status bits are1=volatile policy enabled and2=batch admitted. Pending zero with
+bit2 set can represent65536 arrivals; complete drain requires bit2 clear too.
+The application tick publishes a coherent RAM snapshot to these read-only
+attributes. Arrivals and checkpoint counts wrap at32bits; the SDK counter may
+start from an older dataset31 baseline. Compare fresh reads with boot sequence,
+heartbeat and exact build identity. No per-error RF reports are generated.
+An explicitly started host collector can read these fields about once per minute;
+timeouts and retained broker state are not successful samples.
+
+Crash capture stays in bounded retained SRAM. On healthy startup, only an absent
+local fault journal receives its first save, followed by independent readback.
+An existing valid journal is never replaced, and malformed or uncertain storage
+is preserved for investigation. A distinct newer retained crash is exposed with
+present/pending flags and without the saved flag, while the earlier durable
+journal stays intact. A pending RAM crash can be lost on power loss. This policy
+reduces diagnostic write pressure; it does not qualify a physical freeze fix.
+
+
+## Allocation-refusal acquisition (experimental schema12)
+
+Native high-priority and delayed requests also carry scoped allocation origins.
+A bounded16-slot shadow map follows the two native8-slot delayed queues by exact
+slot and7-byte signature, retaining the requester's returnPC across failed retries
+and queue wrap. Missing or inconsistent provenance stays unknown and invalidates
+older shadow generations; it never inherits the caller that frees a buffer. The
+native global/pool reset clears this map. This does not change quota, callback
+ordering, return values, counters or free behavior. The SDK derives seven symbol
+aliases while preserving allocated sections and normalized relocations.
+
+Requester scope is the native API call site. Off-thread application requests can
+originate in an OSIF worker; this evidence does not reconstruct their earlier
+application call stack. Schema12 encodings and return-PC interpretation remain
+unchanged; callback destinations are not substituted for requester addresses.
+
+
+The diagnostic-batch option also requires `boards/allocation-trace.overlay`,
+placed after the loop/fatal SRAM overlays. It reserves the independent256-byte
+window0x2003fc00..0x2003fd00. Existing loop/fatal windows remain unchanged.
+Native instructions, IT blocks, assertions, buffer quotas and scheduler capacity
+are preserved. A verified weak native getter and real-entry alias route SDK
+internal requests through the application entry recorder. SDK archive allocated
+bytes and normalized relocations remain identical.
+
+Read0x0912 for20-byte format1 metadata: bytes0..2 are1,48,32; byte3 low6bits is
+the retained record count, bit6 marks capture-counter wrap and bit7 marks any
+history overwrite. Little-endian32-bit words at4,8,12,16 are captured count,
+overwrites, missing-context count and holder-snapshot sequence. All counters are
+modulo32bits. Read0x0919/0x091a for skipped nested captures/lifetime observations.
+Captured plus skipped requests accounts for allocation arrivals; missing caller
+contexts and lifetime gaps remain explicit rather than fabricated.
+
+First/latest48-byte records are0x0913/0x0914;32 history slots are0x0920..0x093f,
+with slot `(sequence-1)%32`. Records contain sequence, sampled uptime, original
+caller returnPC, full32-bit requested size,40-bit storage bitmap, IN/OUT/context/
+storage flags, requested storage units when attempted, quotas, queue head/tail
+and oldest observed holder. Each standalone record READ is56 ZCL bytes, within
+the66-byte native limit. No report-on-error is enabled. Holder chunks0x0940..
+0x094d each contain a32-bit matching sequence followed by three12-byte entries
+(caller, sampled age, buffer ID, units, direction and coverage flags).
+
+Capture precedes diagnostic enqueue, including a queue-full fatal. Acquisition
+uses bounded RAM and never waits for another observer. Nested capture/update
+attempts are skipped and counted. Interrupt observations use cached thread
+uptime without calling the kernel clock; flags mark approximate times/ages.
+Incomplete lifetime coverage or a mutation during acquisition invalidates the
+corresponding semantic snapshot flags. These are observed allocation paths and
+holders, not proof of the physical cause of earlier freezes.
+
+Two CRC-protected alternating SRAM commits preserve a recent refusal with its
+own build ID and boot sequence. Repetitive updates are cooled to one per second;
+SDK fatal/assert/abort acquisition explicitly flushes the latest completed RAM
+record. A nested incomplete capture leaves the previous commit intact. Read
+0x0915..0x0917 for the frozen previous commit and0x0918 for status bits1 ready,
+2 previous present,4 foreign build,8 newer uncommitted RAM evidence and16 a
+nested commit skipped. The full32-entry history is volatile. SRAM, power loss,
+and legacy loader/REC heaps do not provide guaranteed retention; qualify the
+exact transition. No new flash persistence is performed.
+
+Export metadata, first/latest, the needed history slots, all holder chunks,
+previous chunks/status, both skipped counters and bracketed boot/build identity.
+Decode the saved object offline with:
+
+```sh
+python -m tools.firmware.read_allocation_trace capture.json --elf archived/zephyr.elf
+```
+
+Repeat `--elf` for a previous record's different archived build. The decoder
+rejects mixed epochs, inconsistent duplicate records, unsupported framing and
+CRC damage; it reports missing chunks explicitly. Caller return addresses are
+resolved only against matching embedded identities. A successful decoder or
+quiet observation interval is not physical freeze qualification.

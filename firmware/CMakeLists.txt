@@ -86,6 +86,17 @@ if(CONFIG_VIMAR_FAULT_DIAGNOSTICS)
         PROPERTIES COMPILE_OPTIONS -fno-lto)
 endif()
 
+if(CONFIG_VIMAR_LOOP_TRACE)
+    file(SHA256 "${ZEPHYR_BASE}/kernel/fatal.c" vimar_loop_fatal_sha)
+    if(NOT vimar_loop_fatal_sha STREQUAL "63a403ccdf73d0961e7a8d3b586e8a06908b1352ce226073434cdef5298fc30f" OR
+       CONFIG_RESET_ON_FATAL_ERROR)
+        message(FATAL_ERROR "Loop trace requires review of changed kernel fatal policy")
+    endif()
+    target_sources(app PRIVATE src/loop_trace.c src/loop_trace_zephyr.c src/loop_trace_fatal.c)
+    set_source_files_properties(src/loop_trace.c src/loop_trace_zephyr.c src/loop_trace_fatal.c
+        PROPERTIES COMPILE_OPTIONS -fno-lto)
+endif()
+
 if(CONFIG_VIMAR_HARDWARE)
     target_sources(app PRIVATE src/platform_io_vimar.c src/vimar_identity.c src/vimar_level.c src/vimar_led.c src/vimar_buttons.c src/vimar_attachment.c src/vimar_attachment_gpio.c
         research/src/research_output.c research/src/research_protocol.c research/src/research_handoff.c)
@@ -114,3 +125,4 @@ endif()
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/loader_contract/runtime.cmake)
 include(${CMAKE_CURRENT_SOURCE_DIR}/ownership_guard.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/diag_batch.cmake)
