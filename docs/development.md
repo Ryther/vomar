@@ -33,6 +33,12 @@ and reopens the complete configuration for the candidate revision.
 
 ## Persistent state and Git authentication
 
+Bash history is saved after each command in `/commandhistory/.bash_history` on
+the `vomar-bashhistory` volume and imported at each prompt in other terminals.
+Startup repairs the volume ownership for the current container user. Keep this
+volume when rebuilding. For terminals opened before a history configuration
+update, run `source ~/.bashrc` to activate it without losing in-memory commands.
+
 Named volumes preserve the SDK cache, Gradle cache, GitHub login and assistant
 state. Codex uses `/home/vscode/.codex` on `vimar-30805-codex`, preserving the
 existing project's session volume. Claude/OpenCode retain their separate paths

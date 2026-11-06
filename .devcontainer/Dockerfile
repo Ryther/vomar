@@ -11,5 +11,7 @@ RUN cd /opt/assistants && npm ci --omit=dev && codex --version && opencode --ver
 RUN apt-get update && apt-get install -y --no-install-recommends libpulse0 libnss3 libasound2t64 file jq less rsync shellcheck strace xauth xclip xxd bash-completion iproute2 lsof psmisc && rm -rf /var/lib/apt/lists/*
 RUN userdel -r ubuntu 2>/dev/null || true
 RUN groupadd --force plugdev && useradd --create-home --uid 1000 --shell /bin/bash vscode && echo 'vscode ALL=(root) NOPASSWD:ALL' > /etc/sudoers.d/vscode && mkdir -p /home/vscode/.config/gh /home/vscode/.cache/vomar /home/vscode/.local/share/vomar-agents /home/vscode/.codex /home/vscode/.gradle && chown -R vscode:vscode /home/vscode
+COPY .devcontainer/bash-history.sh /usr/local/share/vomar-bash-history.sh
+RUN echo '. /usr/local/share/vomar-bash-history.sh' >> /home/vscode/.bashrc
 USER vscode
 WORKDIR /workspaces/vomar

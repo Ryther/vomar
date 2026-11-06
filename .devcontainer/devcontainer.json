@@ -14,6 +14,7 @@
     "VIMAR_WEST": "/home/vscode/.cache/vomar/ncs-venv/bin/west"
   },
   "mounts": [
+    "source=vomar-bashhistory,target=/commandhistory,type=volume,consistency=cached",
     "source=vomar-sdk-cache,target=/home/vscode/.cache/vomar,type=volume",
     "source=vomar-agent-state,target=/home/vscode/.local/share/vomar-agents,type=volume",
     "source=vimar-30805-codex,target=/home/vscode/.codex,type=volume",
@@ -47,7 +48,7 @@
       "installDirectlyFromGitHubRelease": true
     }
   },
-  "postStartCommand": "python tools/dev/container_check.py",
+  "postStartCommand": "sudo chown -R \"$(id -u):$(id -g)\" /commandhistory && sudo chmod 700 /commandhistory && python tools/dev/container_check.py",
   "runArgs": [
     "--volume=${localEnv:VOMAR_USB_DEVICE:vomar-no-host-usb}:/dev/bus/usb",
     "--device-cgroup-rule=c 189:* rmw",

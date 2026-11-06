@@ -3,6 +3,7 @@
 !.devcontainer/
 .devcontainer/**
 !.devcontainer/Dockerfile
+!.devcontainer/bash-history.sh
 !.devcontainer/toolchain.json
 !.devcontainer/assistants/
 .devcontainer/assistants/**
