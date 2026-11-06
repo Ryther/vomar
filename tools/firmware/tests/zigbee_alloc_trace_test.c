@@ -76,21 +76,18 @@ zb_bool_t vimar_sdk_process_delayed_buf_entry_unsafe(void *entry,zb_bool_t dir)
 { (void)entry; (void)dir; return 0; }
 int main(int argc, char **argv)
 {
-    assert(argc == 2 || argc == 3);
+    assert(argc == 2);
     if (!strcmp(argv[1], "retained_write")) {
         vimar_alloc_trace_boot(31);
         assert(zb_buf_get_func(1, 1216) == 0);
         now++;
         assert(zb_buf_get_func(0, 44) == 0);
         vimar_alloc_trace_flush();
-        FILE *f = fopen(argv[2], "wb"); assert(f);
-        assert(fwrite((const void *)synthetic_retained, 1, 256, f) == 256);
-        assert(fclose(f) == 0); return 0;
+        assert(fwrite((const void *)synthetic_retained, 1, 256, stdout) == 256);
+        assert(fflush(stdout) == 0); return 0;
     }
     if (!strncmp(argv[1], "retained_read", 13)) {
-        FILE *f = fopen(argv[2], "rb"); assert(f);
-        assert(fread((void *)synthetic_retained, 1, 256, f) == 256);
-        assert(fclose(f) == 0);
+        assert(fread((void *)synthetic_retained, 1, 256, stdin) == 256);
         vimar_alloc_trace_boot(32);
         bool empty = !strcmp(argv[1], "retained_read_empty");
         assert((vimar_alloc_trace_retained_status & 2) == (empty ? 0 : 2));

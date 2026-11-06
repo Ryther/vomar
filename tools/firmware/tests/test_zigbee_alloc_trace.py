@@ -46,15 +46,14 @@ def test_compiled_allocation_capture(executable, case):
 def test_retained_commit_survives_new_process_and_rejects_damage(executable, tmp_path):
     import binascii
     import struct
-    saved = tmp_path / 'retained.bin'
-    result = subprocess.run([str(executable), 'retained_write', str(saved)], capture_output=True, text=True)
+    result = subprocess.run([str(executable), 'retained_write'], capture_output=True, cwd=tmp_path)
     assert result.returncode == 0, result.stderr
-    original = saved.read_bytes()
+    original = result.stdout
+    assert len(original) == 256
     for offset in (0, 128):
         assert struct.unpack_from('<I', original, offset + 80)[0] == binascii.crc32(original[offset:offset + 80])
     def read(data, case):
-        saved.write_bytes(data)
-        result = subprocess.run([str(executable), case, str(saved)], capture_output=True, text=True)
+        result = subprocess.run([str(executable), case], input=data, capture_output=True, cwd=tmp_path)
         assert result.returncode == 0, result.stderr
     read(original, 'retained_read')
     damaged = bytearray(original); damaged[128 + 84] = 0
@@ -67,3 +66,12 @@ def test_retained_commit_survives_new_process_and_rejects_damage(executable, tmp
         foreign[offset + 16] = 0xaa
         struct.pack_into('<I', foreign, offset + 80, binascii.crc32(foreign[offset:offset + 80]))
     read(foreign, 'retained_read_foreign')
+
+
+def test_recorder_rejects_file_arguments_without_overwriting_them(executable, tmp_path):
+    saved = tmp_path / 'retained.bin'
+    saved.write_bytes(b'untouched synthetic snapshot')
+    result = subprocess.run([str(executable), 'retained_write', str(saved)],
+                            capture_output=True, cwd=tmp_path)
+    assert result.returncode != 0
+    assert saved.read_bytes() == b'untouched synthetic snapshot'
