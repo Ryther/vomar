@@ -74,3 +74,66 @@ def test_failed_native_build_retains_status_and_frozen_inputs(tmp_path, monkeypa
     assert report['status'] == 'failed' and report['returncode'] == 7
     assert (out / 'source/firmware/main.c').exists()
     assert (out / 'generated/main-pair.h').read_bytes() == pair.read_bytes()
+
+
+def test_analysis_recorder_profile_is_frozen_separately_from_compact_main(tmp_path, monkeypatch):
+    from tools.release.ci_firmware import build_trace_main
+    _, pair, loader = fixture_source(tmp_path, monkeypatch)
+    # Exercise real configuration/hash preparation without invoking the SDK.
+    monkeypatch.setattr(builder, 'build', builder.prepare)
+    compact = builder.prepare(tmp_path / 'compact', pair, loader)
+    traced = build_trace_main(tmp_path / 'traced', pair, loader)
+    assert 'CONFIG_VIMAR_LOOP_TRACE=y\n' in (tmp_path / 'traced/main.conf').read_text()
+    assert traced['build_id'] != compact['build_id']
+    assert traced['inputs_sha256']['main.conf'] != compact['inputs_sha256']['main.conf']
+    after = builder.prepare(tmp_path / 'after', pair, loader)
+    assert (tmp_path / 'after/main.conf').read_bytes() == (tmp_path / 'compact/main.conf').read_bytes()
+    assert after['build_id'] == compact['build_id']
+
+
+def test_failed_analysis_profile_does_not_change_subsequent_compact_main(tmp_path, monkeypatch):
+    from tools.release.ci_firmware import build_trace_main
+    _, pair, loader = fixture_source(tmp_path, monkeypatch)
+    monkeypatch.setattr(builder, 'build', builder.prepare)
+    before = builder.prepare(tmp_path / 'before', pair, loader)
+    occupied = tmp_path / 'occupied'
+    occupied.mkdir()
+    with pytest.raises(ValueError):
+        build_trace_main(occupied, pair, loader)
+    after = builder.prepare(tmp_path / 'after', pair, loader)
+    assert after['build_id'] == before['build_id']
+    assert 'CONFIG_VIMAR_LOOP_TRACE=n\n' in (tmp_path / 'after/main.conf').read_text()
+
+
+def test_ci_entrypoint_prepares_both_compact_and_recorder_profiles(tmp_path, monkeypatch):
+    import sys
+    from tools.release import ci_firmware
+    source, _, _ = fixture_source(tmp_path, monkeypatch)
+    monkeypatch.setattr(ci_firmware, 'ROOT', source)
+    monkeypatch.setattr(builder, 'build', builder.prepare)
+    for name, value in {'VIMAR_NCS_WORKSPACE': str(tmp_path),
+                        'VIMAR_WEST': '/synthetic/west',
+                        'VIMAR_BUILD_PYTHON': '/synthetic/python'}.items():
+        monkeypatch.setenv(name, value)
+
+    def native_boundary(command, **kwargs):
+        if 'tools.firmware.build_typed_common_candidate' in command:
+            generated = Path(command[command.index('--output') + 1]) / 'generated'
+            generated.mkdir(parents=True)
+            for name in ('main-pair.h', 'loader-contracts.h'):
+                (generated / name).write_text('/* synthetic binding */\n')
+        elif 'tools.firmware.build_guarded_main' in command:
+            builder.prepare(*[command[command.index(flag) + 1] for flag in
+                              ('--output', '--pair-bindings', '--loader-bindings')])
+        elif '-c' in command:
+            with monkeypatch.context() as child:
+                child.setattr(sys, 'argv', command[1:2] + command[3:])
+                exec(command[2], {})
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(ci_firmware.subprocess, 'run', native_boundary)
+    out = tmp_path / 'ci-output'
+    monkeypatch.setattr(sys, 'argv', ['ci_firmware', '--output', str(out)])
+    ci_firmware.main()
+    assert 'CONFIG_VIMAR_LOOP_TRACE=n\n' in (out / 'guarded-main/main.conf').read_text()
+    assert 'CONFIG_VIMAR_LOOP_TRACE=y\n' in (out / 'loop-trace-main/main.conf').read_text()

@@ -13,6 +13,16 @@ def firmware_version():
     import re
     text=(ROOT/'firmware/VERSION').read_text();return '.'.join(re.search(name+r'\s*=\s*([0-9]+)',text)[1] for name in ('VERSION_MAJOR','VERSION_MINOR','PATCHLEVEL'))
 
+def build_trace_main(output, pair_bindings, loader_bindings):
+    """Compile the disabled recorder in a separate unsigned analysis profile."""
+    from tools.firmware import build_guarded_main as builder
+    compact = builder.CONFIG
+    try:
+        builder.CONFIG = compact.replace('CONFIG_VIMAR_LOOP_TRACE=n', 'CONFIG_VIMAR_LOOP_TRACE=y')
+        return builder.build(output, pair_bindings, loader_bindings)
+    finally:
+        builder.CONFIG = compact
+
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--output',type=Path,required=True);a=p.parse_args();out=a.output.absolute();out.mkdir(parents=True,exist_ok=True)
     ws=Path(os.environ['VIMAR_NCS_WORKSPACE']);west=Path(os.environ['VIMAR_WEST'])
@@ -30,5 +40,10 @@ def main():
                         '--pair-bindings',str(out/'typed/generated/main-pair.h'),
                         '--loader-bindings',str(out/'typed/generated/loader-contracts.h')],
                        cwd=ROOT,env=env,check=True)
+        # CodeQL must also extract product code disabled in the compact image.
+        subprocess.run([os.environ['VIMAR_BUILD_PYTHON'], '-c',
+                        'import sys; from tools.release.ci_firmware import build_trace_main; build_trace_main(*sys.argv[1:])',
+                        str(out/'loop-trace-main'), str(out/'typed/generated/main-pair.h'),
+                        str(out/'typed/generated/loader-contracts.h')], cwd=ROOT,env=env,check=True)
     print('DK compile only. Ephemeral signer; no official release or physical qualification.')
 if __name__=='__main__':main()

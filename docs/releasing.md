@@ -59,6 +59,10 @@ differ from an independently signed file with the same authenticated region.
 Native/decoder checks and owner acceptance of beta9 do not fill the thirteen
 physical fields for the new compact artifact.
 
+CI also compiles a separate unsigned recorder profile for complete C analysis.
+That profile enables loop tracing, remains a CI-only output and does not replace
+the compact MAIN or relax CodeQL's required-source check.
+
 
 ## Complete immutable draft
 
