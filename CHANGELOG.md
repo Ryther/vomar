@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/Ryther/vomar/compare/v1.1.0...v1.2.0) (2026-11-12)
+
+
+### Features
+
+* **firmware:** release guarded 1.1.7 production profile ([#44](https://github.com/Ryther/vomar/issues/44)) ([2583e65](https://github.com/Ryther/vomar/commit/2583e65f26ea37cd6d2e68e99211f9bfb7cefd42))
+
 ## [1.1.0](https://github.com/Ryther/vomar/compare/v1.0.0...v1.1.0) (2026-10-29)
 
 
