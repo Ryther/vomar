@@ -132,3 +132,14 @@ vimar_fault_build_id: .fill 16,1,0xab
     resolved=decoder.resolve_record(value,'ab'*16,elf)
     assert resolved['caller']['symbol']=='caller'
     with pytest.raises(ValueError,match='identity'):decoder.resolve_record(value,'cd'*16,elf)
+
+
+def test_production_profile_explicitly_reports_capture_unavailable():
+    state={'boot_sequence':1,'boot_sequence_after':1,'firmware_build_id':'ab'*16,
+           'allocation_trace_metadata':bytes([2])+bytes(19)}
+    state['allocation_trace_metadata']=state['allocation_trace_metadata'].hex()
+    value=decoder.decode_capture(state)
+    assert value['current']['available'] is False
+    assert value['current']['history']==[] and value['previous'] is None
+    state['allocation_trace_metadata']=(bytes([2,1])+bytes(18)).hex()
+    with pytest.raises(ValueError,match='disabled'):decoder.decode_capture(state)

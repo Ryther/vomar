@@ -84,6 +84,7 @@ def test_analysis_recorder_profile_is_frozen_separately_from_compact_main(tmp_pa
     compact = builder.prepare(tmp_path / 'compact', pair, loader)
     traced = build_trace_main(tmp_path / 'traced', pair, loader)
     assert 'CONFIG_VIMAR_LOOP_TRACE=y\n' in (tmp_path / 'traced/main.conf').read_text()
+    assert 'CONFIG_VIMAR_ALLOC_TRACE=y\n' in (tmp_path / 'traced/main.conf').read_text()
     assert traced['build_id'] != compact['build_id']
     assert traced['inputs_sha256']['main.conf'] != compact['inputs_sha256']['main.conf']
     after = builder.prepare(tmp_path / 'after', pair, loader)
@@ -137,3 +138,32 @@ def test_ci_entrypoint_prepares_both_compact_and_recorder_profiles(tmp_path, mon
     ci_firmware.main()
     assert 'CONFIG_VIMAR_LOOP_TRACE=n\n' in (out / 'guarded-main/main.conf').read_text()
     assert 'CONFIG_VIMAR_LOOP_TRACE=y\n' in (out / 'loop-trace-main/main.conf').read_text()
+
+
+def test_production_builder_disables_allocation_capture():
+    from tools.firmware.build_guarded_main import CONFIG
+    assert 'CONFIG_VIMAR_ALLOC_TRACE=n' in CONFIG.splitlines()
+
+
+def test_production_forwarders_preserve_native_results_without_capture(tmp_path):
+    from tools.firmware.tests.test_zigbee_ownership_sdk import SDK
+    root=Path(__file__).resolve().parents[3]
+    (tmp_path/'zboss_api.h').write_text(SDK+'\ntypedef uint8_t zb_bool_t;typedef uint16_t zb_uint16_t;typedef void (*zb_callback2_t)(zb_uint8_t,zb_uint16_t);\n')
+    harness=tmp_path/'forward.c'
+    harness.write_text(r'''#include <assert.h>
+#include <string.h>
+#include "zigbee_alloc_passthrough.c"
+static void cb(zb_uint8_t p){(void)p;}
+static void cb2(zb_uint8_t p,zb_uint16_t q){(void)p;(void)q;}
+zb_bufid_t vimar_sdk_buf_get_func(zb_bool_t in,zb_uint_t size){assert(in==1&&size==1216);return 19;}
+zb_bufid_t vimar_sdk_zb_buf_get_hipri_func(zb_bool_t in){assert(!in);return 23;}
+zb_ret_t vimar_sdk_zb_buf_get_out_delayed_func(zb_callback_t c){assert(c==cb);return -29;}
+zb_ret_t vimar_sdk_zb_buf_get_in_delayed_func(zb_callback_t c){assert(c==cb);return -42;}
+zb_ret_t vimar_sdk_zb_buf_get_out_delayed_ext_func(zb_callback2_t c,zb_uint16_t arg,zb_uint_t size){assert(c==cb2&&arg==0x1234&&size==2048);return -7;}
+zb_ret_t vimar_sdk_zb_buf_get_in_delayed_ext_func(zb_callback2_t c,zb_uint16_t arg,zb_uint_t size){assert(c==cb2&&arg==0x1234&&size==2048);return -8;}
+zb_bool_t vimar_sdk_process_delayed_buf_entry_unsafe(void *entry,zb_bool_t in){assert(entry==(void *)cb&&in==1);return 1;}
+int main(void){assert(vimar_alloc_trace_enabled==0);assert(zb_buf_get_func(1,1216)==19);assert(zb_buf_get_hipri_func(0)==23);assert(zb_buf_get_out_delayed_func(cb)==-29);assert(zb_buf_get_in_delayed_func(cb)==-42);assert(zb_buf_get_out_delayed_ext_func(cb2,0x1234,2048)==-7);assert(zb_buf_get_in_delayed_ext_func(cb2,0x1234,2048)==-8);assert(process_delayed_buf_entry_unsafe((void *)cb,1)==1);uint8_t expected[21]={20,2};vimar_alloc_trace_boot(4);vimar_alloc_trace_storage_result(8,1);vimar_alloc_trace_failure();vimar_alloc_trace_release(1);vimar_alloc_trace_pool_reset();vimar_alloc_trace_refresh();vimar_alloc_trace_flush();assert(!memcmp(expected,vimar_alloc_trace_metadata,21));return 0;}
+''')
+    binary=tmp_path/'forward'
+    subprocess.run(['cc','-std=c11','-Wall','-Wextra','-Werror','-fsanitize=undefined','-I',str(tmp_path),'-I',str(root/'firmware/src'),str(harness),'-o',str(binary)],check=True)
+    subprocess.run([str(binary)],check=True)

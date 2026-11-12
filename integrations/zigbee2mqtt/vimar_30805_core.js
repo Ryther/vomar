@@ -196,8 +196,11 @@ function decodeValue(metadata, value) {
     if (metadata.minSchema >= 11 && metadata.type === 'numeric' && (!Number.isInteger(value) || value < 0 || value > (metadata.zclType === 'u16' ? 0xffff : 0xffffffff))) return undefined;
     if (metadata.octetLength !== undefined) {
         if (!Buffer.isBuffer(value) || value.length !== metadata.octetLength) return undefined;
-        if (metadata.name === 'allocation_trace_metadata' &&
-            (value[0] !== 1 || value[1] !== 48 || value[2] !== 32 || (value[3]&63) > 32)) return undefined;
+        if (metadata.name === 'allocation_trace_metadata') {
+            const disabled = value[0] === 2 && value.subarray(1).every((byte) => byte === 0);
+            const captured = value[0] === 1 && value[1] === 48 && value[2] === 32 && (value[3]&63) <= 32;
+            if (!disabled && !captured) return undefined;
+        }
         return value.toString('hex');
     }
     if(metadata.name === 'firmware_build_id') return Buffer.isBuffer(value) && value.length===16 ? value.toString('hex') : undefined;

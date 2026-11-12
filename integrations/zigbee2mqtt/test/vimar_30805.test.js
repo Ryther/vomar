@@ -875,3 +875,15 @@ test('schema twelve allocation records are bounded read-only diagnostics', async
     assert.equal(internal.length,49);
     assert.equal(dynamic(device(12)).some(x=>x.name==='allocation_trace_history_0'),false);
 });
+
+
+test('production allocation metadata explicitly reports capture unavailable', () => {
+    const {custom}=build();
+    const receiver=custom.fromZigbee.find(x=>x.type.includes('readResponse'));
+    const disabled=Buffer.alloc(20);disabled[0]=2;
+    assert.equal(receiver.convert(null,{data:{2322:disabled}}).allocation_trace_metadata,disabled.toString('hex'));
+    for(let i=1;i<20;i++) {
+        const malformed=Buffer.from(disabled);malformed[i]=1;
+        assert.deepEqual(receiver.convert(null,{data:{2322:malformed}}),{});
+    }
+});

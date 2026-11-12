@@ -230,3 +230,11 @@ timestamps, missing contexts, skipped observations and overwritten history have
 explicit flags/counters. Previous SRAM commits keep their captured boot/build;
 they must not be attributed to a newer installed image. No flash write, reset,
 mode change or update follows from reading these attributes.
+
+### Allocation capture availability
+
+The production-profile 1.1.7 candidate disables extended allocation capture. Its
+20-byte `allocation_trace_metadata` is version 2 followed by zero bytes, indicating
+unavailable capture. The converter preserves that descriptor; it must not be
+interpreted as a successful zero-error observation. Version 1 remains the extended
+diagnostic profile. Use the converter generated with the corresponding candidate.

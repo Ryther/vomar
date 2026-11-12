@@ -45,6 +45,15 @@ config VIMAR_ZIGBEE_DIAGNOSTIC_BATCH
       checkpoints are volatile; other NVRAM callers retain normal persistence.
       Target timing and hardware behavior remain unqualified.
 
+config VIMAR_ALLOC_TRACE
+    bool "Experimental allocation provenance and history capture"
+    depends on VIMAR_ZIGBEE_DIAGNOSTIC_BATCH
+    default y
+    help
+      Acquire allocation callers, holder histories and retained SRAM records.
+      Disable for the production profile while preserving native forwarding,
+      ownership protection and counted allocation diagnostic batching.
+
 config VIMAR_LOOP_TRACE
     bool "Experimental retained application-loop observations"
     depends on VIMAR_FAULT_DIAGNOSTICS

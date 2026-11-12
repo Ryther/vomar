@@ -134,3 +134,8 @@ def test_original_diagnostic_flash_path_rejected(tmp_path, crosscompiler):
     report = audit.inspect(graph(tmp_path, crosscompiler, volatile=False))
     assert not report['passed']
     assert not report['checks']['statistics_use_volatile_checkpoint']
+
+
+def test_new_profile_admission_requires_marker(tmp_path, crosscompiler):
+    report=audit.inspect(graph(tmp_path,crosscompiler),require_profile=True)
+    assert not report['passed'] and not report['checks']['allocation_profile_marker_present']

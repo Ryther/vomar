@@ -149,6 +149,11 @@ compatible migration, never a reset/bond-deletion guess.
 
 ## Connection selector and Zigbee pairing
 
+The running MAIN application processes the button gesture. A hung MAIN may
+ignore it even when the independent recovery image is intact. A power cycle can
+be necessary and can erase diagnostics retained only in RAM; preserve available
+evidence before recommending it.
+
 Supporting MAIN/recovery components offer a five-second hold of both keys, then
 a 30-second violet/green selector. Release both keys. Up forgets the Zigbee network
 and opens a two-minute blue/violet pairing window; enable permit join on the
@@ -258,6 +263,17 @@ loader, signature, model, role and profile remain checked; each OTA operation
 then preserves the exact authenticated recovery it observed. This changes MAIN
 admission, not recovery firmware, and is not deployed or physically qualified
 merely because host tests pass. Verify the actual installed release first.
+
+## Production-profile candidate
+
+The production-intended 1.1.7 profile keeps ownership protection, RAM diagnostic
+batching, checked application-alarm rearming and minimal fatal records. Extended
+allocation capture, loop recording, SDK tracing, logging and console output are
+disabled; LTO is enabled. Allocation metadata format 2 with zero reserved bytes
+means capture is unavailable, not that no failures occurred. Use its matching
+converter. An intended production profile still requires exact-image physical
+qualification and explicit device-bound installation consent; do not present
+previous diagnostic DK observations as qualification of this image.
 
 ## Experimental ownership beta
 

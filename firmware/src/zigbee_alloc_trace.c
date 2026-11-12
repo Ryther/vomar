@@ -1,3 +1,4 @@
+const unsigned int vimar_alloc_trace_enabled = 1;
 /* Failure-time RAM acquisition; no allocation, flash, or radio calls. */
 #include "zigbee_alloc_trace.h"
 #include <stdbool.h>

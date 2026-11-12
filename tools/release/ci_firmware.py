@@ -18,7 +18,8 @@ def build_trace_main(output, pair_bindings, loader_bindings):
     from tools.firmware import build_guarded_main as builder
     compact = builder.CONFIG
     try:
-        builder.CONFIG = compact.replace('CONFIG_VIMAR_LOOP_TRACE=n', 'CONFIG_VIMAR_LOOP_TRACE=y')
+        builder.CONFIG = compact.replace('CONFIG_VIMAR_LOOP_TRACE=n', 'CONFIG_VIMAR_LOOP_TRACE=y').replace(
+            'CONFIG_VIMAR_ALLOC_TRACE=n', 'CONFIG_VIMAR_ALLOC_TRACE=y')
         return builder.build(output, pair_bindings, loader_bindings)
     finally:
         builder.CONFIG = compact

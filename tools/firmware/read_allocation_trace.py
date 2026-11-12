@@ -99,6 +99,14 @@ def decode_capture(state):
         raise ValueError('Mixed boot samples')
     version, size, capacity, count_flags, total, overwritten, unknown, holder_sequence = struct.unpack(
         '<BBBBIIII', blob(state, 'allocation_trace_metadata', 20))
+    if version == 2:
+        if any((size, capacity, count_flags, total, overwritten, unknown, holder_sequence)):
+            raise ValueError('Invalid disabled allocation profile')
+        return dict(current=dict(build_id=build.lower(), boot_sequence=boot,
+            available=False, metadata=dict(format=2, total=0), first=None,
+            latest=None, history=[], holders=[], complete='boot_sequence_after' in state,
+            attribution_complete=False, missing_attributes=[]), previous=None,
+            interpretation='Allocation history is not compiled into this production profile.')
     count = count_flags & 63
     wrapped, history_overwritten = bool(count_flags & 64), bool(count_flags & 128)
     if (version, size, capacity) != (1, 48, 32) or count > 32 or holder_sequence != total:

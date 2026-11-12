@@ -19,7 +19,7 @@ from prepare_diag_batch_sdk import (ARCHIVE_SHA, EXPORTED, RAM_CHECKPOINT, GETTE
 from prepare_compact_sdk import KIND as COMPACT_KIND, verify_report as verify_compact_report
 
 
-def inspect(path: Path) -> dict:
+def inspect(path: Path, *, require_profile: bool = False) -> dict:
     ownership = ownership_inspect(path)
     raw = path.read_bytes()
     elf = ELFFile(io.BytesIO(raw))
@@ -76,6 +76,7 @@ def inspect(path: Path) -> dict:
         allocation_seams.append(bool(public and native
             and public['st_info']['bind'] == native['st_info']['bind'] == 'STB_GLOBAL'
             and public['st_value'] != native['st_value'] and edge(name, real)))
+    trace_profile = data('vimar_alloc_trace_enabled')
     capacity = data('gc_sched_q_size')
     queue = definitions.get('gc_cb_q')
     checks = dict(
@@ -119,8 +120,20 @@ def inspect(path: Path) -> dict:
         queue_capacity_unchanged=bool(len(capacity) == 4 and struct.unpack('<I', capacity)[0] == 32
                                      and queue and queue['st_size'] == 236),
     )
+    if require_profile:
+        checks['allocation_profile_marker_present'] = bool(trace_profile)
+    if trace_profile:
+        checks['allocation_profile_valid'] = trace_profile in (bytes(4), b'\x01\x00\x00\x00')
+        if trace_profile == bytes(4):
+            checks['allocation_capture_storage_absent'] = not any(name in definitions for name in (
+                'vimar_alloc_trace_first', 'vimar_alloc_trace_latest',
+                'vimar_alloc_trace_history', 'vimar_alloc_trace_holders',
+                'vimar_alloc_trace_previous', 'retain_failure'))
+            checks['allocation_disabled_metadata'] = data('vimar_alloc_trace_metadata') == bytes([20, 2]) + bytes(19)
+    enabled = trace_profile != bytes(4)
     return dict(elf=str(path.resolve()), sha256=hashlib.sha256(raw).hexdigest(),
                 checks=checks, passed=all(checks.values()), references=references,
+                allocation_trace_enabled=enabled,
                 getterBypasses=getter_bypasses, hardwareQualified=False,
                 allocationBypasses=allocation_bypasses,
                 scope='Native link admission; not runtime or physical qualification')
@@ -133,7 +146,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--ar', type=Path)
     args = parser.parse_args()
-    report = inspect(args.elf)
+    report = inspect(args.elf, require_profile=True)
     sdk = json.loads(args.sdk_report.read_text())
     if sdk.get('kind') == COMPACT_KIND:
         try:

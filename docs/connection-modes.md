@@ -7,6 +7,11 @@ behavior. The desktop client has no equivalent pairing command yet.
 
 ## Use the wall buttons
 
+The MAIN application processes this gesture. If MAIN stops servicing its input
+loop, the selector can also stop responding; a separate recovery image does not
+provide an independent live button trigger. A power interruption may then be
+needed and can erase crash evidence held only in RAM.
+
 1. Hold **both buttons for five seconds**. The status LED alternates **violet and
    green**. This selector stays open for **30 seconds**.
 2. Release **both** buttons fully before choosing a mode.

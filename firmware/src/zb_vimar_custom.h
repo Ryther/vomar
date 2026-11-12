@@ -21,6 +21,7 @@
 void vimar_custom_cluster_init_server(void);
 #if defined(CONFIG_VIMAR_ZIGBEE_DIAGNOSTIC_BATCH)
 #include "zigbee_alloc_trace.h"
+#if !defined(VIMAR_ALLOC_TRACE_DISABLED)
 #define VIMAR_ALLOC_HISTORY_ATTRIBUTE(n) \
  VIMAR_RO(VIMAR_ATTR_ALLOCATION_TRACE_HISTORY_BASE+(n), ZB_ZCL_ATTR_TYPE_OCTET_STRING, vimar_alloc_trace_history[n]),
 #define VIMAR_ALLOC_HOLDER_ATTRIBUTE(n) \
@@ -81,6 +82,10 @@ void vimar_custom_cluster_init_server(void);
  VIMAR_ALLOC_HOLDER_ATTRIBUTE(11) \
  VIMAR_ALLOC_HOLDER_ATTRIBUTE(12) \
  VIMAR_ALLOC_HOLDER_ATTRIBUTE(13)
+#else
+#define VIMAR_ALLOCATION_TRACE_ATTRIBUTES \
+ VIMAR_RO(VIMAR_ATTR_ALLOCATION_TRACE_METADATA, ZB_ZCL_ATTR_TYPE_OCTET_STRING, vimar_alloc_trace_metadata),
+#endif
 #else
 #define VIMAR_ALLOCATION_TRACE_ATTRIBUTES
 #endif

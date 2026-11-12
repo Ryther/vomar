@@ -23,6 +23,12 @@ Zigbee pairing and an explicit authenticated Bluetooth request. See
 timeouts and compatibility limits. It requires a compatible signed MAIN/recovery contract;
 implementation alone does not establish physical qualification.
 
+The application loop uses an SDK alarm for its next invocation. Rejected alarm
+admission follows the existing checked-error capture and abort/reset path rather
+than silently abandoning local input and the selector. This protection neither
+provides an independent hardware watchdog nor establishes the cause or repair of
+an observed physical freeze.
+
 ## Build dependencies
 
 Use the pinned [development environment](../docs/development.md). From the
@@ -142,6 +148,20 @@ observed coverage of the repaired confirmation path. The SDK callback carries a
 buffer identifier; arbitrary delayed callbacks after allocation reuse remain
 outside the proven contract. No physical qualification follows from enabling
 the option or an interval without assertions.
+
+## Production-profile 1.1.7 candidate
+
+The guarded production builder enables ownership protection, counted RAM diagnostic
+batching and checked application-alarm rearming. It disables allocation provenance
+capture (`CONFIG_VIMAR_ALLOC_TRACE=n`), loop recording, SDK tracing, logging and
+console output, and enables LTO. Minimal fatal error records remain enabled.
+The allocation metadata descriptor is format 2 with zero reserved bytes: capture
+is unavailable, rather than a captured history containing zero failures.
+The diagnostic build keeps format 1 and its existing history attributes.
+
+This is a production-intended profile, not physical qualification. Native link
+admission and synthetic controls cannot establish household stability, RF behavior
+or recovery after an actual fault. Qualification applies to the exact image tested.
 
 ## Host checks and optional local integration checks
 

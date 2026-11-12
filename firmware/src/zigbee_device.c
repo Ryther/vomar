@@ -1086,6 +1086,7 @@ static void schedule_application_tick(void)
     zb_ret_t result = ZB_SCHEDULE_APP_ALARM(application_tick, 0,
         ZB_MILLISECONDS_TO_BEACON_INTERVAL(APPLICATION_TICK_INTERVAL_MS));
     vimar_loop_trace_event(LOOP_TRACE_REARM_RETURN, result);
+    ZB_ERROR_CHECK(result);
 }
 
 static void application_tick(zb_uint8_t unused)
