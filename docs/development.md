@@ -52,7 +52,10 @@ state has the separate `vomar-github-state` volume.
 `codex --version`, `opencode --version` and `claude --version` check installation
 without inference. The canonical user guide is `.agents/skills/vomar-guide`;
 Claude's alias and the hash-owned private fallback preserve user-customized
-skills. Existing session histories can be selected with `codex resume --all`
+skills. When the image provides `rea` and `claude`, the same step runs
+`rea setup --client claude_code --yes` on every container creation: REA keeps
+its backup of `~/.claude.json`, registers the `rea` MCP server and installs its
+skill. A failed registration is reported without blocking the workspace. Existing session histories can be selected with `codex resume --all`
 when the workspace path changes.
 
 ## Add tools in the same container
