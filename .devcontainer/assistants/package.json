@@ -3,9 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "dependencies": {
-    "@openai/codex": "0.164.0",
-    "@opencode/cli": "2.1.4",
-    "@anthropic-ai/claude-code": "2.1.310",
-    "@devcontainers/cli": "0.89.0"
+    "@openai/codex": "0.166.0",
+    "@opencode/cli": "2.2.5",
+    "@anthropic-ai/claude-code": "2.1.315",
+    "@devcontainers/cli": "0.90.0"
   }
 }
