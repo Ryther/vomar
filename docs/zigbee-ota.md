@@ -78,3 +78,27 @@ satisfy physical power-cut evidence. See
 Retain original-stock backups and matching restoration material privately.
 Stock restoration replaces custom firmware and has its own explicit review and
 physical evidence scope; do not treat a carried helper as a qualified route.
+
+## Individually reviewed firmware betas
+
+A public firmware label such as1.1.7-beta1 has a numeric MCUboot identity
+1.1.7+1 and Zigbee OTA version0x01010701. A later beta increments the build
+byte. Stable1.1.7 build0 sorts below beta9 and cannot be offered to it as a newer
+OTA image. Its preparation uses an explicitly reviewed Bluetooth MAIN-only
+transition; stable1.1.8 would sort above the beta series. Ordinary stable
+encodings remain unchanged. This beta identity does not change the distribution
+tag or qualify its image. Read the exact signed metadata and acceptance.
+
+The compact1.1.7 preparation restores staging from1.1.6 with recovery1.0.0,
+retaining the existing overlap/version checks. Decoder and native software
+controls do not establish physical OTA qualification or publication; consult
+the [current firmware preparation](../firmware/README.md#firmware117-preparation).
+
+Before a one-device beta, verify fresh source/recovery compatibility and the
+exact compressed staging budget against the installed bytes. Prepare an admitted
+fallback before installation; the ordinary OTA path rejects older versions.
+Use the schema9 read-only counters and application heartbeat described in the
+[firmware guide](../firmware/README.md#single-device-ownership-beta), with a
+matching external converter. No update is started by opening or refreshing a
+monitor. Retain fault evidence and stop/reconcile uncertain outcomes before any
+further write; never repeat an OTA automatically.

@@ -233,7 +233,7 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
                 val definition=row["definition"] as? JsonObject ?: return@mapNotNull null
                 val vendor=definition.string("vendor") ?: return@mapNotNull null
                 val model=definition.string("model") ?: return@mapNotNull null
-                if(!FleetPolicy.recognisesZigbee(vendor,model))return@mapNotNull null
+                val kind=FleetPolicy.zigbeeFirmwareKind(vendor,model) ?: return@mapNotNull null
                 val ieee=row.string("ieee_address")?.lowercase() ?: error("Missing IEEE")
                 require(ieee.matches(Regex("0x[0-9a-f]{16}")))
                 val name=row.string("friendly_name") ?: ieee
@@ -252,7 +252,6 @@ internal class ZigbeeBridge(private val connection:MqttConnection,private val sc
                     }
                 }
                 exposes(definition["exposes"])
-                val kind=if(vendor.equals("OpenVimar",true))FirmwareKind.CUSTOM else FirmwareKind.STOCK
                 val version=row.string("software_build_id")?.takeIf { it.isNotBlank() && it.length<=64 }
                 val record=DeviceRecord("zigbee:$network:$ieee",name,networkId=network,ieee=ieee,installedVersion=version,
                     firmwareKind=kind,capabilities=capabilities,observedAt=at,observationSource=ZigbeeDeviceMetadata.INVENTORY,followZigbeeName=true)

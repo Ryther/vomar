@@ -14,7 +14,7 @@ def sha(blob):
     return hashlib.sha256(blob).hexdigest()
 
 
-def signed_image(key, role=1, profile=2, damage=False):
+def signed_image(key, role=1, profile=2, damage=False, version=(0, 6, 0, 0)):
     payload = struct.pack('<II', 0x20010000, 0xc201) + bytes(56)
     target = b'VIMAR30805' + bytes([profile])
     fields = struct.pack('<HH', 0xa0, len(target)) + target + struct.pack('<HHB', 0xa1, 1, role)
@@ -22,7 +22,7 @@ def signed_image(key, role=1, profile=2, damage=False):
     header = bytearray(512)
     struct.pack_into('<I', header, 0, 0x96f3b83d)
     struct.pack_into('<HHII', header, 8, 512, len(protected), len(payload), 0)
-    struct.pack_into('<BBHI', header, 20, 0, 6, 0, 0)
+    struct.pack_into('<BBHI', header, 20, *version)
     region = bytes(header) + payload + protected
     digest = hashlib.sha256(region).digest()
     signature = key.sign(digest, ec.ECDSA(utils.Prehashed(hashes.SHA256())))
@@ -84,7 +84,8 @@ def attach_ota(args,key,damage=None):
     entries=struct.pack('<HH',1,32)+keyhash+struct.pack('<HH',0x10,32)+digest+struct.pack('<HH',0x22,len(signature))+signature
     compressed=region+struct.pack('<HH',0x6907,len(entries)+4)+entries
     total=66+len(compressed)
-    ota=struct.pack('<IHHHHHIH32sIHHHI',0x0beef11e,0x100,60,4,0xfff1,0x3085,0x00060000,2,b'Vimar30805 signed compressed OTA',total,1,1,0,len(compressed))+compressed
+    from tools.firmware.package_zigbee_ota import ota_version
+    ota=struct.pack('<IHHHHHIH32sIHHHI',0x0beef11e,0x100,60,4,0xfff1,0x3085,ota_version(parsed['version']),2,b'Vimar30805 signed compressed OTA',total,1,1,0,len(compressed))+compressed
     if damage=='header':ota=ota[:10]+b'\x00\x00'+ota[12:]
     path=args['release'].parent/'main.ota';path.write_bytes(ota)
     desc=json.loads(args['release'].read_text());desc['zigbeeOta']={'path':'main.ota','sha256':sha(ota)}
@@ -244,3 +245,25 @@ def test_common_images_match_strict_firmware_key_tlv_and_capacity_contract(relea
     args['release'].write_text(json.dumps(descriptor))
     with pytest.raises(ValueError): package(args)
     assert not args['output'].exists()
+
+
+def test_authenticated_beta_component_and_carrier_preserve_exact_numeric_versions(release):
+    from tools.firmware.package_common_android_update import verify_zigbee_carrier, verify_component
+    args,key=release
+    main=signed_image(key,version=(1,1,7,1))
+    root=args['release'].parent;(root/'main.signed.bin').write_bytes(main)
+    desc=json.loads(args['release'].read_text());desc['main']['sha256']=sha(main)
+    qpath=root/'qualification.json';q=json.loads(qpath.read_text());q['components']['main']=sha(main)
+    qpath.write_text(json.dumps(q));desc['qualification']['sha256']=sha(qpath.read_bytes());args['release'].write_text(json.dumps(desc))
+    carrier=attach_ota(args,key)
+    metadata=verify_component(main,key.public_key(),'main')
+    assert metadata['version']=='1.1.7+1' and metadata['wireVersion']==[1,1,7,1]
+    assert verify_zigbee_carrier(carrier,main,key.public_key(),metadata)['fileVersion']==0x01010701
+    package(args)
+    with zipfile.ZipFile(args['output']) as zipped:
+        raw=zipped.read('manifest.json');key.public_key().verify(zipped.read('manifest.sig'),raw,ec.ECDSA(hashes.SHA256()))
+        manifest=json.loads(raw);assert manifest['main']['version']=='1.1.7+1'
+        assert manifest['zigbeeOta']['fileVersion']==0x01010701
+    changed=bytearray(carrier);struct.pack_into('<I',changed,14,0x01010700)
+    with pytest.raises(ValueError,match='version'):
+        verify_zigbee_carrier(bytes(changed),main,key.public_key(),metadata)

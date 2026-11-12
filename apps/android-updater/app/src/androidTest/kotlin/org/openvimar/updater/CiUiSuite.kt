@@ -11,6 +11,7 @@ class CiUiSuite : TestSuite() {
             addTestSuite(InitialInstallUiTest::class.java)
             addTestSuite(InitialInstallAndroidAdapterTest::class.java)
             addTestSuite(BleTrialUiTest::class.java)
+            addTestSuite(OriginalRestoreUiTest::class.java)
             addTestSuite(AutomaticConnectionUiTest::class.java)
             addTestSuite(AutomaticNetworkConnectionTest::class.java)
             addTestSuite(NativeFleetUiTest::class.java)

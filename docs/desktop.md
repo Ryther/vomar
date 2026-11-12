@@ -96,3 +96,15 @@ firmware or cancel a submitted remote OTA request.
 For source builds, GUI display setup and pinned runtime packaging, use
 [Development](development.md#isolated-native-desktop-runtime). For failures, use
 [Troubleshooting](troubleshooting.md).
+
+## Firmware beta version admission
+
+The source accepts authenticated nonzero MCUboot build counters, for example
+1.1.7+1 for firmware labelled1.1.7-beta1. A stable build with counter0 retains
+its ordinary three-part metadata. Header, manifest and optional Zigbee envelope
+versions must still match exactly; all signatures and hash/role/model checks
+remain required. Earlier shipped clients can reject these beta counters before
+a device write. Updating client source does not update an installed application.
+Use a client build containing this admission change and the explicit single-device
+trial route; qualification candidates remain rejected by ordinary/fleet admission.
+A prepared trial/return ZIP does not demonstrate physical Bluetooth recovery.

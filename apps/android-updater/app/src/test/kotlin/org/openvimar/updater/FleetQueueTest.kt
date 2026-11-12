@@ -88,6 +88,19 @@ class FleetQueueTest {
         assertEquals(FleetJobState.BLOCKED,duplicate.jobs.single().state)
         assertTrue(duplicate.jobs.single().message.contains("open",ignoreCase=true))
     }
+    @Test fun aliasesWithinOneGroupCannotCreateMultipleIntentsForTheSamePhysicalDimmer()=runBlocking {
+        val original=device("1","net-a")
+        val aliases=listOf(original.copy(id="same-uid",networkId="net-b",ieee="0x2"),
+            original.copy(id="same-zigbee",uid=listOf("87654321","00000002")))
+        for(alias in aliases){
+            var executions=0
+            val q=FleetQueue(this,Memory(),FleetJobExecutor{_,_->executions++;FleetExecutionResult(FleetJobState.VERIFIED,"Observed return")})
+            val group=q.createGroup(listOf(original,alias),release,FleetMode.NETWORK_PARALLEL)
+            assertEquals(FleetJobState.BLOCKED,group.jobs[1].state)
+            q.start(group.id);await{!q.hasActiveWork()}
+            assertEquals("Only one operation may be admitted for a physical dimmer",1,executions)
+        }
+    }
     @Test fun manualBleEvidenceMustMatchJobCheckpointUidTargetAndRecoveryBeforeOwnerConfirmation()=runBlocking {
         val q=FleetQueue(this,Memory(),FleetJobExecutor{_,_->error("No firmware operation expected")})
         val device=device("1");val g=q.createGroup(listOf(device),release,FleetMode.SEQUENTIAL);val id=g.jobs.single().id

@@ -8,7 +8,7 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 EXPECTED_CLASSES = tuple('org.openvimar.updater.' + name for name in (
-    'InitialInstallUiTest', 'InitialInstallAndroidAdapterTest', 'BleTrialUiTest',
+    'InitialInstallUiTest', 'InitialInstallAndroidAdapterTest', 'BleTrialUiTest', 'OriginalRestoreUiTest',
     'AutomaticConnectionUiTest', 'AutomaticNetworkConnectionTest',
     'NativeFleetUiTest', 'SavedConnectionPersistenceTest', 'MqttCleartextPolicyTest',
 ))

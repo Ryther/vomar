@@ -77,7 +77,7 @@ def test_sdk_source_tag_does_not_reclassify_asserts():
     assert decoded['kind']=='assert' and 'severity' not in decoded
 
 @pytest.mark.parametrize('offset,fmt,value',[
-    (4,'H',2),(6,'H',127),(8,'I',0),(32,'I',10),
+    (4,'H',3),(6,'H',127),(8,'I',0),(32,'I',10),
     (32,'I',30),(32,'I',0x4000e),(112,'I',1),(124,'I',0),
 ])
 def test_sdk_tags_do_not_relax_record_admission(offset,fmt,value):

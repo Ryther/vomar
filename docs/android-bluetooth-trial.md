@@ -60,3 +60,29 @@ Reports include bounded connection/OS metadata and recorded outcomes; keep them
 private and review them before sharing. They are separate from original backups.
 For a legacy target that cannot pass inspection, consult the
 [legacy compatibility reference](legacy-zigbee-bluetooth-bridge.md).
+
+## Android1.1.5 and the guarded1.1.7-beta1 trial
+
+Android1.1.5/code35 accepts authenticated nonzero firmware build counters such
+as1.1.7+1. Install the signed APK over the existing Vomar app; preserve its data,
+originals and Bluetooth bonds. Wait for any existing device update to finish
+before entering Bluetooth or starting another review.
+
+For a device retaining recovery1.0.0,
+MAIN1.1.6 does not imply recovery1.1.6. Use the trial and return ZIPs matched to
+the exact installed recovery. Fresh inspection must admit the live MAIN/REC
+hashes and loader identity before either transfer. The generic REC1.1.6-bound
+reference ZIPs are not the packages for a retained REC1.0.0 installation.
+
+To return, enter ordinary Bluetooth service, open the selected device's Update
+firmware flow, choose the separately prepared MAIN1.1.6 return ZIP, inspect again
+and approve the new operation. It authorizes only this beta's signed source and
+preserves the matching recovery/loader. This is a MAIN update, not a stock-original
+restoration. Do not select a lower-version Zigbee OTA file as a rollback.
+
+If MAIN is unresponsive, the ordinary five-second selector might be unavailable.
+The recovery entrance GPIO is evaluated by the installed bootloader at startup;
+verify that exact loader and the physical entry method before relying on it.
+A source-verified button mapping is not a completed physical recovery test.
+Prepared return bytes do not provide automatic rollback or prove lamp/settings
+continuity. The Bluetooth path and recovery entry remain physically unqualified.

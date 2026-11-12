@@ -73,3 +73,42 @@ def test_recovery_cannot_reuse_profile2_with_an_incompatible_build(field):
  config={**RECOVERY_ABI_CONFIG,field:'y' if field=='CONFIG_DISABLE_FLASH_PATCH' else 'unsupported'}
  with pytest.raises(ValueError,match='recovery contract'):
   validate(config)
+
+
+def test_beta_public_label_keeps_numeric_image_and_wire_versions(tmp_path):
+    from tools.firmware.package_zigbee_ota import ota_version
+    first = builder.candidate_versions(WATCHDOG_HANDOFF, True, '1.1.7-beta1')
+    second = builder.candidate_versions(WATCHDOG_HANDOFF, True, '1.1.7-beta2')
+    assert set(first.values()) == {'1.1.7+1'}
+    assert set(second.values()) == {'1.1.7+2'}
+    assert ota_version('1.1.6') < ota_version(first['main']) < ota_version(second['main']) < ota_version('1.1.8')
+    path = tmp_path/'VERSION'
+    builder.version(path, first['main'], extra='beta1')
+    assert 'VERSION_TWEAK = 1\nEXTRAVERSION = beta1\n' in path.read_text()
+
+
+@pytest.mark.parametrize('value', ['1.1.7-beta0', '1.1.7-beta01', '1.1.7-beta255', '1.1.7-beta1\n', '1.1.7-beta.1'])
+def test_beta_labels_are_bounded_and_unambiguous(value):
+    with pytest.raises(ValueError, match='version'):
+        builder.candidate_versions(WATCHDOG_HANDOFF, True, value)
+
+
+def test_guard_requires_explicit_beta_before_creating_output(tmp_path):
+    with pytest.raises(ValueError, match='beta'):
+        builder.build(tmp_path/'absent', Path('unused'), Path('unused'), WATCHDOG_HANDOFF, True,
+                      release_version='1.1.7', ownership_guard=True)
+    assert not (tmp_path/'absent').exists()
+
+
+@pytest.mark.parametrize('damage', [None, 'failed', 'stale', 'missing'])
+def test_ownership_admission_binds_the_actual_elf(tmp_path, damage):
+    import hashlib,json
+    (tmp_path/'zephyr').mkdir();elf=tmp_path/'zephyr/zephyr.elf';elf.write_bytes(b'fixture ELF')
+    report={'passed':damage!='failed','sha256':hashlib.sha256(elf.read_bytes()).hexdigest()}
+    if damage=='stale':report['sha256']='0'*64
+    if damage!='missing':(tmp_path/'ownership-link-audit.json').write_text(json.dumps(report))
+    if damage:
+        with pytest.raises(ValueError,match='ownership'):
+            builder.require_ownership_main(tmp_path)
+    else:
+        assert builder.require_ownership_main(tmp_path)['elf_sha256']==report['sha256']

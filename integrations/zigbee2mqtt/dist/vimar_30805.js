@@ -135,6 +135,30 @@ const ATTRIBUTE_METADATA = Object.freeze([
     diagnostic('fault_diagnostic_status', 'faultDiagStatus', 0x0800, 'numeric', {minSchema: 7, zclType: 'u32', label: 'Stato diagnostica riavvii', description: 'Bit: 1 cattura pronta; 2 rapporto presente; 4 salvato; 8 errore memoria; 16 cattura precedente da conservare; 32 rapporto di una build precedente, non attribuito alla build corrente.'}),
     ...Array.from({length: 8}, (_, i) => diagnostic(`fault_diagnostic_${i}`, `faultDiag${i}`, 0x0801+i, 'text',
         {minSchema: 7, zclType: 'octetStr', internal: true, description: 'Frammento diagnostico di sola lettura, formato binario versionato con CRC e identità build.'})),
+    diagnostic('application_ticks', 'applicationTicks', 0x0900, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Application heartbeat', description: 'Application-loop counter; compare fresh reads within the same boot. Wraps at 32 bits.'}),
+    diagnostic('ownership_guard_enabled', 'ownershipGuardEnabled', 0x0901, 'binary', {minSchema: 9, zclType: 'bool', valueOn: true, valueOff: false, label: 'Experimental ownership guard'}),
+    diagnostic('ownership_local_requests', 'ownershipLocalRequests', 0x0902, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Guard local requests'}),
+    diagnostic('ownership_confirmations', 'ownershipConfirmations', 0x0903, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Guard confirmations'}),
+    diagnostic('ownership_restored_confirmations', 'ownershipRestoredConfirmations', 0x0904, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Guard corrected confirmations', description: 'A positive delta proves this path ran; it does not establish an APS fix.'}),
+    diagnostic('ownership_storage_errors', 'ownershipStorageErrors', 0x0905, 'numeric', {minSchema: 9, zclType: 'u32', label: 'Guard storage errors'}),
+    diagnostic('firmware_build_id', 'firmwareBuildId', 0x0906, 'text', {minSchema: 9, zclType: 'octetStr', label: 'Firmware diagnostic build identity', description: 'Exact diagnostic identity; all zeros means unavailable.'}),
+    diagnostic('diagnostic_ram_status', 'diagnosticRamStatus', 0x090d, 'numeric', {minSchema: 11, zclType: 'u32', label: 'RAM diagnostic status', description: 'Bits: 1 volatile policy enabled; 2 allocation batch admitted. Pending zero alone does not prove a drain.'}),
+    diagnostic('allocation_failures', 'allocationFailures', 0x090e, 'numeric', {minSchema: 11, zclType: 'u32', label: 'Allocation failures since boot', description: 'RAM arrivals, wrapping at 32 bits. Compare fresh reads with boot sequence and build identity.'}),
+    diagnostic('diagnostic_checkpoints', 'diagnosticCheckpoints', 0x090f, 'numeric', {minSchema: 11, zclType: 'u32', label: 'RAM diagnostic checkpoints', description: 'Volatile SDK statistics updates; not flash writes or a count of fatal errors.'}),
+    diagnostic('sdk_allocation_failures', 'sdkAllocationFailures', 0x0910, 'numeric', {minSchema: 11, zclType: 'u16', label: 'SDK allocation failure counter', description: 'Native counter modulo65536; may include an older persisted baseline.'}),
+    diagnostic('diagnostic_pending', 'diagnosticPending', 0x0911, 'numeric', {minSchema: 11, zclType: 'u16', label: 'Pending allocation failures', description: 'Modulo65536. Read with RAM status: admitted plus zero can represent65536 arrivals.'}),
+    diagnostic('allocation_trace_metadata', 'allocationTraceMetadata', 0x0912, 'text', {minSchema: 12, zclType: 'octetStr', octetLength: 20, label: 'Allocation trace metadata', description: 'Versioned RAM history counts, overwritten records and missing caller context. Read with boot/build identity.'}),
+    diagnostic('allocation_trace_first', 'allocationTraceFirst', 0x0913, 'text', {minSchema: 12, zclType: 'octetStr', octetLength: 48, label: 'First allocation refusal', description: 'Failure-time raw record. Decode against the matching archived firmware ELF.'}),
+    diagnostic('allocation_trace_latest', 'allocationTraceLatest', 0x0914, 'text', {minSchema: 12, zclType: 'octetStr', octetLength: 48, label: 'Latest allocation refusal', description: 'Caller, request, pool, queue and oldest holder; not a physical root-cause claim.'}),
+    ...Array.from({length: 3}, (_, i) => diagnostic(`allocation_trace_previous_${i}`, `allocationTracePrevious${i}`, 0x0915+i, 'text',
+        {minSchema: 12, zclType: 'octetStr', octetLength: 32, internal: true})),
+    diagnostic('allocation_trace_retained_status', 'allocationTraceRetainedStatus', 0x0918, 'numeric', {minSchema: 12, zclType: 'u32', label: 'Retained allocation trace status', description: 'Bits: 1 ready, 2 previous commit, 4 foreign build, 8 newer RAM record, 16 nested commit skipped. SRAM retention is best effort.'}),
+    diagnostic('allocation_trace_dropped', 'allocationTraceDropped', 0x0919, 'numeric', {minSchema: 12, zclType: 'u32', label: 'Skipped allocation captures', description: 'Nested acquisition attempts skipped to preserve an in-progress snapshot; modulo32-bit count.'}),
+    diagnostic('allocation_trace_lifetime_gaps', 'allocationTraceLifetimeGaps', 0x091a, 'numeric', {minSchema: 12, zclType: 'u32', label: 'Buffer lifetime observation gaps', description: 'Skipped nested lifetime observations. Affected holder snapshots are marked incomplete.'}),
+    ...Array.from({length: 32}, (_, i) => diagnostic(`allocation_trace_history_${i}`, `allocationTraceHistory${i}`, 0x0920+i, 'text',
+        {minSchema: 12, zclType: 'octetStr', octetLength: 48, internal: true})),
+    ...Array.from({length: 14}, (_, i) => diagnostic(`allocation_trace_holders_${i}`, `allocationTraceHolders${i}`, 0x0940+i, 'text',
+        {minSchema: 12, zclType: 'octetStr', octetLength: 40, internal: true})),
 ]);
 
 const ATTRIBUTE_IDS = Object.freeze(Object.fromEntries(ATTRIBUTE_METADATA.map((item) => [item.name, item.ID])));
@@ -150,7 +174,7 @@ function schemaVersion(device) {
 const toPercent = (value) => Math.round(value * 1000 / 254) / 10;
 function publicState(metadata, value) {
     const decoded=decodeValue(metadata,value);
-    if((metadata.name==='ota_contract' || metadata.internal) && decoded===undefined)return {};
+    if(decoded===undefined)return {};
     const result = {[metadata.name]: decoded};
     if (PERCENT_SETTINGS.includes(metadata.name)) result[`${metadata.name}_percent`] = toPercent(value);
     if (metadata.name === 'timer_duration_s') result.timer_1_duration_s = value;
@@ -173,6 +197,17 @@ function encodeValue(metadata, value) {
 }
 
 function decodeValue(metadata, value) {
+    if (metadata.minSchema >= 11 && metadata.type === 'numeric' && (!Number.isInteger(value) || value < 0 || value > (metadata.zclType === 'u16' ? 0xffff : 0xffffffff))) return undefined;
+    if (metadata.octetLength !== undefined) {
+        if (!Buffer.isBuffer(value) || value.length !== metadata.octetLength) return undefined;
+        if (metadata.name === 'allocation_trace_metadata') {
+            const disabled = value[0] === 2 && value.subarray(1).every((byte) => byte === 0);
+            const captured = value[0] === 1 && value[1] === 48 && value[2] === 32 && (value[3]&63) <= 32;
+            if (!disabled && !captured) return undefined;
+        }
+        return value.toString('hex');
+    }
+    if(metadata.name === 'firmware_build_id') return Buffer.isBuffer(value) && value.length===16 ? value.toString('hex') : undefined;
     if(metadata.internal) return Buffer.isBuffer(value) && value.length===32 ? value.toString('hex') : undefined;
     if (metadata.name === 'ota_contract') {
         if (!Buffer.isBuffer(value) || value.length !== 43 || value[0] !== 1 || value[1] !== 2 || ![0, 1].includes(value[2])) return undefined;

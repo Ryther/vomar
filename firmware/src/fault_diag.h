@@ -11,7 +11,7 @@
 #define FAULT_DIAG_SLOT_CAUSE 0u
 #define FAULT_DIAG_SLOT_ABORT 1u
 #define FAULT_DIAG_MAGIC UINT32_C(0x46444941)
-#define FAULT_DIAG_VERSION 1u
+#define FAULT_DIAG_VERSION 2u
 #define FAULT_DIAG_COMMIT UINT32_C(0x434f4d54)
 
 enum fault_diag_kind {
@@ -38,6 +38,13 @@ enum fault_diag_valid {
     FAULT_DIAG_VALID_REPORT_LENGTH = 1u << 15,
     FAULT_DIAG_VALID_REPORT_STATUS = 1u << 16,
     FAULT_DIAG_VALID_PHASE = 1u << 17,
+    FAULT_DIAG_VALID_QUEUE = 1u << 18,
+    FAULT_DIAG_VALID_QUEUE_HEAD = 1u << 19,
+    FAULT_DIAG_VALID_QUEUE_TAIL = 1u << 20,
+};
+
+struct fault_diag_queue {
+    uint32_t capacity, used, read_index, write_index, head_callback, tail_callback;
 };
 
 /* Native little-endian 32-bit wire layout; CRC32/IEEE covers bytes 0..119.
@@ -51,7 +58,11 @@ struct fault_diag_record {
     uint8_t build_id[FAULT_DIAG_BUILD_ID_SIZE];
     uint32_t valid, kind, uptime_ms, source;
     int32_t line, error;
-    uint32_t lr, msp, psp, ipsr, control, gpregret;
+    union {
+        struct { uint32_t lr, msp, psp, ipsr, control, gpregret; };
+        /* Format2 ERROR only; queued callbacks never identify a failed attempt. */
+        struct fault_diag_queue queue;
+    };
     uint32_t signal;
     int32_t signal_status;
     uint32_t stage, role, report_kind, report_length;
@@ -94,6 +105,9 @@ bool fault_diag_capture_assert(struct fault_diag_context *, uint32_t file_id,
                                int32_t line);
 bool fault_diag_capture_error(struct fault_diag_context *, uint32_t site,
                               int32_t line, int32_t rc);
+bool fault_diag_capture_queue_error(struct fault_diag_context *, uint32_t site,
+                                    int32_t line, int32_t rc,
+                                    const struct fault_diag_queue *, uint32_t valid);
 bool fault_diag_capture_abort(struct fault_diag_context *, uint32_t lr,
                               uint32_t msp, uint32_t psp, uint32_t ipsr,
                               uint32_t control, uint32_t gpregret);

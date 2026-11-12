@@ -50,7 +50,7 @@ class ZigbeeFleetExecutorTest {
     private suspend fun bridge(scope:CoroutineScope,connection:FakeConnection):ZigbeeBridge {
         val bridge=ZigbeeBridge(connection,scope,requestTimeoutMs=100,proofSampleDelayMs=0)
         bridge.connect(BrokerProfile("test","ssl://broker.example",listOf(ZigbeeNetwork("a","A","alpha"))),null)
-        bridge.consume(MqttMessageEnvelope("alpha/bridge/devices","""[{"ieee_address":"$ieee","friendly_name":"Desk","supported":true,"model_id":"Vimar30805","definition":{"vendor":"OpenVimar","model":"30805-custom","supports_ota":true,"exposes":[]}}]""".toByteArray()))
+        bridge.consume(MqttMessageEnvelope("alpha/bridge/devices","""[{"ieee_address":"$ieee","friendly_name":"Desk","supported":true,"model_id":"Vimar30805","definition":{"vendor":"Vomar","model":"30805-custom","supports_ota":true,"exposes":[]}}]""".toByteArray()))
         connection.diagnosticBridge=bridge;connection.diagnosticRecovery=pkg().manifest.targetRecoverySignedHash
         return bridge
     }

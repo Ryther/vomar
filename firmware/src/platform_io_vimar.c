@@ -9,6 +9,7 @@
 #include "boot_trace.h"
 #include "zigbee_device.h"
 #include "connection_intent.h"
+#include "loop_trace_zephyr.h"
 #include <errno.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/retained_mem.h>
@@ -164,6 +165,7 @@ static int request_connection(bool bluetooth)
  (void)vimar_boot_trace_request(BOOT_REASON_NONE);
 #endif
  (void)set(NULL,0);recovering=false;LOG_ERR("Recovery request:%d",error);return error;}
+ vimar_loop_trace_event(LOOP_TRACE_RECOVERY,0);
  sys_reboot(SYS_REBOOT_COLD);return 0;
 }
 int platform_io_request_recovery(void){return request_connection(true);}

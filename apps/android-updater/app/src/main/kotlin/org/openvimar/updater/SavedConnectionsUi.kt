@@ -127,7 +127,9 @@ internal class SavedConnectionsUi(
         val p=current() ?: run{screen="list";draw();return}
         val error=connectionErrors[p.id]!=null || network.activeProfileId==p.id&&network.state.value.connectionError
         if(online())connectionErrors.remove(p.id)
-        headerState(if(online())"Connected" else if(enabled()&&network.state.value.reconnecting)"Reconnecting" else if(error)"Connection error" else "Not connected",activity.getColor(if(online())R.color.ui_current else if(error)R.color.ui_available else R.color.ui_error))
+        val connectionState=if(online())"Connected" else if(enabled()&&network.state.value.reconnecting)"Reconnecting" else if(error)"Connection error" else "Not connected"
+        headerState(connectionState,activity.getColor(if(online())R.color.ui_current else if(error)R.color.ui_available else R.color.ui_error))
+        text(connectionState,secondary=false)
         section("Broker address");text(p.serverUri)
         section("Credentials")
         val saved=network.hasCredentials(p)
