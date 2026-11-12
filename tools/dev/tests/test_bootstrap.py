@@ -71,3 +71,28 @@ def test_private_workspace_files_never_enter_docker_build_context():
         assert policy.match_file(p),p
     for p in ['.devcontainer/Dockerfile','.devcontainer/toolchain.json','tools/dev/bootstrap.py','.devcontainer/assistants/package-lock.json']:
         assert not policy.match_file(p),p
+
+
+def test_rea_registration_is_skipped_without_both_tools(monkeypatch):
+    from tools.dev import bootstrap
+    calls=[]
+    monkeypatch.setattr(bootstrap.subprocess,'run',lambda *a,**k:calls.append(a))
+    for present in ({'rea'},{'claude'},set()):
+        monkeypatch.setattr(bootstrap.shutil,'which',lambda name,present=present:f'/bin/{name}' if name in present else None)
+        bootstrap.register_rea()
+    assert calls==[]
+
+
+def test_rea_registration_uses_rea_setup_and_never_fails_workspace(monkeypatch,capsys):
+    import subprocess
+    from tools.dev import bootstrap
+    calls=[]
+    def run(args,**kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args,1,'','provider unavailable')
+    monkeypatch.setattr(bootstrap.shutil,'which',lambda name:f'/opt/bin/{name}')
+    monkeypatch.setattr(bootstrap.subprocess,'run',run)
+    bootstrap.register_rea()
+    assert calls==[['/opt/bin/rea','setup','--client','claude_code','--yes']]
+    out=capsys.readouterr().out
+    assert 'rea setup --client claude_code' in out and 'provider unavailable' in out
