@@ -5,7 +5,7 @@ standard Identify. Its native version is owned by `package.json`, independently
 of distribution and firmware versions.
 
 The1.2.0 source adds percentage-brightness conversion and schema9..12 read-only
-diagnostics. Use its matching generated converter with the1.1.7 firmware
+diagnostics. Use its matching generated converter with the1.1.8 firmware
 preparation; native component versioning does not imply a published distribution.
 
 `dist/vimar_30805.js` is the standalone ESM external converter for the custom DK firmware identity
@@ -233,7 +233,7 @@ mode change or update follows from reading these attributes.
 
 ### Allocation capture availability
 
-The production-profile 1.1.7 candidate disables extended allocation capture. Its
+The production-profile 1.1.8 candidate disables extended allocation capture. Its
 20-byte `allocation_trace_metadata` is version 2 followed by zero bytes, indicating
 unavailable capture. The converter preserves that descriptor; it must not be
 interpreted as a successful zero-error observation. Version 1 remains the extended

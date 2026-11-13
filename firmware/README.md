@@ -149,7 +149,7 @@ buffer identifier; arbitrary delayed callbacks after allocation reuse remain
 outside the proven contract. No physical qualification follows from enabling
 the option or an interval without assertions.
 
-## Production-profile 1.1.7 candidate
+## Production-profile 1.1.8 candidate
 
 The guarded production builder enables ownership protection, counted RAM diagnostic
 batching and checked application-alarm rearming. It disables allocation provenance
@@ -162,6 +162,11 @@ The diagnostic build keeps format 1 and its existing history attributes.
 This is a production-intended profile, not physical qualification. Native link
 admission and synthetic controls cannot establish household stability, RF behavior
 or recovery after an actual fault. Qualification applies to the exact image tested.
+
+The 1.1.7 production build was trialled on one dimmer but not published. Firmware
+1.1.8 retains that profile and changes only the boot-time comparison of persisted
+fault records and the CI-only loop recorder frame initialization. It is a new
+image: the 1.1.7 trial does not qualify it.
 
 ## Host checks and optional local integration checks
 

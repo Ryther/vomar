@@ -127,9 +127,17 @@ bool loop_trace_event(struct loop_trace *trace, enum loop_trace_stage stage, uin
     if (stage == LOOP_TRACE_KERNEL_FATAL || stage == LOOP_TRACE_SDK_FATAL) sample->last_result = result;
     bool published = false;
     if (!trace->blocked) {
-        struct loop_trace_record record = {.magic = MAGIC, .version = 2, .length = 128,
-            .boot_sequence = trace->boot_sequence, .sample = *sample,
-            .timing = trace->timing, .commit = COMMIT};
+        /* The CRC covers raw bytes: start from all-zero storage, not an
+         * initializer that leaves any padding indeterminate. */
+        struct loop_trace_record record;
+        memset(&record, 0, sizeof record);
+        record.magic = MAGIC;
+        record.version = 2;
+        record.length = 128;
+        record.boot_sequence = trace->boot_sequence;
+        record.sample = *sample;
+        record.timing = trace->timing;
+        record.commit = COMMIT;
         if (++trace->sequence == 0) trace->sequence = 1;
         record.sequence = trace->sequence;
         memcpy(record.build_id, trace->build_id, 16);

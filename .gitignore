@@ -807,6 +807,7 @@
 !/tools/firmware/tests/test_loader_runtime_installer.py
 !/tools/firmware/tests/test_loader_runtime_tool.py
 !/tools/firmware/tests/test_loader_runtime_zephyr.py
+!/tools/firmware/tests/test_loop_trace.py
 !/tools/firmware/tests/test_manual_power_cut.py
 !/tools/firmware/tests/test_measure_boot.py
 !/tools/firmware/tests/test_migration_copy.py

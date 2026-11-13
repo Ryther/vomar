@@ -266,14 +266,15 @@ merely because host tests pass. Verify the actual installed release first.
 
 ## Production-profile candidate
 
-The production-intended 1.1.7 profile keeps ownership protection, RAM diagnostic
+The production-intended 1.1.8 profile keeps ownership protection, RAM diagnostic
 batching, checked application-alarm rearming and minimal fatal records. Extended
 allocation capture, loop recording, SDK tracing, logging and console output are
 disabled; LTO is enabled. Allocation metadata format 2 with zero reserved bytes
 means capture is unavailable, not that no failures occurred. Use its matching
 converter. An intended production profile still requires exact-image physical
 qualification and explicit device-bound installation consent; do not present
-previous diagnostic DK observations as qualification of this image.
+previous diagnostic DK observations as qualification of this image. The 1.1.7
+production build was trialled on one dimmer but never published; use 1.1.8.
 
 ## Experimental ownership beta
 
