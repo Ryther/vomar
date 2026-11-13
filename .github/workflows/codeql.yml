@@ -19,11 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {persist-credentials: false}
-      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066
         with: {languages: '${{ matrix.language }}', build-mode: '${{ matrix.mode }}', tools: linked, config-file: .github/codeql-config.yml}
       - if: matrix.language == 'java-kotlin'
         run: apps/android-updater/gradlew -p apps/android-updater --dependency-verification=strict --no-build-cache --rerun-tasks :core:compileKotlin :app:compileDebugKotlin
-      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066
         with: {category: '/language:${{ matrix.language }}', output: _test/codeql-sarif}
       - name: Reject blocking CodeQL findings
         run: python -m tools.release.codeql_gate --sarif _test/codeql-sarif
@@ -55,7 +55,7 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y cmake ninja-build gperf device-tree-compiler binutils-arm-none-eabi
       - run: python -m pip install --require-hashes -r requirements-dev.lock
       - run: python tools/dev/bootstrap.py firmware
-      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066
         with: {languages: c-cpp, build-mode: manual, tools: linked, db-location: '${{ runner.temp }}/vomar-codeql-db', config-file: .github/codeql-config.yml}
       - env:
           VIMAR_NCS_WORKSPACE: /home/runner/.cache/vomar/ncs
@@ -64,10 +64,10 @@ jobs:
         run: python -m tools.release.ci_firmware --output _test/codeql-firmware
       - run: python -m pytest tools/firmware/tests -q
       - run: python -m tools.release.capture_analysis --build _test/codeql-firmware --output _test/codeql-reports
-      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+      - uses: github/codeql-action/analyze@33d7b85da1a04171e211befe2c739303b9a4c066
         with: {category: /language:c-cpp, upload: never, output: _test/codeql-sarif}
       - run: python -m tools.release.codeql_scope --archive "${{ runner.temp }}/vomar-codeql-db/cpp/src.zip" --reports _test/codeql-reports --sarif _test/codeql-sarif
-      - uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370
+      - uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066
         with: {sarif_file: _test/codeql-sarif, category: /language:c-cpp}
       - name: Reject blocking CodeQL findings
         run: python -m tools.release.codeql_gate --sarif _test/codeql-sarif
