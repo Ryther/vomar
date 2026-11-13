@@ -253,14 +253,21 @@ open VS Code from that shell:
 ```sh
 export VOMAR_USB_DEVICE=/dev/bus/usb
 export VOMAR_DBUS_SOURCE=/run/dbus
-export VOMAR_KVM_DEVICE=/dev/kvm  # only if the host provides KVM
-export VOMAR_KVM_GID="$(stat -c %g /dev/kvm)"  # grant the non-root container user access
 code .
 ```
 
 Review host USB/plugdev and D-Bus access first. Without these variables, the
-container uses empty private USB/D-Bus volumes and maps only `/dev/null` for
-virtualization, so CI and ordinary development do not require attached hardware or host services. Changing
+container uses empty private USB/D-Bus volumes, so CI and ordinary development do
+not require attached hardware or host services.
+
+KVM for the Android emulator needs no variable. Before each creation,
+`initializeCommand` runs `.devcontainer/kvm.sh host`, which links
+`_test/devcontainer/kvm` to the host `/dev/kvm` when it is a character device and
+to `/dev/null` otherwise; Docker maps that node to `/dev/kvm`. At start, the
+container removes the `/dev/null` placeholder or grants the non-root user access
+to the real device. Hosts without KVM, including macOS and Windows/WSL without
+nested virtualization, still start. `VOMAR_KVM_DEVICE` can select another device
+node. Changing
 host mounts later requires recreating this same configuration after saving work;
 it never requires another profile. The USB bind and major-189 cgroup rule also cover devices reconnected after
 startup; mapping only the original USB nodes misses hotplug. Access does not

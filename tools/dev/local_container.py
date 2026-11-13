@@ -88,7 +88,9 @@ def derive(
         arguments[:] = [
             a
             for a in arguments
-            if "VOMAR_KVM_DEVICE" not in a and "VOMAR_KVM_GID" not in a
+            if "VOMAR_KVM_DEVICE" not in a
+            and "VOMAR_KVM_GID" not in a
+            and "_test/devcontainer/kvm" not in a
         ]
         arguments.extend(["--device=/dev/kvm", f"--group-add={kvm_gid}"])
     if any(

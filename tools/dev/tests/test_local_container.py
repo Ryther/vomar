@@ -16,8 +16,7 @@ def base_config():
         "runArgs": [
             "--volume=${localEnv:VOMAR_USB_DEVICE:vomar-no-host-usb}:/dev/bus/usb",
             "--volume=${localEnv:VOMAR_DBUS_SOURCE:vomar-no-host-dbus}:/run/dbus:ro",
-            "--device=${localEnv:VOMAR_KVM_DEVICE:/dev/null}",
-            "--group-add=${localEnv:VOMAR_KVM_GID:65534}",
+            "--device=${localWorkspaceFolder}/_test/devcontainer/kvm:/dev/kvm",
             "--group-add=plugdev",
         ],
     }
@@ -125,6 +124,7 @@ def test_local_profile_keeps_current_features_and_only_inherits_known_host_conne
         for a in result["runArgs"]
     )
     assert "--device=/dev/kvm" in result["runArgs"]
+    assert not any("_test/devcontainer/kvm" in a for a in result["runArgs"])
     assert "--group-add=990" in result["runArgs"]
     assert not any("VOMAR_KVM_GID" in a for a in result["runArgs"])
     with pytest.raises(ValueError, match="group ID"):
@@ -238,3 +238,45 @@ def test_cli_help_does_not_require_docker_or_format_stat_percent_as_a_placeholde
     assert result.returncode == 0, result.stderr
     assert "stat -c %g /dev/kvm" in result.stdout
     assert "--inherit-from-container" in result.stdout
+
+
+def test_canonical_container_selects_kvm_without_requiring_it():
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    config = json.loads((root / ".devcontainer/devcontainer.json").read_text())
+    assert config["initializeCommand"] == "sh .devcontainer/kvm.sh host"
+    assert config["postStartCommand"].startswith("sh .devcontainer/kvm.sh container && ")
+    assert "--device=${localWorkspaceFolder}/_test/devcontainer/kvm:/dev/kvm" in config["runArgs"]
+    assert not any("VOMAR_KVM" in a for a in config["runArgs"])
+
+
+@pytest.mark.parametrize("device,expected", [("/dev/null", "/dev/null"), ("/nonexistent/kvm", "/dev/null")])
+def test_host_mode_links_a_character_device_or_the_null_placeholder(tmp_path, device, expected):
+    import os
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[3] / ".devcontainer/kvm.sh"
+    env = {**os.environ, "VOMAR_KVM_DEVICE": device}
+    subprocess.run(["sh", str(script), "host"], cwd=tmp_path, env=env, check=True)
+    assert os.readlink(tmp_path / "_test/devcontainer/kvm") == expected
+
+
+def test_container_mode_removes_a_placeholder_that_is_not_kvm(tmp_path):
+    import os
+    import subprocess
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[3] / ".devcontainer/kvm.sh"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "sudo").write_text('#!/bin/sh\nexec "$@"\n')
+    (bin_dir / "sudo").chmod(0o755)
+    node = tmp_path / "kvm"
+    node.write_text("")
+    env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}", "VOMAR_KVM_NODE": str(node)}
+    subprocess.run(["sh", str(script), "container"], env=env, check=True)
+    assert not node.exists()
+    result = subprocess.run(["sh", str(script), "other"], env=env, capture_output=True, text=True)
+    assert result.returncode == 2
