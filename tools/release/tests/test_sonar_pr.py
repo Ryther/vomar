@@ -562,3 +562,11 @@ def test_cloud_pr_c_inputs_only_admit_the_pinned_sdk_compiler(tmp_path,compiler,
                           env={**os.environ,'HOME':str(home),'CANDIDATE_SHA':'a'*40})
     assert (result.returncode==0)==accepted, result.stderr
     if not accepted:assert 'Compiler outside the pinned SDK' in result.stderr
+
+
+def test_pr_scan_waits_for_every_coverage_producer_including_firmware():
+    root=Path(__file__).resolve().parents[3]
+    job=yaml.safe_load((root/'.github/workflows/validate.yml').read_text())['jobs']['sonar-pr']
+    assert set(job['needs'])=={'source','firmware','android','converter'}
+    for producer in job['needs']:
+        assert f"needs.{producer}.result == 'success'" in job['with']['coverage-result']
