@@ -88,6 +88,14 @@ has no C analyzer, so their firmware C relies on mandatory CodeQL and the
 post-merge main scan. Both publish report artifacts. Missing coverage, the
 expected scanner or its report fails the aggregate. A PR scan does not certify
 the exact release revision or hardware behavior.
+
+Before pushing, run `python -m tools.release.sonar_precheck --base origin/main`
+on a clean committed tree. It needs only Docker and the pinned development
+environment: it regenerates the CI reports for the changed languages in clean
+worktrees, compares Python/JavaScript/Kotlin issues on a disposable SonarQube
+Community server, runs the locked clang-tidy on changed C lines and applies the
+Sonar new-code coverage formula and 80% threshold. Kotlin coverage uses JVM unit
+tests only, and Cloud's proprietary C rules have no local equivalent.
 CodeQL SARIF high/critical security findings and error results fail the required
 check; an analysis job completing successfully is insufficient. Main additionally
 requires the code scanning ruleset, and publication rechecks fresh CodeQL analyses

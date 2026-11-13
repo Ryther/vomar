@@ -1144,6 +1144,10 @@
 !/tools/release/sonar_report.py
 !/tools/release/prepare_pr_analysis.py
 !/tools/release/tests/test_sonar_pr.py
+!/tools/release/sonar_precheck.py
+!/tools/release/new_code_coverage.py
+!/tools/release/tests/test_new_code_coverage.py
+!/tools/release/tests/test_sonar_precheck.py
 !/docs/architecture.md
 !/docs/installation.md
 !/docs/troubleshooting.md
