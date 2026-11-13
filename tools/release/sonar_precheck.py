@@ -248,6 +248,7 @@ def main():
     git('worktree', 'add', '--detach', str(worktrees['base']), base)
     git('worktree', 'add', '--detach', str(worktrees['candidate']), head)
     summary = {'head': head, 'base': base, 'languages': sorted(languages), 'notes': []}
+    completed = False
     try:
         candidate = worktrees['candidate'].resolve()
         summary['notes'] += produce_reports(candidate, languages, reports, log)
@@ -259,8 +260,10 @@ def main():
         summary['introduced'] = []
         if languages & {'python', 'javascript', 'kotlin'}:
             summary['introduced'] = community(worktrees['base'].resolve(), candidate, reports, output, log)
+        completed = True
     finally:
-        if not args.keep:
+        # A failed step keeps its worktrees and build logs for diagnosis.
+        if completed and not args.keep:
             for path in worktrees.values():
                 subprocess.run(['git', '-C', str(ROOT), 'worktree', 'remove', '--force', str(path)],
                                check=False, capture_output=True)
