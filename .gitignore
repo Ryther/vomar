@@ -947,6 +947,7 @@
 !/.devcontainer/assistants/package-lock.json
 !/.devcontainer/devcontainer.json
 !/.devcontainer/Dockerfile
+!/.devcontainer/kvm.sh
 !/.agents/
 !/.agents/skills/
 !/.agents/skills/vomar-guide/
