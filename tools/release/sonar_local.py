@@ -22,6 +22,10 @@ else:
 
 ROOT = Path(__file__).resolve().parents[2]
 SERVER = "http://127.0.0.1:9000"
+# The scanner reaches the server from its own container. CI uses the runner's
+# host network; a local precheck uses a private Docker network instead.
+SCANNER_NETWORK = "host"
+SCANNER_SERVER = SERVER
 SETTINGS = ROOT / ".github/sonar-pr.properties"
 REPORTS = None
 IMAGES = json.loads((ROOT / ".github/sonar-community.json").read_text())
@@ -69,8 +73,8 @@ def scan(source: Path, project: str, output: Path, token: str) -> int:
     receipt = task / "report-task.txt"
     receipt.unlink(missing_ok=True)
     command = [
-        "docker", "run", "--rm", "--network", "host", "-w", str(source), "-e", "SONAR_TOKEN",
-        "-e", f"SONAR_HOST_URL={SERVER}", "-v", f"{source}:{source}:ro",
+        "docker", "run", "--rm", "--network", SCANNER_NETWORK, "-w", str(source), "-e", "SONAR_TOKEN",
+        "-e", f"SONAR_HOST_URL={SCANNER_SERVER}", "-v", f"{source}:{source}:ro",
         "-v", f"{task}:/sonar-task",
         "-v", f"{SETTINGS}:/settings.properties:ro",
         "-v", f"{REPORTS}:/reports:ro", SCANNER,
@@ -79,11 +83,16 @@ def scan(source: Path, project: str, output: Path, token: str) -> int:
         "-Dsonar.qualitygate.wait=true",
     ]
     if project == "vomar-candidate":
-        command.extend([
-            "-Dsonar.python.coverage.reportPaths=/reports/python-coverage.xml",
-            "-Dsonar.javascript.lcov.reportPaths=/reports/lcov.info",
-            "-Dsonar.coverage.jacoco.xmlReportPaths=/reports/core-jacoco.xml,/reports/app-jacoco.xml",
-        ])
+        coverage = [
+            ("sonar.python.coverage.reportPaths", ["python-coverage.xml"]),
+            ("sonar.javascript.lcov.reportPaths", ["lcov.info"]),
+            ("sonar.coverage.jacoco.xmlReportPaths", ["core-jacoco.xml", "app-jacoco.xml"]),
+        ]
+        for key, names in coverage:
+            # A local precheck measures only the languages it changed.
+            present = [f"/reports/{name}" for name in names if (Path(REPORTS) / name).is_file()]
+            if present:
+                command.append(f"-D{key}={','.join(present)}")
     with (output / (project + "-scanner.log")).open("w") as log:
         result = subprocess.run(command, env={**os.environ, "SONAR_TOKEN": token}, stdout=log, stderr=subprocess.STDOUT, check=False)
     if not receipt.exists():

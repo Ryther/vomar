@@ -57,7 +57,15 @@ git diff --check
 python -m tools.release.public_tree --include-untracked --output _test/public-tree.json
 python -m tools.release.install_check_tools --output _test/check-tools
 _test/check-tools/gitleaks git --redact --no-banner --log-opts=HEAD
+python -m tools.release.sonar_precheck --base origin/main
 ```
+
+The precheck analyzes the committed HEAD in clean worktrees with disposable
+Docker services and no credentials: SonarQube Community for Python, JavaScript
+and Kotlin introduced issues, the locked clang-tidy for changed firmware C lines,
+and Sonar new-code coverage (80%) over changed lines. Fix every finding before
+pushing. It cannot reproduce SonarCloud's proprietary C rules, so the PR's Cloud
+analysis stays authoritative and must also pass before merge.
 
 Run the range check when outgoing commits exist; use the actual destination
 instead of `origin/main` when pushing elsewhere. Checking only `HEAD`, a PR

@@ -14,7 +14,7 @@ jobs:
   cloud:
     if: inputs.coverage-result == 'success' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.user.login != 'dependabot[bot]'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     outputs:
       report_present: ${{ steps.report.outputs.artifact-id != '' }}
     steps:
@@ -26,6 +26,26 @@ jobs:
         with: {python-version: '3.13.12'}
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with: {pattern: '*reports-${{ inputs.sha }}', path: reports, merge-multiple: true}
+      # Firmware C uses the same protected remapping as main. It runs before the
+      # PR remapper, which rewrites JavaScript sources beneath the candidate root.
+      - name: Validate firmware C analysis inputs without credentials
+        env: {CANDIDATE_SHA: '${{ inputs.sha }}'}
+        run: |
+          PYTHONPATH=trusted python - <<'PY'
+          import os
+          import json
+          from pathlib import Path
+          from tools.release.prepare_analysis import prepare
+          prepare('reports', 'candidate', os.environ['CANDIDATE_SHA'])
+          # The C analyzer probes the named compiler. PR data may only name the
+          # SDK compiler that the next step installs from the protected base.
+          compilers = Path.home()/'.cache/vomar/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin'
+          for row in json.loads(Path('reports/compile_commands.json').read_text()):
+              if Path(row['arguments'][0]).parent != compilers:
+                  raise ValueError('Compiler outside the pinned SDK: '+row['arguments'][0])
+          PY
+      - name: Install the pinned firmware SDK headers from the protected base
+        run: python trusted/tools/dev/bootstrap.py firmware
       - name: Require target history in the analyzed checkout
         env: {PR_BASE_SHA: '${{ github.event.pull_request.base.sha }}', PR_BASE_REF: '${{ github.event.pull_request.base.ref }}'}
         run: |
@@ -58,12 +78,15 @@ jobs:
             -e SONAR_TOKEN -e SONAR_HOST_URL=https://sonarcloud.io -e SONAR_USER_HOME=/tmp/sonar-user \
             -v "$GITHUB_WORKSPACE/candidate:$GITHUB_WORKSPACE/candidate:ro" \
             -v "$GITHUB_WORKSPACE/reports:/reports:ro" \
-            -v "$GITHUB_WORKSPACE/trusted/.github/sonar-pr.properties:/settings.properties:ro" \
+            -v "$HOME/.cache/vomar:$HOME/.cache/vomar:ro" \
+            -v "$GITHUB_WORKSPACE/trusted/sonar-project.properties:/settings.properties:ro" \
             -v "$GITHUB_WORKSPACE/sonar-report/task:/sonar-task" "$image" \
             -Dproject.settings=/settings.properties -Dsonar.working.directory=/sonar-task \
             -Dsonar.python.coverage.reportPaths=/reports/python-coverage.xml \
             -Dsonar.javascript.lcov.reportPaths=/reports/lcov.info \
             -Dsonar.coverage.jacoco.xmlReportPaths=/reports/core-jacoco.xml,/reports/app-jacoco.xml \
+            -Dsonar.coverageReportPaths=/reports/c-coverage.xml \
+            -Dsonar.cfamily.compile-commands=/reports/compile_commands.json \
             "-Dsonar.pullrequest.key=$PR_NUMBER" "-Dsonar.pullrequest.branch=$PR_HEAD" \
             "-Dsonar.pullrequest.base=$PR_BASE" "-Dsonar.scm.revision=$CANDIDATE_SHA" \
             -Dsonar.qualitygate.wait=true > sonar-report/scanner.log 2>&1
