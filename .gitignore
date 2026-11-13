@@ -947,6 +947,8 @@
 !/.devcontainer/assistants/package-lock.json
 !/.devcontainer/devcontainer.json
 !/.devcontainer/Dockerfile
+!/.devcontainer/bash-history.sh
+!/tools/dev/tests/test_bash_history.py
 !/.agents/
 !/.agents/skills/
 !/.agents/skills/vomar-guide/
