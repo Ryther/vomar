@@ -34,6 +34,8 @@ static bool ready;
 /* Decode foreign build evidence as foreign: the stored identity is retained
  * verbatim for later matching to its archived ELF, never attributed to this
  * build. This is forensic data, not authority to execute an image. */
+_Static_assert(sizeof(struct fault_diag_record)==32*sizeof(uint32_t),"wire image");
+
 static bool read_stored(const volatile uint32_t *words,unsigned slot,struct fault_diag_record *record)
 {
     uint32_t stored_id[4];
@@ -66,8 +68,11 @@ void vimar_fault_diag_boot(uint32_t boot_sequence)
         bool durable_subset=(export_status&4u)!=0;
         for(unsigned slot=0;slot<2;slot++) {
             struct fault_diag_record record;
-            if(read_stored(RETAINED,slot,&record) &&
-               memcmp((uint8_t *)exported+slot*128,&record,128)!=0)durable_subset=false;
+            uint32_t words[32];
+            if(!read_stored(RETAINED,slot,&record))continue;
+            /* Compare the validated wire image, not the struct object. */
+            memcpy(words,&record,sizeof(words));
+            if(memcmp((uint8_t *)exported+slot*128,words,sizeof(words))!=0)durable_subset=false;
         }
         /* Export only validated slots; never attach validity to uncommitted RAM. */
         if(!durable_subset)memset(exported,0,sizeof(exported));
