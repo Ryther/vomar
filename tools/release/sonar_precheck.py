@@ -235,7 +235,9 @@ def main():
         raise SystemExit('Commit or remove local changes first: the precheck analyzes committed HEAD only.')
     head = git('rev-parse', 'HEAD')
     base = git('merge-base', args.base, 'HEAD')
-    output = ROOT / '_test/sonar-precheck' / head[:12]
+    # Keep paths short: Zephyr/ninja derive file names from the source path and
+    # exceed the 255-byte limit beneath a long worktree directory.
+    output = ROOT / '_test/pc' / head[:8]
     if output.exists():
         shutil.rmtree(output)
     output.mkdir(parents=True)
@@ -244,7 +246,7 @@ def main():
     reports.mkdir()
     changed = new_code_coverage.changed_lines(ROOT, base, head)
     languages, scoped = changed_languages(changed, ROOT / 'sonar-project.properties')
-    worktrees = {'base': output / 'base', 'candidate': output / 'candidate'}
+    worktrees = {'base': output / 'b', 'candidate': output / 'c'}
     git('worktree', 'add', '--detach', str(worktrees['base']), base)
     git('worktree', 'add', '--detach', str(worktrees['candidate']), head)
     summary = {'head': head, 'base': base, 'languages': sorted(languages), 'notes': []}
