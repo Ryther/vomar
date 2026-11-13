@@ -18,3 +18,12 @@ def test_only_languages_in_scanner_scope_select_report_work(tmp_path):
     languages, scoped = sonar_precheck.changed_languages(changed, settings)
     assert languages == {'c', 'python'}
     assert sorted(scoped) == ['apps/desktop-updater/src/vomar_updater/y.py', 'firmware/src/a.c']
+
+
+def test_gcc_builtin_headers_are_replaced_by_clang_headers(tmp_path):
+    gcc = '/sdk/bin/../lib/gcc/arm-zephyr-eabi/14.3.0/include'
+    arguments = ['/sdk/gcc', '-isystem', gcc, '-isystem', gcc + '-fixed', '-isystem' + gcc, '-isystem', '/sdk/picolibc/include',
+                 '-nostdinc', '-c', 'x.c']
+    assert sonar_precheck.clang_arguments(arguments, tmp_path) == [
+        '/sdk/gcc', '-isystem', str(tmp_path), '-isystem' + str(tmp_path), '-isystem', '/sdk/picolibc/include',
+        '-nostdinc', '-c', 'x.c']

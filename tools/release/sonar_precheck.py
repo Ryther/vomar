@@ -131,9 +131,18 @@ def produce_reports(candidate, languages, reports, log):
     return notes
 
 
-def clang_arguments(arguments):
-    result, skip = [], False
-    for arg in arguments[1:]:
+def gcc_internal(path):
+    """GCC's own builtin headers (arm_acle.h, stddef.h, ...), which clang rejects."""
+    return re.search(r'/lib/gcc/[^/]+/[^/]+/include(-fixed)?/?$', path) is not None
+
+
+def clang_arguments(arguments, resource=None):
+    """Adapt a Zephyr GCC invocation: drop GCC-only options and replace GCC's
+    internal header directory with clang's builtin headers."""
+    result, skip, index = [], False, 1
+    while index < len(arguments):
+        arg = arguments[index]
+        index += 1
         if skip:
             skip = False
             continue
@@ -142,8 +151,25 @@ def clang_arguments(arguments):
             continue
         if arg.startswith('--param') or arg.split('=', 1)[0] in GCC_ONLY:
             continue
+        if arg == '-isystem' and index < len(arguments) and gcc_internal(arguments[index]):
+            path = arguments[index]
+            index += 1
+            if resource is not None and not path.rstrip('/').endswith('-fixed'):
+                result.extend(['-isystem', str(resource)])
+            continue
+        if arg.startswith('-isystem') and len(arg) > 8 and gcc_internal(arg[8:]):
+            if resource is not None and not arg.rstrip('/').endswith('-fixed'):
+                result.append('-isystem' + str(resource))
+            continue
         result.append(arg)
     return [arguments[0], *result]
+
+
+def clang_resource(tool):
+    found = sorted((Path(tool).resolve().parent.parent / 'lib/clang').glob('*/include'))
+    if not found:
+        raise RuntimeError('clang-tidy builtin headers are missing from the locked package')
+    return found[-1]
 
 
 def clang_tidy(candidate, scoped, changed, reports, output, log):
@@ -151,6 +177,8 @@ def clang_tidy(candidate, scoped, changed, reports, output, log):
     rows = json.loads((reports / 'compile_commands.json').read_text())
     database = output / 'clang-tidy'
     database.mkdir(exist_ok=True)
+    tool = Path(sys.executable).with_name('clang-tidy')
+    resource = clang_resource(tool)
     entries, sources = [], set()
     for row in rows:
         path = Path(row['file']).resolve()
@@ -158,10 +186,9 @@ def clang_tidy(candidate, scoped, changed, reports, output, log):
             relative = path.relative_to(candidate).as_posix()
             if relative in scoped and relative.endswith('.c') and relative not in sources:
                 sources.add(relative)
-                entries.append({**row, 'arguments': clang_arguments(row['arguments'])})
+                entries.append({**row, 'arguments': clang_arguments(row['arguments'], resource)})
     (database / 'compile_commands.json').write_text(json.dumps(entries))
     unbuilt = sorted(p for p in scoped if p.endswith('.c') and p not in sources)
-    tool = Path(sys.executable).with_name('clang-tidy')
     findings = []
     pattern = re.compile(r'^(?P<path>/[^:]+):(?P<line>\d+):(?P<col>\d+): (?P<kind>warning|error): (?P<message>.*) \[(?P<check>[^\]]+)\]$')
     for source in sorted(sources):
@@ -175,10 +202,16 @@ def clang_tidy(candidate, scoped, changed, reports, output, log):
             if not match:
                 continue
             path = Path(match['path']).resolve()
+            if match['kind'] == 'error':
+                # A translation unit that does not compile was not analyzed.
+                relative = path.relative_to(candidate).as_posix() if path.is_relative_to(candidate) else str(path)
+                findings.append({'path': relative, 'line': int(match['line']), 'check': match['check'],
+                                 'message': 'not analyzed: ' + match['message']})
+                continue
             if not path.is_relative_to(candidate):
                 continue
             relative = path.relative_to(candidate).as_posix()
-            if match['kind'] == 'error' or int(match['line']) in changed.get(relative, ()):
+            if int(match['line']) in changed.get(relative, ()):
                 findings.append({'path': relative, 'line': int(match['line']), 'check': match['check'],
                                  'message': match['message']})
     return findings, unbuilt
