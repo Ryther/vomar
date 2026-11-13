@@ -78,13 +78,16 @@ documentation impact and unverified scenarios. Keep the self-contained
 `.agents/skills/vomar-guide/SKILL.md` aligned with user procedures, not merely
 with contributor commands; Claude's alias points to the same source.
 
-`Sonar required` is produced on PRs after actual Python, JavaScript and Kotlin
-coverage. Trusted same-repository PRs use Cloud with protected base settings;
-fork/Dependabot PRs use disposable Community without repository credentials.
-Both publish report artifacts. Missing coverage, the expected scanner or its
-report fails the aggregate. Firmware C has mandatory CodeQL; full main/release
-Sonar additionally requires actual C compilation/coverage and exact revision.
-A scoped PR scan does not certify full release analysis or hardware behavior.
+`Sonar required` is produced on PRs after actual Python, JavaScript, Kotlin and
+firmware C coverage. Trusted same-repository PRs use Cloud with the protected base
+`sonar-project.properties`, the same scope as main: the exact-run C compilation
+database and host C coverage are validated and remapped by the protected helper,
+and the analyzer may only probe the pinned SDK compiler installed from the base.
+Fork/Dependabot PRs use disposable Community without repository credentials; it
+has no C analyzer, so their firmware C relies on mandatory CodeQL and the
+post-merge main scan. Both publish report artifacts. Missing coverage, the
+expected scanner or its report fails the aggregate. A PR scan does not certify
+the exact release revision or hardware behavior.
 CodeQL SARIF high/critical security findings and error results fail the required
 check; an analysis job completing successfully is insufficient. Main additionally
 requires the code scanning ruleset, and publication rechecks fresh CodeQL analyses

@@ -524,3 +524,41 @@ raise SystemExit(int(os.environ["EXPORT_STATUS"]))
     assert json.loads((tmp_path/'calls.json').read_text())['source'] == 'selected-protected-exporter'
     assert summary.read_text() == '# Protected exporter report\n'
     assert result.returncode == (int(export_status) or int(scan_outcome != 'success'))
+
+
+def _cloud_steps():
+    root=Path(__file__).resolve().parents[3]
+    return yaml.safe_load((root/'.github/workflows/sonar-pr.yml').read_text())['jobs']['cloud']['steps']
+
+
+def test_cloud_pr_scan_uses_full_scope_with_firmware_c():
+    steps=_cloud_steps()
+    names=[step.get('name') for step in steps]
+    c_inputs=names.index('Validate firmware C analysis inputs without credentials')
+    assert c_inputs<names.index('Install the pinned firmware SDK headers from the protected base')
+    assert c_inputs<names.index('Validate exact candidate reports without credentials'), 'C remapping must precede the PR JavaScript remapper'
+    scan=next(step for step in steps if step.get('name')=='Scan source as data using protected PR settings')['run']
+    assert 'trusted/sonar-project.properties:/settings.properties:ro' in scan
+    assert '$HOME/.cache/vomar:$HOME/.cache/vomar:ro' in scan
+    assert '-Dsonar.coverageReportPaths=/reports/c-coverage.xml' in scan
+    assert '-Dsonar.cfamily.compile-commands=/reports/compile_commands.json' in scan
+
+
+@pytest.mark.parametrize('compiler,accepted',[
+    ('{home}/.cache/vomar/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc',True),
+    ('{candidate}/tools/arm-zephyr-eabi-gcc',False),
+    ('arm-zephyr-eabi-gcc',False),
+])
+def test_cloud_pr_c_inputs_only_admit_the_pinned_sdk_compiler(tmp_path,compiler,accepted):
+    step=next(step for step in _cloud_steps() if step.get('name')=='Validate firmware C analysis inputs without credentials')
+    package=tmp_path/'trusted/tools/release';package.mkdir(parents=True)
+    for directory in (tmp_path/'trusted/tools',package):(directory/'__init__.py').write_text('')
+    (package/'prepare_analysis.py').write_text('def prepare(reports,candidate,sha):\n    assert sha=="a"*40\n')
+    home=tmp_path/'home';home.mkdir()
+    reports=tmp_path/'reports';reports.mkdir()
+    rows=[{'file':'f.c','directory':'d','arguments':[compiler.format(home=home,candidate=tmp_path/'candidate'),'-c','f.c']}]
+    (reports/'compile_commands.json').write_text(json.dumps(rows))
+    result=subprocess.run(['bash','-e','-c',step['run']],cwd=tmp_path,capture_output=True,text=True,
+                          env={**os.environ,'HOME':str(home),'CANDIDATE_SHA':'a'*40})
+    assert (result.returncode==0)==accepted, result.stderr
+    if not accepted:assert 'Compiler outside the pinned SDK' in result.stderr
