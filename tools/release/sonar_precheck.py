@@ -165,8 +165,9 @@ def clang_arguments(arguments, resource=None):
     return [arguments[0], *result]
 
 
-def clang_resource(tool):
-    found = sorted((Path(tool).resolve().parent.parent / 'lib/clang').glob('*/include'))
+def clang_resource():
+    import clang_tidy  # the locked wheel ships the binary and builtin headers
+    found = sorted((Path(clang_tidy.__file__).parent / 'data/lib/clang').glob('*/include'))
     if not found:
         raise RuntimeError('clang-tidy builtin headers are missing from the locked package')
     return found[-1]
@@ -178,7 +179,7 @@ def clang_tidy(candidate, scoped, changed, reports, output, log):
     database = output / 'clang-tidy'
     database.mkdir(exist_ok=True)
     tool = Path(sys.executable).with_name('clang-tidy')
-    resource = clang_resource(tool)
+    resource = clang_resource()
     entries, sources = [], set()
     for row in rows:
         path = Path(row['file']).resolve()
