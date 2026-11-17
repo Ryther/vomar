@@ -101,7 +101,19 @@ def workspace():
             except OSError:print('Assistant state remains in its private OS-managed home directory.')
     for dest in (Path.home()/'.claude/skills/vomar-guide/SKILL.md',Path.home()/'.config/opencode/skills/vomar-guide/SKILL.md',Path.home()/'.agents/skills/vomar-guide/SKILL.md'):
         install_guide(ROOT/'.agents/skills/vomar-guide/SKILL.md',dest,symlink=os.name!='nt')
+    register_rea()
     print(f'Development environment: {python}. Agent login remains private.')
+
+
+def register_rea():
+    # ~/.claude.json lives outside the persistent agent-state volume, so each
+    # new container repeats REA's own idempotent, backup-preserving setup.
+    rea=shutil.which('rea')
+    if rea is None or shutil.which('claude') is None: return
+    result=subprocess.run([rea,'setup','--client','claude_code','--yes'],capture_output=True,text=True,check=False)
+    if result.returncode:
+        print('REA registration for Claude Code failed; run: rea setup --client claude_code')
+        print((result.stderr or result.stdout)[-2000:])
 
 
 def image(catalog):
